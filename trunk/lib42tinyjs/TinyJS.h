@@ -29,6 +29,7 @@
 #include <string>
 #include <vector>
 
+#undef TRACE
 #ifndef TRACE
 #define TRACE printf
 #endif // TRACE
@@ -47,18 +48,29 @@ enum LEX_TYPES {
     LEX_NEQUAL,
     LEX_NTYPEEQUAL,
     LEX_LEQUAL,
+    LEX_LSHIFT,
+    LEX_LSHIFTEQUAL,
     LEX_GEQUAL,
+    LEX_RSHIFT,
+    LEX_RSHIFTEQUAL,
     LEX_PLUSEQUAL,
     LEX_MINUSEQUAL,
     LEX_PLUSPLUS,
     LEX_MINUSMINUS,
+    LEX_ANDEQUAL,
     LEX_ANDAND,
+    LEX_OREQUAL,
     LEX_OROR,
+    LEX_XOREQUAL,
     // reserved words
+#define LEX_R_LIST_START LEX_R_IF
     LEX_R_IF,
     LEX_R_ELSE,
+    LEX_R_DO,
     LEX_R_WHILE,
     LEX_R_FOR,
+    LEX_R_BREAK,
+    LEX_R_CONTINUE,
     LEX_R_FUNCTION,
     LEX_R_RETURN,
     LEX_R_VAR,
@@ -67,6 +79,8 @@ enum LEX_TYPES {
     LEX_R_NULL,
     LEX_R_UNDEFINED,
     LEX_R_NEW,
+
+	LEX_R_LIST_END /* always the last entry */
 };
 
 enum SCRIPTVAR_FLAGS {
@@ -76,15 +90,18 @@ enum SCRIPTVAR_FLAGS {
     SCRIPTVAR_ARRAY       = 4,
     SCRIPTVAR_DOUBLE      = 8,  // floating point double
     SCRIPTVAR_INTEGER     = 16, // integer number
-    SCRIPTVAR_STRING      = 32, // string
-    SCRIPTVAR_NULL        = 64, // it seems null is its own data type
+    SCRIPTVAR_BOOLEAN     = 32, // boolean
+    SCRIPTVAR_STRING      = 64, // string
+    SCRIPTVAR_NULL        = 128, // it seems null is its own data type
 
-    SCRIPTVAR_NATIVE      = 128, // to specify this is a native function
+    SCRIPTVAR_NATIVE      = 256, // to specify this is a native function
     SCRIPTVAR_NUMERICMASK = SCRIPTVAR_NULL |
                             SCRIPTVAR_DOUBLE |
-                            SCRIPTVAR_INTEGER,
+                            SCRIPTVAR_INTEGER |
+                            SCRIPTVAR_BOOLEAN,
     SCRIPTVAR_VARTYPEMASK = SCRIPTVAR_DOUBLE |
                             SCRIPTVAR_INTEGER |
+                            SCRIPTVAR_BOOLEAN |
                             SCRIPTVAR_STRING |
                             SCRIPTVAR_FUNCTION |
                             SCRIPTVAR_OBJECT |
@@ -92,6 +109,14 @@ enum SCRIPTVAR_FLAGS {
                             SCRIPTVAR_NULL,
 
 };
+enum RUNTIME_FLAGS {
+	RUNTIME_CANBREAK	= 1,
+	RUNTIME_BREAK		= 2,
+	RUNTIME_CANCONTINUE	= 4,
+	RUNTIME_CONTINUE	= 8,
+};
+
+#define RUNTIME_LOOP_MASK (RUNTIME_CANBREAK | RUNTIME_BREAK | RUNTIME_CANCONTINUE | RUNTIME_CONTINUE)
 
 #define TINYJS_RETURN_VAR "return"
 #define TINYJS_PROTOTYPE_CLASS "prototype"
@@ -122,7 +147,7 @@ public:
     std::string tkStr; ///< Data contained in the token we have here
 
     void match(int expected_tk); ///< Lexical match wotsit
-    std::string getTokenStr(int token); ///< Get the string representation of the given token
+    static std::string getTokenStr(int token); ///< Get the string representation of the given token
     void reset(); ///< Reset this lex so we can start again
 
     std::string getSubString(int pos); ///< Return a sub-string from the given position up until right now
@@ -173,6 +198,7 @@ public:
     CScriptVar(const std::string &str); ///< Create a string
     CScriptVar(double varData);
     CScriptVar(int val);
+    CScriptVar(bool val);
     ~CScriptVar(void);
 
     CScriptVar *getReturnVar(); ///< If this is a function, get the result value (for use by native functions)
@@ -198,11 +224,13 @@ public:
     const std::string &getString();
     std::string getParsableString(); ///< get Data as a parsable javascript string
     void setInt(int num);
+    void setBool(bool val);
     void setDouble(double val);
     void setString(const std::string &str);
     void setUndefined();
 
     bool isInt() { return (flags&SCRIPTVAR_INTEGER)!=0; }
+    bool isBool() { return (flags&SCRIPTVAR_BOOLEAN)!=0; }
     bool isDouble() { return (flags&SCRIPTVAR_DOUBLE)!=0; }
     bool isString() { return (flags&SCRIPTVAR_STRING)!=0; }
     bool isNumeric() { return (flags&SCRIPTVAR_NUMERICMASK)!=0; }
@@ -285,18 +313,22 @@ public:
     CScriptVar *root;   /// root of symbol table
 private:
     CScriptLex *l;             /// current lexer
+	int runtimeFlags;
     std::vector<CScriptVar*> scopes; /// stack of scopes when parsing
     CScriptVar *stringClass; /// Built in string class
     CScriptVar *objectClass; /// Built in object class
     CScriptVar *arrayClass; /// Built in array class
-
     // parsing - in order of precedence
     CScriptVarLink *factor(bool &execute);
     CScriptVarLink *unary(bool &execute);
     CScriptVarLink *term(bool &execute);
     CScriptVarLink *expression(bool &execute);
-    CScriptVarLink *condition(bool &execute);
-    CScriptVarLink *logic(bool &execute);
+	CScriptVarLink *binary_shift(bool &execute);
+    CScriptVarLink *relation(bool &execute, int set=LEX_EQUAL, int set_n='<');
+    CScriptVarLink *logic_binary(bool &execute, int op='|', int op_n1='^', int op_n2='&');
+    CScriptVarLink *logic(bool &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
+	CScriptVarLink *condition(bool &execute);
+	CScriptVarLink *assignment(bool &execute, int cascade=0);
     CScriptVarLink *base(bool &execute);
     void block(bool &execute);
     void statement(bool &execute);

@@ -23,15 +23,17 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#include "TinyJS_Functions.h"
+#include "targetver.h"
+#include <afx.h>
 #include <math.h>
 #include <cstdlib>
 #include <sstream>
+#include "TinyJS_Functions.h"
 
 using namespace std;
 // ----------------------------------------------- Actual Functions
 
-void scTrace(CScriptVar *c, void *userdata) {
+void scTrace(CScriptVar *UNUSED(c), void * userdata) {
     CTinyJS *js = (CTinyJS*)userdata;
     js->root->trace();
 }
