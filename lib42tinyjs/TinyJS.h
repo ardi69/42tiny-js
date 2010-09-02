@@ -180,7 +180,7 @@ public:
   CScriptVarLink *nextSibling;
   CScriptVarLink *prevSibling;
   CScriptVar *var;
-  bool owned;
+  CScriptVar *owned; // pointer to the owner CScriptVar
 
   CScriptVarLink(CScriptVar *var, const std::string &name = TINYJS_TEMP_NAME);
   CScriptVarLink(const CScriptVarLink &link); ///< Copy constructor
@@ -328,7 +328,7 @@ private:
     CScriptVarLink *logic_binary(bool &execute, int op='|', int op_n1='^', int op_n2='&');
     CScriptVarLink *logic(bool &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
 	CScriptVarLink *condition(bool &execute);
-	CScriptVarLink *assignment(bool &execute, int cascade=0);
+	CScriptVarLink *assignment(bool &execute);
     CScriptVarLink *base(bool &execute);
     void block(bool &execute);
     void statement(bool &execute);

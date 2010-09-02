@@ -23,12 +23,20 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#include "targetver.h"
-#include <afx.h>
+#ifdef _MSC_VER
+#	include "targetver.h"
+#	include <afx.h>
+#endif
 #include <math.h>
 #include <cstdlib>
 #include <sstream>
 #include "TinyJS_Functions.h"
+
+#ifdef _DEBUG
+#	ifdef _MSC_VER
+#		define new DEBUG_NEW
+#	endif
+#endif
 
 using namespace std;
 // ----------------------------------------------- Actual Functions

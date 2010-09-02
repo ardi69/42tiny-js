@@ -70,7 +70,8 @@
                    String.length() no more - now String.length
                    Added extra constructors to reduce confusion
                    Fixed checks against undefined
-   Version ardi    Added boolean datatype (in string operators its shown as 'true'/'false' but in math as '1'/'0'
+   Forked to 42tiny-js by Armin diedering
+   R3			   Added boolean datatype (in string operators its shown as 'true'/'false' but in math as '1'/'0'
 				   Added '~' operator
 				   Added bit-shift operators '<<' '>>'
 				   Added assignment operators '<<=' '>>=' '|=' '&=' '^='
@@ -91,24 +92,38 @@
 												-> ['!' '~' '-' '++' '--']
 					Added do-while-loop ( do .... while(..); )
 					Added break and continue statements for loops
+	R4				Changed "owned"-member of CScriptVarLink from bool to a pointer of CScriptVarowned
+					Added some Visual Studio Preprocessor stuff
+					Added now alowed stuff like this (function (v) {print(v);})(12);
+					Remove unneeded and wrong deepCopy by assignment operator '='
+
 
     NOTE: This doesn't support constructors for objects
           Recursive loops of data such as a.foo = a; fail to be garbage collected
           'length' cannot be set
           There is no ternary operator implemented yet
-	  The postfix increment operator returns the current value, not the previous as it should.
  */
 
 
-
-#include "targetver.h"
-#include <afx.h>
+#ifdef _MSC_VER
+#	include "targetver.h"
+#	include <afx.h>
+#endif
 #include <assert.h>
+#include <string>
+#include <string.h>
+#include <sstream>
+#include <cstdlib>
+#include <stdio.h>
 #include "TinyJS.h"
 
-#	ifdef _DEBUG
+#ifdef _DEBUG
+#	ifdef _MSC_VER
 #		define new DEBUG_NEW
+#	else
+#		define DEBUG_MEMORY 1
 #	endif
+#endif
 
 
 #ifndef ASSERT
@@ -120,11 +135,6 @@
  * BUT this is more clever - it tries to keep the old link if it's not owned to save allocations */
 #define CREATE_LINK(LINK, VAR) { if (!LINK || LINK->owned) LINK = new CScriptVarLink(VAR); else LINK->replaceWith(VAR); }
 
-#include <string>
-#include <string.h>
-#include <sstream>
-#include <cstdlib>
-#include <stdio.h>
 
 using namespace std;
 
@@ -608,7 +618,7 @@ CScriptVarLink::CScriptVarLink(CScriptVar *var, const std::string &name) {
     this->nextSibling = 0;
     this->prevSibling = 0;
     this->var = var->ref();
-    this->owned = false;
+    this->owned = NULL;
 }
 
 CScriptVarLink::~CScriptVarLink() {
@@ -627,7 +637,7 @@ CScriptVarLink::CScriptVarLink(const CScriptVarLink &link) {
     this->nextSibling = 0;
     this->prevSibling = 0;
     this->var = link.var->ref();
-    this->owned = false;
+    this->owned = NULL;
 }
 
 void CScriptVarLink::replaceWith(CScriptVar *newVar) {
@@ -766,7 +776,7 @@ CScriptVarLink *CScriptVar::addChild(const std::string &childName, CScriptVar *c
       child = new CScriptVar();
 
     CScriptVarLink *link = new CScriptVarLink(child, childName);
-    link->owned = true;
+    link->owned = this;
     if (lastChild) {
         lastChild->nextSibling = link;
         link->prevSibling = lastChild;
@@ -1315,13 +1325,14 @@ CScriptVarLink *CTinyJS::parseFunctionDefinition() {
 }
 
 CScriptVarLink *CTinyJS::factor(bool &execute) {
-    if (l->tk=='(') {
+/*    if (l->tk=='(') {
         l->match('(');
         CScriptVarLink *a = base(execute);
         l->match(')');
         return a;
     }
-    if (l->tk==LEX_R_TRUE) {
+*/
+	if (l->tk==LEX_R_TRUE) {
         l->match(LEX_R_TRUE);
         return new CScriptVarLink(new CScriptVar(true));
     }
@@ -1337,8 +1348,17 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
         l->match(LEX_R_UNDEFINED);
         return new CScriptVarLink(new CScriptVar(TINYJS_BLANK_DATA,SCRIPTVAR_UNDEFINED));
     }
-    if (l->tk==LEX_ID) {
-        CScriptVarLink *a = execute ? findInScopes(l->tkStr) : new CScriptVarLink(new CScriptVar());
+    if (l->tk==LEX_ID || l->tk=='(') {
+        CScriptVarLink *a;
+		int op = l->tk;
+		if(l->tk=='(')
+		{
+			l->match('(');
+			a = base(execute);
+			l->match(')');
+		}
+		else 
+			a = execute ? findInScopes(l->tkStr) : new CScriptVarLink(new CScriptVar());
         /* The parent if we're executing a method call */
         CScriptVar *parent = 0;
 
@@ -1347,7 +1367,8 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
            * (we won't add it here. This is done in the assignment operator)*/
           a = new CScriptVarLink(new CScriptVar(), l->tkStr);
         }
-        l->match(LEX_ID);
+		if(op==LEX_ID)
+			l->match(LEX_ID);
         while (l->tk=='(' || l->tk=='.' || l->tk=='[') {
             if (l->tk=='(') { // ------------------------------------- Function Call
               if (execute) {
@@ -1358,9 +1379,9 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
                 }
                 l->match('(');
                 // create a new symbol table entry for execution of this function
-                CScriptVar *functionRoot = new CScriptVar(TINYJS_BLANK_DATA, SCRIPTVAR_FUNCTION);
+                CScriptVarLink *functionRoot = new CScriptVarLink(new CScriptVar(TINYJS_BLANK_DATA, SCRIPTVAR_FUNCTION));
                 if (parent)
-                  functionRoot->addChildNoDup("this", parent);
+                  functionRoot->var->addChildNoDup("this", parent);
                 // grab in all parameters
                 CScriptVarLink *v = a->var->firstChild;
                 while (v) {
@@ -1368,10 +1389,10 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
                     if (execute) {
                         if (value->var->isBasic()) {
                           // pass by value
-                          functionRoot->addChild(v->name, value->var->deepCopy());
+                          functionRoot->var->addChild(v->name, value->var->deepCopy());
                         } else {
                           // pass by reference
-                          functionRoot->addChild(v->name, value->var);
+                          functionRoot->var->addChild(v->name, value->var);
                         }
                     }
                     CLEAN(value);
@@ -1383,12 +1404,12 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
                 CScriptVarLink *returnVar = NULL;
                 // execute function!
                 // add the function's execute space to the symbol table so we can recurse
-                CScriptVarLink *returnVarLink = functionRoot->addChild(TINYJS_RETURN_VAR);
-                scopes.push_back(functionRoot);
+                CScriptVarLink *returnVarLink = functionRoot->var->addChild(TINYJS_RETURN_VAR);
+                scopes.push_back(functionRoot->var);
 
                 if (a->var->isNative()) {
                     ASSERT(a->var->jsCallback);
-                    a->var->jsCallback(functionRoot, a->var->jsCallbackUserData);
+                    a->var->jsCallback(functionRoot->var, a->var->jsCallbackUserData);
                 } else {
                     /* we just want to execute the block, but something could
                      * have messed up and left us with the wrong ScriptLex, so
@@ -1414,7 +1435,7 @@ CScriptVarLink *CTinyJS::factor(bool &execute) {
                 scopes.pop_back();
                 /* get the real return var before we remove it from our function */
                 returnVar = new CScriptVarLink(returnVarLink->var);
-                functionRoot->removeLink(returnVarLink);
+                functionRoot->var->removeLink(returnVarLink);
                 delete functionRoot;
                 if (returnVar)
                   a = returnVar;
@@ -1789,7 +1810,7 @@ CScriptVarLink *CTinyJS::condition(bool &execute)
 	return a;
 }
 	
-CScriptVarLink *CTinyJS::assignment(bool &execute, int cascade) {
+CScriptVarLink *CTinyJS::assignment(bool &execute) {
     CScriptVarLink *lhs = condition(execute);
     if (l->tk=='=' || l->tk==LEX_PLUSEQUAL || l->tk==LEX_MINUSEQUAL || 
 			l->tk==LEX_LSHIFTEQUAL || l->tk==LEX_RSHIFTEQUAL ||
@@ -1807,13 +1828,10 @@ CScriptVarLink *CTinyJS::assignment(bool &execute, int cascade) {
 
         int op = l->tk;
         l->match(l->tk);
-        CScriptVarLink *rhs = assignment(execute, ++cascade);
-		--cascade;
+        CScriptVarLink *rhs = assignment(execute);
         if (execute) {
             if (op=='=') {
                 lhs->replaceWith(rhs);
-				if(cascade==0) // the leftest assignment returns always an unnamed var
-					lhs = new CScriptVarLink(lhs->var->deepCopy()); 
            } else if (op==LEX_PLUSEQUAL) {
                 CScriptVar *res = lhs->var->mathsOp(rhs->var, '+');
                 lhs->replaceWith(res);
@@ -1880,11 +1898,12 @@ void CTinyJS::statement(bool &execute) {
         l->tk==LEX_PLUSPLUS ||
         l->tk==LEX_MINUSMINUS ||
         l->tk=='+' ||
-        l->tk=='-') {
+        l->tk=='-' ||
+        l->tk=='(') {
         /* Execute a simple statement that only contains basic arithmetic... */
         CLEAN(base(execute));
         l->match(';');
-    } else if (l->tk=='{') {
+	} else if (l->tk=='{') {
         /* A block of code */
         block(execute);
     } else if (l->tk==';') {
