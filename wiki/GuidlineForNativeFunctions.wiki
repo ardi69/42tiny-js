@@ -1,0 +1,9 @@
+#summary guidline for native function
+
+= This File is still under construction =
+= Guidline for Native Functions =
+
+== add native functions ==
+
+To add a native function the TinyJS-class privides a methode defined as {{{ CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0);}}}
+JSCallback is defined as {{{typedef void (*JSCallback)(const CFunctionsScopePtr &var, void *userdata);}}}
