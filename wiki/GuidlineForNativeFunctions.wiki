@@ -5,10 +5,11 @@
 
 == add native functions ==
 
-To add a native function the TinyJS-class privides a methode defined as 
+To add a native function the TinyJS-class provides a methode defined as 
 {{{
 CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0);
 }}}
-JSCallback is defined as {{{
+and JSCallback is defined as 
+{{{
 typedef void (*JSCallback)(const CFunctionsScopePtr &var, void *userdata);
 }}}
