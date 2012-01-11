@@ -1,3 +1,32 @@
+/*
+ * 42TinyJS
+ *
+ * A fork of TinyJS with the goal to makes a more JavaScript/ECMA compliant engine
+ *
+ * Authored By Armin Diedering <armin@diedering.de>
+ *
+ * Copyright (C) 2010 ardisoft
+ *
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the "Software"), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is furnished to do
+ * so, subject to the following conditions:
+
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 
 #ifndef pool_allocator_h__
 #define pool_allocator_h__
@@ -6,7 +35,7 @@
 #include <stdint.h>
 #include <string>
 
-//#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
+#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
 
 #if defined(_DEBUG) || defined(LOG_POOL_ALLOCATOR_MEMORY_USAGE)
 #	define DEBUG_POOL_ALLOCATOR
@@ -19,6 +48,7 @@ public:
 	void* alloc(size_t);
 	void free(void* p, size_t);
 	static fixed_size_allocator *get(size_t,bool,const char* for_class=0);
+	size_t objectSize() { return object_size; }
 private:
 	fixed_size_allocator(size_t num_objects, size_t object_size, const char* for_class); 
 	fixed_size_allocator(const fixed_size_allocator&);
