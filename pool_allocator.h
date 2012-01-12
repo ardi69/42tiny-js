@@ -42,22 +42,7 @@
  * added to 42TinyJS a pool_allocator. This allocator allocates every 64 objects
  * as a pool of objects. Is an object needed it can faster allocated from this pool as 
  * from the heap.
- * To speed-up frees the pool_allocator never frees the pools.
- * Never??? 
- * The pool_allocator holds all allocated memory in a global class-instance (pool-manager).
- * After the main-function has finished the StartUp-Code calls all global de-constructors.
- * In the de-constructor of the pool-manager the memory is freed.
- *
- * But! Some Compiler/Debugger detects a memory leaks 
- * because at the end of main we have memory that not freed.
- *
- * you can deactivate the pool_allocator by commenting out the follow #define USE_POOL_ALLOCATOR
  ************************************************************************/ 
-#define USE_POOL_ALLOCATOR
-
-
-#ifdef USE_POOL_ALLOCATOR
-
 
 #define LOG_POOL_ALLOCATOR_MEMORY_USAGE
 
@@ -69,18 +54,20 @@ struct block_head;
 class fixed_size_allocator {
 public:
 	~fixed_size_allocator();
-	void* alloc(size_t);
-	void free(void* p, size_t);
-	static fixed_size_allocator *get(size_t,bool,const char* for_class=0);
+	static void *alloc(size_t,const char* for_class=0);
+	static void free(void *, size_t);
 	size_t objectSize() { return object_size; }
 private:
 	fixed_size_allocator(size_t num_objects, size_t object_size, const char* for_class); 
 	fixed_size_allocator(const fixed_size_allocator&);
 	fixed_size_allocator& operator=(const fixed_size_allocator&);
+	void *_alloc(size_t);
+	bool _free(void* p, size_t);
 	size_t num_objects;
 	size_t object_size;
 	void *head_of_free_list;
 	block_head *head;
+	int refs;
 #ifdef DEBUG_POOL_ALLOCATOR
 	// Debug
 	std::string name;
@@ -97,28 +84,19 @@ class fixed_size_object {
 public:
 	static void* operator new(size_t size) {
 #ifdef DEBUG_POOL_ALLOCATOR
-		return fixed_size_allocator::get(size, true, typeid(T).name())->alloc(size);
+		return fixed_size_allocator::alloc(size, typeid(T).name());
 #else
-		return fixed_size_allocator::get(size, true)->alloc(size);
+		return fixed_size_allocator::alloc(size);
 #endif
 	}
 	static void* operator new(size_t size, void* p) {
 		return p;
 	}
 	static void operator delete(void* p, size_t size) {
-		fixed_size_allocator::get(size, false)->free(p, size);
+		fixed_size_allocator::free(p, size);
 	}
 private:
 };
-
-#else /* USE_POOL_ALLOCATOR */
-
-template<typename T, int num_objects=64>
-class fixed_size_object {
-};
-
-#endif /* USE_POOL_ALLOCATOR */
-
 #if 0 // under construction
 template<typename T>
 class block_allocator_stl {
