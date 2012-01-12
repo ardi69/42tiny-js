@@ -28,6 +28,9 @@
  */
 
 #include "pool_allocator.h"
+
+#ifdef USE_POOL_ALLOCATOR
+
 #include <vector>
 #include <algorithm>
 
@@ -187,3 +190,6 @@ fixed_size_allocator *fixed_size_allocator::get(size_t size, bool for_alloc, con
 		ASSERT(0/* free called but not allocator defined*/);
 	return 0;
 }
+#else
+int this_int_is_declared_to_prevent_linker_warnigs;
+#endif /* USE_POOL_ALLOCATOR */
