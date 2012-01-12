@@ -35,6 +35,30 @@
 #include <stdint.h>
 #include <string>
 
+
+/************************************************************************
+ * TinyJS must many many times allocates and frees objects
+ * To prevent memory fragmentation and speed ups allocates & frees, i have
+ * added to 42TinyJS a pool_allocator. This allocator allocates every 64 objects
+ * as a pool of objects. Is an object needed it can faster allocated from this pool as 
+ * from the heap.
+ * To speed-up frees the pool_allocator never frees the pools.
+ * Never??? 
+ * The pool_allocator holds all allocated memory in a global class-instance (pool-manager).
+ * After the main-function has finished the StartUp-Code calls all global de-constructors.
+ * In the de-constructor of the pool-manager the memory is freed.
+ *
+ * But! Some Compiler/Debugger detects a memory leaks 
+ * because at the end of main we have memory that not freed.
+ *
+ * you can deactivate the pool_allocator by commenting out the follow #define USE_POOL_ALLOCATOR
+ ************************************************************************/ 
+#define USE_POOL_ALLOCATOR
+
+
+#ifdef USE_POOL_ALLOCATOR
+
+
 #define LOG_POOL_ALLOCATOR_MEMORY_USAGE
 
 #if defined(_DEBUG) || defined(LOG_POOL_ALLOCATOR_MEMORY_USAGE)
@@ -86,6 +110,15 @@ public:
 	}
 private:
 };
+
+#else /* USE_POOL_ALLOCATOR */
+
+template<typename T, int num_objects=64>
+class fixed_size_object {
+};
+
+#endif /* USE_POOL_ALLOCATOR */
+
 #if 0 // under construction
 template<typename T>
 class block_allocator_stl {
