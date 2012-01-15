@@ -557,17 +557,6 @@ public:
 	bool removeLink(CScriptVarLink *&link); ///< Remove a specific link (this is faster than finding via a child)
 	void removeAllChildren();
 
-/*
-	/// funcions for FUNCTION
-	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
-	#define DEPRECATED_getParameter DEPRECATED("getParameter is deprecated use getArgument instead")
-	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string &name); 
-	DEPRECATED_getParameter CScriptVarPtr getParameter(int Idx); 
-	CScriptVarPtr getArgument(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
-	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
-	int getParameterLength(); ///< If this is a function, get the count of parameters
-*/
-	
 	/// ARRAY
 	CScriptVarPtr getArrayIndex(int idx); ///< The the value at an array index
 	void setArrayIndex(int idx, const CScriptVarPtr &value); ///< Set the value at an array index
@@ -1580,6 +1569,7 @@ private:
 
 	void native_Object(const CFunctionsScopePtr &c, void *data);
 	void native_Object_hasOwnProperty(const CFunctionsScopePtr &c, void *data);
+	void native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *data);
 	void native_Object_valueOf(const CFunctionsScopePtr &c, void *data);
 	void native_Object_toString(const CFunctionsScopePtr &c, void *data);
 
