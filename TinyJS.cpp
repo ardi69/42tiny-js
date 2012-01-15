@@ -2770,8 +2770,8 @@ CTinyJS::CTinyJS() {
 	// Object
 	var = addNative("function Object()", this, &CTinyJS::native_Object);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_hasOwnProperty); 
-	addNative("function Object.prototype.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_toString); 
 	pseudo_statics.push_back(&objectPrototype);
