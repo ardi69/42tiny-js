@@ -44,7 +44,7 @@
  * from the heap.
  ************************************************************************/ 
 
-#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
+//#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
 
 #if defined(_DEBUG) || defined(LOG_POOL_ALLOCATOR_MEMORY_USAGE)
 #	define DEBUG_POOL_ALLOCATOR

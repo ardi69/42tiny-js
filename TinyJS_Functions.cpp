@@ -48,23 +48,23 @@ using namespace std;
 
 static void scTrace(const CFunctionsScopePtr &c, void * userdata) {
 	CTinyJS *js = (CTinyJS*)userdata;
-	if(c->getParameterLength())
-		c->getParameter(0)->trace();
+	if(c->getArgumentsLength())
+		c->getArgument(0)->trace();
 	else
 		js->getRoot()->trace("root");
 }
 
 static void scObjectDump(const CFunctionsScopePtr &c, void *) {
-	c->getParameter("this")->trace("> ");
+	c->getArgument("this")->trace("> ");
 }
 
 static void scObjectClone(const CFunctionsScopePtr &c, void *) {
-	CScriptVarPtr obj = c->getParameter("this");
+	CScriptVarPtr obj = c->getArgument("this");
 	c->setReturnVar(obj->clone());
 }
 
 static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
-	string str = c->getParameter("str")->getString();
+	string str = c->getArgument("str")->getString();
 
 	int val = 0;
 	if (str.length()==1)
@@ -74,12 +74,12 @@ static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
 
 static void scJSONStringify(const CFunctionsScopePtr &c, void *) {
 	string indent = "   ", indentString;
-	c->setReturnVar(c->newScriptVar(c->getParameter("obj")->getParsableString(indentString, indent)));
+	c->setReturnVar(c->newScriptVar(c->getArgument("obj")->getParsableString(indentString, indent)));
 }
 
 static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
-	CScriptVarPtr obj = c->getParameter("obj");
-	CScriptVarPtr arr = c->getParameter("this");
+	CScriptVarPtr obj = c->getArgument("obj");
+	CScriptVarPtr arr = c->getArgument("this");
 
 	int l = arr->getArrayLength();
 	CScriptVarPtr equal = c->constScriptVar(Undefined);
@@ -94,8 +94,8 @@ static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
 }
 
 static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
-	CScriptVarPtr obj = c->getParameter("obj");
-	CScriptVarPtr arr = c->getParameter("this");
+	CScriptVarPtr obj = c->getArgument("obj");
+	CScriptVarPtr arr = c->getArgument("this");
 	int i;
 	vector<int> removedIndices;
 
@@ -129,8 +129,8 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 }
 
 static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
-	string sep = c->getParameter("separator")->getString();
-	CScriptVarPtr arr = c->getParameter("this");
+	string sep = c->getArgument("separator")->getString();
+	CScriptVarPtr arr = c->getArgument("this");
 
 	ostringstream sstr;
 	int l = arr->getArrayLength();

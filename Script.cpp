@@ -60,7 +60,7 @@
 const char *code = "function myfunc(x, y) { return x + y; } var a = myfunc(1,2); print(a);";
 
 void js_print(const CFunctionsScopePtr &v, void *) {
-	printf("> %s\n", v->getParameter("text")->getString().c_str());
+	printf("> %s\n", v->getArgument("text")->getString().c_str());
 }
 
 void js_dump(const CFunctionsScopePtr &v, void *) {
