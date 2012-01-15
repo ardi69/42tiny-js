@@ -2771,6 +2771,7 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Object()", this, &CTinyJS::native_Object);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_hasOwnProperty); 
+	addNative("function Object.prototype.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_toString); 
 	pseudo_statics.push_back(&objectPrototype);
@@ -3700,22 +3701,35 @@ CScriptVarLinkPtr CTinyJS::execute_binary_shift(bool &execute) {
 	}
 	return a;
 }
-// L->R: Precedence 8 (relational) < <= > <= in (TODO: instanceof)
+// L->R: Precedence 8 (relational) < <= > <= in instanceof
 // L->R: Precedence 9 (equality) == != === !===
 CScriptVarLinkPtr CTinyJS::execute_relation(bool &execute, int set, int set_n) {
 	CScriptVarLinkPtr a = set_n ? execute_relation(execute, set_n, 0) : execute_binary_shift(execute);
 	if ((set==LEX_EQUAL && t->tk>=LEX_RELATIONS_1_BEGIN && t->tk<=LEX_RELATIONS_1_END)
-				||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN))) {
+				||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN || t->tk == LEX_R_INSTANCEOF))) {
 		CheckRightHandVar(execute, a);
 		while ((set==LEX_EQUAL && t->tk>=LEX_RELATIONS_1_BEGIN && t->tk<=LEX_RELATIONS_1_END)
-					||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN))) {
+					||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN || t->tk == LEX_R_INSTANCEOF))) {
 			int op = t->tk;
 			t->match(t->tk);
 			CScriptVarLinkPtr b = set_n ? execute_relation(execute, set_n, 0) : execute_binary_shift(execute); // L->R
 			if (execute) {
 				CheckRightHandVar(execute, b);
 				if(op == LEX_R_IN) {
-					a(constScriptVar( b->getVarPtr()->findChildWithPrototypeChain((*a)->getString())!= 0 ));
+					a(constScriptVar( (*b)->findChildWithPrototypeChain((*a)->getString())!= 0 ));
+				} else if(op == LEX_R_INSTANCEOF) {
+					CScriptVarLink *prototype = (*b)->findChild(TINYJS_PROTOTYPE_CLASS);
+					if(!prototype)
+						throwError(execute, "invalid 'instanceof' operand b");
+					else {
+						unsigned int uniqueID = getUniqueID();
+						CScriptVarPtr object = (*a)->findChild(TINYJS___PROTO___VAR);
+						while( object && object!=prototype->getVarPtr() && object->getTempraryID() != uniqueID) {
+							object->setTemporaryID(uniqueID); // prevents recursions
+							object = object->findChild(TINYJS___PROTO___VAR);
+						}
+						a(constScriptVar(object && object==prototype->getVarPtr()));
+					}
 				} else
 					a = mathsOp(execute, a, b, op);
 			}
@@ -4477,6 +4491,12 @@ void CTinyJS::native_Object(const CFunctionsScopePtr &c, void *data) {
 }
 void CTinyJS::native_Object_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->constScriptVar(c->getArgument("this")->findChild(c->getArgument("prop")->getString()) != 0));
+}
+void CTinyJS::native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *data) {
+	if(c->getArgumentsLength()>=1) {
+		c->setReturnVar(c->getArgument(0)->findChild(TINYJS___PROTO___VAR));
+	}
+	// TODO throw error 
 }
 void CTinyJS::native_Object_valueOf(const CFunctionsScopePtr &c, void *data) {
 	bool execute = true;
