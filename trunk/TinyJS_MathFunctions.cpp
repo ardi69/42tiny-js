@@ -62,10 +62,10 @@ using namespace std;
 #define F_RNG(a,min,max)    ((a)<(min) ? min : ((a)>(max) ? max : a ))
  
 //CScriptVar shortcut macro
-#define scIsInt(a)          ( c->getParameter(a)->isInt() )
-#define scIsDouble(a)       ( c->getParameter(a)->isDouble() )  
-#define scGetInt(a)         ( c->getParameter(a)->getInt() )
-#define scGetDouble(a)      ( c->getParameter(a)->getDouble() )  
+#define scIsInt(a)          ( c->getArgument(a)->isInt() )
+#define scIsDouble(a)       ( c->getArgument(a)->isDouble() )  
+#define scGetInt(a)         ( c->getArgument(a)->getInt() )
+#define scGetDouble(a)      ( c->getArgument(a)->getDouble() )  
 #define scReturnInt(a)      ( c->setReturnVar(c->newScriptVar((int)a)) )
 #define scReturnDouble(a)   ( c->setReturnVar(c->newScriptVar((double)a)) )
 #define scReturnNaN()       do { c->setReturnVar(c->constScriptVar(NaN)); return; } while(0)
@@ -99,7 +99,7 @@ namespace
 }
 #endif
 
-#define GET_PARAMETER_AS_NUMERIC_VAR(v,n) CScriptVarPtr v = c->getParameter(n)->getNumericVar()
+#define GET_PARAMETER_AS_NUMERIC_VAR(v,n) CScriptVarPtr v = c->getArgument(n)->getNumericVar()
 #define RETURN_NAN_IS_NAN(v) do{ if(v->isNaN()) { c->setReturnVar(v); return; } }while(0)
 #define RETURN_NAN_IS_NAN_OR_INFINITY(v) do{ if(v->isNaN() || v->isInfinity()) { c->setReturnVar(v); return; } }while(0)
 #define RETURN_INFINITY_IS_INFINITY(v) do{ if(v->isInfinity()) { c->setReturnVar(v); return; } }while(0)
@@ -136,7 +136,7 @@ static void scMathFloor(const CFunctionsScopePtr &c, void *userdata) {
 
 //Math.min(a,b) - returns minimum of two given values 
 static void scMathMin(const CFunctionsScopePtr &c, void *userdata) {
-	int length = c->getParameterLength();
+	int length = c->getArgumentsLength();
 	CScriptVarLinkPtr ret(c->constScriptVar(InfinityPositive));
 	for(int i=0; i<length; i++)
 	{
@@ -151,7 +151,7 @@ static void scMathMin(const CFunctionsScopePtr &c, void *userdata) {
 
 //Math.max(a,b) - returns maximum of two given values  
 static void scMathMax(const CFunctionsScopePtr &c, void *userdata) {
-	int length = c->getParameterLength();
+	int length = c->getArgumentsLength();
 	CScriptVarLinkPtr ret(c->constScriptVar(InfinityNegative));
 	for(int i=0; i<length; i++)
 	{

@@ -262,7 +262,7 @@ bool run_test(const char *filename) {
     printf("ERROR: %s\n", e->text.c_str());
 	delete e;
   }
-  bool pass = s.getRoot()->getParameter("result")->getBool();
+  bool pass = (*s.getRoot()->findChild("result"))->getBool();
 #ifdef WITH_TIME_LOGGER
   TimeLoggerLogprint(Test);
 #endif

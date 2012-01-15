@@ -55,6 +55,13 @@
 #	define __attribute__(x)
 #endif
 
+#ifdef _MSC_VER
+#	define DEPRECATED(_Text) __declspec(deprecated(_Text))
+#elif defined(__GNUC__)
+#	define DEPRECATED(_Text) __attribute__ ((deprecated))
+#else
+#	define DEPRECATED(_Text)
+#endif
 
 #undef TRACE
 #ifndef TRACE
@@ -348,7 +355,7 @@ public:
 	std::string file;
 	int line;
 	std::string name;
-	std::vector<std::string> parameter;
+	std::vector<std::string> arguments;
 	TOKEN_VECT body;
 private:
 };
@@ -528,6 +535,7 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 	virtual std::string getVarType()=0;
+	CScriptVarPtr getPrimitivVar(); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	CScriptVarPtr getPrimitivVar(bool execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 	CScriptVarPtr valueOf(bool execute);
@@ -549,13 +557,16 @@ public:
 	bool removeLink(CScriptVarLink *&link); ///< Remove a specific link (this is faster than finding via a child)
 	void removeAllChildren();
 
-
+/*
 	/// funcions for FUNCTION
 	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
-	CScriptVarPtr getParameter(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
-	CScriptVarPtr getParameter(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
+	#define DEPRECATED_getParameter DEPRECATED("getParameter is deprecated use getArgument instead")
+	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string &name); 
+	DEPRECATED_getParameter CScriptVarPtr getParameter(int Idx); 
+	CScriptVarPtr getArgument(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
+	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
 	int getParameterLength(); ///< If this is a function, get the count of parameters
-
+*/
 	
 	/// ARRAY
 	CScriptVarPtr getArrayIndex(int idx); ///< The the value at an array index
@@ -842,12 +853,18 @@ protected:
 public:
 	virtual ~CScriptVarObject();
 	virtual CScriptVarPtr clone();
+
 	virtual bool isObject(); // { return true; }
 	virtual bool isPrimitive(); // { return false; } 
 
+	virtual int getInt();
+	virtual bool getBool();
+	virtual double getDouble();
 	virtual std::string getString(); // { return "[ Object ]"; };
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent);
 	virtual std::string getVarType(); // { return "object"; }
+
+	virtual CScriptVarPtr _toString(bool execute, int radix=0);
 private:
 	friend define_newScriptVar_Fnc(Object, CTinyJS* Context, Object_t);
 	friend define_newScriptVar_Fnc(Object, CTinyJS* Context, Object_t, const CScriptVarPtr &);
@@ -865,15 +882,15 @@ define_ScriptVarPtr_Type(ObjectWrap);
 
 class CScriptVarObjectWrap : public CScriptVarObject {
 protected:
-	CScriptVarObjectWrap(CTinyJS *Context, const CScriptVarPtr Value);// : CScriptVarObject(Context), value(Value) {}
+	CScriptVarObjectWrap(CTinyJS *Context, const CScriptVarPtr &Value);// : CScriptVarObject(Context), value(Value) {}
 	CScriptVarObjectWrap(const CScriptVarObjectWrap &Copy) : CScriptVarObject(Copy), value(Copy.value) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarObjectWrap();
 	virtual CScriptVarPtr clone();
-	virtual int getInt();
-	virtual bool getBool();
-	virtual double getDouble();
-	virtual std::string getString();
+//	virtual int getInt();
+//	virtual bool getBool();
+//	virtual double getDouble();
+//	virtual std::string getString();
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
@@ -1083,6 +1100,7 @@ public:
 	virtual CScriptVarPtr clone();
 	virtual bool isNumber(); // { return true; }
 	virtual bool isInt(); // { return true; }
+	virtual CScriptVarPtr _toString(bool execute, int radix=0);
 	friend define_newScriptVar_Fnc(Integer, CTinyJS* Context, int);
 	friend define_newScriptVar_Fnc(Integer, CTinyJS* Context, char);
 };
@@ -1165,6 +1183,7 @@ public:
 	virtual std::string getString(); // {return float2string(data);}
 	virtual std::string getVarType(); // { return "number"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
+	virtual CScriptVarPtr _toString(bool execute, int radix=0);
 private:
 	double data;
 	friend define_newScriptVar_Fnc(Double, CTinyJS* Context, double);
@@ -1302,6 +1321,16 @@ protected: // only derived classes or friends can be created
 public:
 	virtual ~CScriptVarScopeFnc();
 	virtual CScriptVarLink *findInScopes(const std::string &childName);
+	
+	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
+	
+	#define DEPRECATED_getParameter DEPRECATED("getParameter is deprecated use getArgument instead")
+	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string &name); 
+	DEPRECATED_getParameter CScriptVarPtr getParameter(int Idx); 
+	CScriptVarPtr getArgument(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
+	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
+	DEPRECATED("getParameterLength is deprecated use getArgumentsLength instead") int getParameterLength(); ///< If this is a function, get the count of parameters
+	int getArgumentsLength(); ///< If this is a function, get the count of parameters
 protected:
 	CScriptVarLink *closure;
 	friend define_newScriptVar_Fnc(ScopeFnc, CTinyJS* Context, ScopeFnc_t, const CScriptVarScopePtr &Closure);
@@ -1490,7 +1519,7 @@ private:
 	CScriptVarPtr constFalse;
 	CScriptVarPtr constOne;
 	CScriptVarPtr constZero;
-	
+	std::vector<CScriptVarPtr *> pseudo_statics;
 	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkPtr &link)
@@ -1507,7 +1536,7 @@ private:
 
 public:
 	// function call
-	CScriptVarPtr callFunction(bool &execute, const CScriptVarPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr& This);
+	CScriptVarPtr callFunction(bool &execute, const CScriptVarPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 	//
 	// parsing - in order of precedence
 
@@ -1583,6 +1612,7 @@ private:
 public:
 	uint32_t getUniqueID() { return ++uniqueID; }
 	CScriptVar *first;
+	void setTemporaryID_recursive(uint32_t ID);
 	void ClearLostVars(const CScriptVarPtr &extra=CScriptVarPtr());
 };
 
