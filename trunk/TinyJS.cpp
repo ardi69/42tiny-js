@@ -4680,7 +4680,7 @@ CScriptVarPtr CTinyJS::newError(ERROR_TYPES type, const CFunctionsScopePtr &c) {
 	if(i>1) fileName	= c->getArgument(1);
 	if(i>2) line		= c->getArgument(2);
 	if(i>3) column		= c->getArgument(3);
-	return newError(type, message.c_str(), fileName.c_str(), line, column));
+	return newError(type, message.c_str(), fileName.c_str(), line, column);
 }
 void CTinyJS::native_Error(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(Error,c)); }
 void CTinyJS::native_EvalError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(EvalError,c)); }
