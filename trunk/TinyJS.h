@@ -224,6 +224,16 @@ enum RUNTIME_FLAGS {
 #define SET_RUNTIME_CANRETURN runtimeFlags |= RUNTIME_CANRETURN
 #define IS_RUNTIME_CANRETURN ((runtimeFlags & RUNTIME_CANRETURN) == RUNTIME_CANRETURN)
 
+enum ERROR_TYPES {
+	Error = 0,
+	EvalError,
+	RangeError,
+	ReferenceError,
+	SyntaxError,
+	TypeError
+};
+extern const char *ERROR_NAME[];
+
 
 #define TINYJS_RETURN_VAR					"return"
 #define TINYJS_LOKALE_VAR					"__locale__"
@@ -1499,6 +1509,7 @@ public:
 	CScriptVarPtr numberPrototype; /// Built in number class
 	CScriptVarPtr booleanPrototype; /// Built in boolean class
 	CScriptVarPtr functionPrototype; /// Built in function class
+	CScriptVarPtr errorPrototype; /// Built in error class
 private:
 	CScriptVarPtr constUndefined;
 	CScriptVarPtr constNaN;
@@ -1565,6 +1576,7 @@ private:
 	void throwError(bool &execute, const std::string &message);
 	void throwError(bool &execute, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
 
+	//////////////////////////////////////////////////////////////////////////
 	/// native Object-Constructors & prototype-functions
 
 	void native_Object(const CFunctionsScopePtr &c, void *data);
@@ -1585,6 +1597,17 @@ private:
 	void native_Function_call(const CFunctionsScopePtr &c, void *data);
 	void native_Function_apply(const CFunctionsScopePtr &c, void *data);
 
+	CScriptVarPtr newError(ERROR_TYPES type, const char *message, const char *file, int line, int column);
+	CScriptVarPtr newError(ERROR_TYPES type, const CFunctionsScopePtr &c);
+	void native_Error(const CFunctionsScopePtr &c, void *data);
+	void native_EvalError(const CFunctionsScopePtr &c, void *data);
+	void native_RangeError(const CFunctionsScopePtr &c, void *data);
+	void native_ReferenceError(const CFunctionsScopePtr &c, void *data);
+	void native_SyntaxError(const CFunctionsScopePtr &c, void *data);
+	void native_TypeError(const CFunctionsScopePtr &c, void *data);
+
+
+	//////////////////////////////////////////////////////////////////////////
 	/// globale function
 
 	void native_eval(const CFunctionsScopePtr &c, void *data);

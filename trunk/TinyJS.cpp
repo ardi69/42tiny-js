@@ -2738,7 +2738,7 @@ CScriptVarLink *CScriptVarScopeWith::findInScopes(const string &childName) {
 // ----------------------------------------------------------------------------------- CSCRIPT
 bool CTinyJS::noexecute = false; 
 CTinyJS::CTinyJS() {
-	CScriptVarPtr var;
+	CScriptVarPtr var, prototype;
 	t = 0;
 	runtimeFlags = 0;
 	first = 0;
@@ -2825,6 +2825,42 @@ CTinyJS::CTinyJS() {
 	functionPrototype->addChild("valueOf", objectPrototype_valueOf);
 	functionPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_statics.push_back(&functionPrototype);
+
+	//////////////////////////////////////////////////////////////////////////
+	// Error
+	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error); 
+	errorPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototype->addChild("message", newScriptVar(""));
+	errorPrototype->addChild("name", newScriptVar("Error"));
+	errorPrototype->addChild("fileName", newScriptVar(""));
+	errorPrototype->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
+	errorPrototype->addChild("column", newScriptVar(-1));			// -1 means not viable
+	pseudo_statics.push_back(&errorPrototype);
+
+	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError); 
+	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
+	prototype->addChild("name", newScriptVar("EvalError"));
+
+	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError); 
+	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
+	prototype->addChild("name", newScriptVar("RangeError"));
+
+	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError); 
+	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
+	prototype->addChild("name", newScriptVar("ReferenceError"));
+
+	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError); 
+	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
+	prototype->addChild("name", newScriptVar("SyntaxError"));
+
+	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError); 
+	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
+	prototype->addChild("name", newScriptVar("TypeError"));
 
 	//////////////////////////////////////////////////////////////////////////
 	// add global built-in vars & constants
@@ -4478,7 +4514,9 @@ CScriptVarLink *CTinyJS::findInPrototypeChain(CScriptVarPtr object, const string
 	return 0;
 }
 #endif
-////////////////////////////////////////////////////////////////////////// native Object
+//////////////////////////////////////////////////////////////////////////
+/// Object
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Object(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr objc = c->getArgument(0);
@@ -4509,7 +4547,9 @@ void CTinyJS::native_Object_toString(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->getArgument("this")->_toString(execute, radix));
 }
 
-////////////////////////////////////////////////////////////////////////// native Array
+//////////////////////////////////////////////////////////////////////////
+/// Array
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Array(const CFunctionsScopePtr &c, void *data) {
 //	CScriptVar *returnVar = new CScriptVarArray(c->getContext());
@@ -4522,7 +4562,9 @@ void CTinyJS::native_Array(const CFunctionsScopePtr &c, void *data) {
 		returnVar->setArrayIndex(i, c->getArgument(i));
 }
 
-////////////////////////////////////////////////////////////////////////// native String
+//////////////////////////////////////////////////////////////////////////
+/// String
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arg;
@@ -4535,7 +4577,9 @@ void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(arg);
 }
 
-////////////////////////////////////////////////////////////////////////// native Number
+//////////////////////////////////////////////////////////////////////////
+/// Number
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Number(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arg;
@@ -4548,7 +4592,9 @@ void CTinyJS::native_Number(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(arg);
 }
 
-////////////////////////////////////////////////////////////////////////// native Boolean
+//////////////////////////////////////////////////////////////////////////
+/// Boolean
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Boolean(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arg;
@@ -4561,7 +4607,9 @@ void CTinyJS::native_Boolean(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(arg);
 }
 
-////////////////////////////////////////////////////////////////////////// native Function
+////////////////////////////////////////////////////////////////////////// 
+/// Function
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Function(const CFunctionsScopePtr &c, void *data) {
 	int length = c->getArgumentsLength();
@@ -4605,7 +4653,45 @@ void CTinyJS::native_Function_apply(const CFunctionsScopePtr &c, void *data) {
 	callFunction(execute, Fnc, Params, This);
 }
 
-////////////////////////////////////////////////////////////////////////// global functions
+////////////////////////////////////////////////////////////////////////// 
+/// Error
+//////////////////////////////////////////////////////////////////////////
+
+const char *ERROR_NAME[] = {"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError"};
+
+CScriptVarPtr CTinyJS::newError(ERROR_TYPES type, const char *message, const char *file, int line, int column) {
+	// ERROR_NAME similar to ERROR_TYPES
+	CScriptVarPtr objc = newScriptVar(Object);
+	CScriptVarPtr prototype = root->findChildByPath(string(ERROR_NAME[type])+".prototype");
+	if(!prototype) prototype = errorPrototype;
+
+	objc->addChildNoDup(TINYJS___PROTO___VAR, prototype);
+	if(message && *message) objc->addChild("message", newScriptVar(message));
+	if(file && *file) objc->addChild("message", newScriptVar(file));
+	if(line>0) objc->addChild("message", newScriptVar(line));
+	if(column>0) objc->addChild("message", newScriptVar(column));
+	return objc;
+}
+CScriptVarPtr CTinyJS::newError(ERROR_TYPES type, const CFunctionsScopePtr &c) {
+	int i = c->getArgumentsLength();
+	string message, fileName;
+	int line=-1, column=-1; 
+	if(i>0) message	= c->getArgument(0);
+	if(i>1) fileName	= c->getArgument(1);
+	if(i>2) line		= c->getArgument(2);
+	if(i>3) column		= c->getArgument(3);
+	return newError(type, message.c_str(), fileName.c_str(), line, column));
+}
+void CTinyJS::native_Error(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(Error,c)); }
+void CTinyJS::native_EvalError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(EvalError,c)); }
+void CTinyJS::native_RangeError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(RangeError,c)); }
+void CTinyJS::native_ReferenceError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(ReferenceError,c)); }
+void CTinyJS::native_SyntaxError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(SyntaxError,c)); }
+void CTinyJS::native_TypeError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(TypeError,c)); }
+
+////////////////////////////////////////////////////////////////////////// 
+/// global functions
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 	string Code = c->getArgument("jsCode")->getString();
