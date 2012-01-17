@@ -65,11 +65,11 @@
 #include <cstring>
 
 //#define WITH_TIME_LOGGER
-
-#ifdef WITH_TIME_LOGGER
-#	include "time_logger.h"
-#endif
 //#define INSANE_MEMORY_DEBUG
+
+
+
+#include "time_logger.h"
 
 #ifdef INSANE_MEMORY_DEBUG
 // needs -rdynamic when compiling/linking

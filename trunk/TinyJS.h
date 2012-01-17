@@ -232,6 +232,8 @@ enum ERROR_TYPES {
 	SyntaxError,
 	TypeError
 };
+#define ERROR_MAX TypeError
+#define ERROR_COUNT (ERROR_MAX+1)
 extern const char *ERROR_NAME[];
 
 
@@ -886,10 +888,10 @@ protected:
 public:
 	virtual ~CScriptVarObjectWrap();
 	virtual CScriptVarPtr clone();
-//	virtual int getInt();
-//	virtual bool getBool();
-//	virtual double getDouble();
-//	virtual std::string getString();
+	//	virtual int getInt();
+	//	virtual bool getBool();
+	//	virtual double getDouble();
+	//	virtual std::string getString();
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
@@ -901,6 +903,32 @@ private:
 	friend define_newScriptVar_Fnc(ObjectWrap, CTinyJS* Context, ObjectWrap_t, const CScriptVarPtr);
 };
 inline define_newScriptVar_Fnc(ObjectWrap, CTinyJS* Context, ObjectWrap_t, const CScriptVarPtr Value) { return new CScriptVarObjectWrap(Context, Value); }
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarError
+////////////////////////////////////////////////////////////////////////// 
+
+define_ScriptVarPtr_Type(Error);
+
+class CScriptVarError : public CScriptVarObject {
+protected:
+	CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);// : CScriptVarObject(Context), value(Value) {}
+	CScriptVarError(const CScriptVarError &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarError();
+	virtual CScriptVarPtr clone();
+	//	virtual int getInt();
+	//	virtual bool getBool();
+	//	virtual double getDouble();
+	//	virtual std::string getString();
+
+//	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
+
+	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+private:
+	friend define_newScriptVar_NamedFnc(Error, CTinyJS* Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
+};
+inline define_newScriptVar_NamedFnc(Error, CTinyJS* Context, ERROR_TYPES type, const char *message=0, const char *file=0, int line=-1, int column=-1) { return new CScriptVarError(Context, type, message, file, line, column); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1509,8 +1537,9 @@ public:
 	CScriptVarPtr numberPrototype; /// Built in number class
 	CScriptVarPtr booleanPrototype; /// Built in boolean class
 	CScriptVarPtr functionPrototype; /// Built in function class
-	CScriptVarPtr errorPrototype; /// Built in error class
+	const CScriptVarPtr &getErrorPrototype(ERROR_TYPES Type) { return errorPrototypes[Type]; }
 private:
+	CScriptVarPtr errorPrototypes[ERROR_COUNT]; /// Built in error class
 	CScriptVarPtr constUndefined;
 	CScriptVarPtr constNaN;
 	CScriptVarPtr constInfinityPositive;
@@ -1519,7 +1548,7 @@ private:
 	CScriptVarPtr constFalse;
 	CScriptVarPtr constOne;
 	CScriptVarPtr constZero;
-	std::vector<CScriptVarPtr *> pseudo_statics;
+	std::vector<CScriptVarPtr *> pseudo_refered;
 	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkPtr &link)
@@ -1597,8 +1626,6 @@ private:
 	void native_Function_call(const CFunctionsScopePtr &c, void *data);
 	void native_Function_apply(const CFunctionsScopePtr &c, void *data);
 
-	CScriptVarPtr newError(ERROR_TYPES type, const char *message, const char *file, int line, int column);
-	CScriptVarPtr newError(ERROR_TYPES type, const CFunctionsScopePtr &c);
 	void native_Error(const CFunctionsScopePtr &c, void *data);
 	void native_EvalError(const CFunctionsScopePtr &c, void *data);
 	void native_RangeError(const CFunctionsScopePtr &c, void *data);
@@ -1608,7 +1635,7 @@ private:
 
 
 	//////////////////////////////////////////////////////////////////////////
-	/// globale function
+	/// global function
 
 	void native_eval(const CFunctionsScopePtr &c, void *data);
 	void native_isNAN(const CFunctionsScopePtr &c, void *data);
@@ -1626,7 +1653,7 @@ public:
 	uint32_t getUniqueID() { return ++uniqueID; }
 	CScriptVar *first;
 	void setTemporaryID_recursive(uint32_t ID);
-	void ClearLostVars(const CScriptVarPtr &extra=CScriptVarPtr());
+	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
 };
 
 //////////////////////////////////////////////////////////////////////////
