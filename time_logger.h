@@ -30,7 +30,7 @@
 
 #ifndef time_logger_h__
 #define time_logger_h__
-#if defined(_DEBUG) && defined(WITH_TIME_LOGGER)
+#if defined(WITH_TIME_LOGGER)
 
 #include <stdint.h>
 #include <stdio.h>

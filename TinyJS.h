@@ -888,10 +888,6 @@ protected:
 public:
 	virtual ~CScriptVarObjectWrap();
 	virtual CScriptVarPtr clone();
-	//	virtual int getInt();
-	//	virtual bool getBool();
-	//	virtual double getDouble();
-	//	virtual std::string getString();
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
