@@ -2104,7 +2104,9 @@ void CScriptVarLinkPtr::clear_tmp_link(){
 		tmp_link = CScriptVarLinkTmpPtr();
 }
 
-////////////////////////////////////////////////////////////////////////// CScriptVarObject
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarObject
+//////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Object);
 CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
@@ -2145,7 +2147,10 @@ string CScriptVarObject::getParsableString(const string &indentString, const str
 }
 string CScriptVarObject::getVarType() { return "object"; }
 CScriptVarPtr CScriptVarObject::_toString(bool execute, int radix) { return newScriptVar("[ Object ]"); };
-////////////////////////////////////////////////////////////////////////// CScriptVarObject
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarObjectWrap
+//////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(ObjectWrap);
 
@@ -2166,7 +2171,40 @@ void CScriptVarObjectWrap::setTemporaryID_recursive(uint32_t ID) {
 	value->setTemporaryID_recursive(ID);
 }
 
-////////////////////////////////////////////////////////////////////////// CScriptVarAccessor
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarError
+//////////////////////////////////////////////////////////////////////////
+const char *ERROR_NAME[] = {"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError"};
+
+CScriptVarError::CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column) : CScriptVarObject(Context, Context->getErrorPrototype(type)) {
+	if(message && *message) addChild("message", newScriptVar(message));
+	if(file && *file) addChild("fileName", newScriptVar(file));
+	if(line>=0) addChild("lineNumber", newScriptVar(line));
+	if(column>=0) addChild("column", newScriptVar(column));
+}
+
+CScriptVarError::~CScriptVarError() {}
+CScriptVarPtr CScriptVarError::clone() { return new CScriptVarError(*this); }
+CScriptVarPtr CScriptVarError::_toString(bool execute, int radix) {
+	CScriptVarLink *link;
+	string name = ERROR_NAME[Error];
+	link = findChildWithPrototypeChain("name"); if(link) name = (*link)->getString();
+	string message; link = findChildWithPrototypeChain("message"); if(link) 
+		message = (*link)->getString();
+	string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = (*link)->getString();
+	int lineNumber; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = (*link)->getInt();
+	int column; link = findChildWithPrototypeChain("column"); if(link) column = (*link)->getInt();
+	ostringstream msg;
+	msg << name << ": " << message;
+	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
+	if(column >=0) msg << " Column:" << column+1;
+	if(fileName.length()) msg << " in " << fileName;
+	return newScriptVar(msg.str());
+}
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarAccessor
+//////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Accessor);
 CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
@@ -2738,7 +2776,7 @@ CScriptVarLink *CScriptVarScopeWith::findInScopes(const string &childName) {
 // ----------------------------------------------------------------------------------- CSCRIPT
 bool CTinyJS::noexecute = false; 
 CTinyJS::CTinyJS() {
-	CScriptVarPtr var, prototype;
+	CScriptVarPtr var;
 	t = 0;
 	runtimeFlags = 0;
 	first = 0;
@@ -2774,9 +2812,9 @@ CTinyJS::CTinyJS() {
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_hasOwnProperty); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_toString); 
-	pseudo_statics.push_back(&objectPrototype);
-	pseudo_statics.push_back(&objectPrototype_valueOf);
-	pseudo_statics.push_back(&objectPrototype_toString);
+	pseudo_refered.push_back(&objectPrototype);
+	pseudo_refered.push_back(&objectPrototype_valueOf);
+	pseudo_refered.push_back(&objectPrototype_toString);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Array
@@ -2784,7 +2822,7 @@ CTinyJS::CTinyJS() {
 	arrayPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	arrayPrototype->addChild("valueOf", objectPrototype_valueOf);
 	arrayPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_statics.push_back(&arrayPrototype);
+	pseudo_refered.push_back(&arrayPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// String
@@ -2792,7 +2830,7 @@ CTinyJS::CTinyJS() {
 	stringPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	stringPrototype->addChild("valueOf", objectPrototype_valueOf);
 	stringPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_statics.push_back(&stringPrototype);
+	pseudo_refered.push_back(&stringPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
@@ -2803,10 +2841,10 @@ CTinyJS::CTinyJS() {
 	numberPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	numberPrototype->addChild("valueOf", objectPrototype_valueOf);
 	numberPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_statics.push_back(&numberPrototype);
-	pseudo_statics.push_back(&constNaN);
-	pseudo_statics.push_back(&constInfinityPositive);
-	pseudo_statics.push_back(&constInfinityNegative);
+	pseudo_refered.push_back(&numberPrototype);
+	pseudo_refered.push_back(&constNaN);
+	pseudo_refered.push_back(&constInfinityPositive);
+	pseudo_refered.push_back(&constInfinityNegative);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Boolean
@@ -2814,7 +2852,7 @@ CTinyJS::CTinyJS() {
 	booleanPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	booleanPrototype->addChild("valueOf", objectPrototype_valueOf);
 	booleanPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_statics.push_back(&booleanPrototype);
+	pseudo_refered.push_back(&booleanPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Function
@@ -2824,54 +2862,53 @@ CTinyJS::CTinyJS() {
 	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_apply); 
 	functionPrototype->addChild("valueOf", objectPrototype_valueOf);
 	functionPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_statics.push_back(&functionPrototype);
+	pseudo_refered.push_back(&functionPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Error
 	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error); 
-	errorPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototype->addChild("message", newScriptVar(""));
-	errorPrototype->addChild("name", newScriptVar("Error"));
-	errorPrototype->addChild("fileName", newScriptVar(""));
-	errorPrototype->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
-	errorPrototype->addChild("column", newScriptVar(-1));			// -1 means not viable
-	pseudo_statics.push_back(&errorPrototype);
+	errorPrototypes[Error] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[Error]->addChild("message", newScriptVar(""));
+	errorPrototypes[Error]->addChild("name", newScriptVar("Error"));
+	errorPrototypes[Error]->addChild("fileName", newScriptVar(""));
+	errorPrototypes[Error]->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
+	errorPrototypes[Error]->addChild("column", newScriptVar(-1));			// -1 means not viable
 
 	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError); 
-	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
-	prototype->addChild("name", newScriptVar("EvalError"));
+	errorPrototypes[EvalError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[EvalError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[EvalError]->addChild("name", newScriptVar("EvalError"));
 
 	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError); 
-	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
-	prototype->addChild("name", newScriptVar("RangeError"));
+	errorPrototypes[RangeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[RangeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[RangeError]->addChild("name", newScriptVar("RangeError"));
 
 	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError); 
-	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
-	prototype->addChild("name", newScriptVar("ReferenceError"));
+	errorPrototypes[ReferenceError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[ReferenceError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[ReferenceError]->addChild("name", newScriptVar("ReferenceError"));
 
 	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError); 
-	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
-	prototype->addChild("name", newScriptVar("SyntaxError"));
+	errorPrototypes[SyntaxError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[SyntaxError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[SyntaxError]->addChild("name", newScriptVar("SyntaxError"));
 
 	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError); 
-	prototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	prototype->addChildNoDup(TINYJS___PROTO___VAR, errorPrototype);
-	prototype->addChild("name", newScriptVar("TypeError"));
+	errorPrototypes[TypeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	errorPrototypes[TypeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[TypeError]->addChild("name", newScriptVar("TypeError"));
 
 	//////////////////////////////////////////////////////////////////////////
 	// add global built-in vars & constants
 	root->addChild("undefined", constUndefined = newScriptVarUndefined(this), SCRIPTVARLINK_ENUMERABLE);
-	pseudo_statics.push_back(&constUndefined);
+	pseudo_refered.push_back(&constUndefined);
 	root->addChild("NaN", constNaN, SCRIPTVARLINK_ENUMERABLE);
 	root->addChild("Infinity", constInfinityPositive, SCRIPTVARLINK_ENUMERABLE);
-	constFalse	= newScriptVarBool(this, false);	pseudo_statics.push_back(&constFalse);
-	constTrue	= newScriptVarBool(this, true);	pseudo_statics.push_back(&constTrue);
-	constZero	= newScriptVar(0);					pseudo_statics.push_back(&constZero);
-	constOne		= newScriptVar(1);					pseudo_statics.push_back(&constOne);
+	constFalse	= newScriptVarBool(this, false);	pseudo_refered.push_back(&constFalse);
+	constTrue	= newScriptVarBool(this, true);	pseudo_refered.push_back(&constTrue);
+	constZero	= newScriptVar(0);					pseudo_refered.push_back(&constZero);
+	constOne		= newScriptVar(1);					pseudo_refered.push_back(&constOne);
 	//////////////////////////////////////////////////////////////////////////
 	// add global functions
 	addNative("function eval(jsCode)", this, &CTinyJS::native_eval); // execute the given string and return the result
@@ -2887,11 +2924,13 @@ CTinyJS::CTinyJS() {
 
 CTinyJS::~CTinyJS() {
 	ASSERT(!t);
-	for(vector<CScriptVarPtr*>::iterator it = pseudo_statics.begin(); it!=pseudo_statics.end(); ++it)
+	for(vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
 		**it = CScriptVarPtr();
+	for(int i=Error; i<ERROR_COUNT; i++)
+		errorPrototypes[i] = CScriptVarPtr();
 	root->removeAllChildren();
 	scopes.clear();
-	ClearLostVars();
+	ClearUnreferedVars();
 	root = CScriptVarPtr();
 #ifdef _DEBUG
 	for(CScriptVar *p = first; p; p=p->next)
@@ -2959,7 +2998,7 @@ CScriptVarLink CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	}
 	t=0;
 	
-	ClearLostVars(v);
+	ClearUnreferedVars(v);
 
 	uint32_t UniqueID = getUniqueID(); 
 	setTemporaryID_recursive(UniqueID);
@@ -4657,37 +4696,22 @@ void CTinyJS::native_Function_apply(const CFunctionsScopePtr &c, void *data) {
 /// Error
 //////////////////////////////////////////////////////////////////////////
 
-const char *ERROR_NAME[] = {"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError"};
-
-CScriptVarPtr CTinyJS::newError(ERROR_TYPES type, const char *message, const char *file, int line, int column) {
-	// ERROR_NAME similar to ERROR_TYPES
-	CScriptVarPtr objc = newScriptVar(Object);
-	CScriptVarPtr prototype = root->findChildByPath(string(ERROR_NAME[type])+".prototype");
-	if(!prototype) prototype = errorPrototype;
-
-	objc->addChildNoDup(TINYJS___PROTO___VAR, prototype);
-	if(message && *message) objc->addChild("message", newScriptVar(message));
-	if(file && *file) objc->addChild("message", newScriptVar(file));
-	if(line>0) objc->addChild("message", newScriptVar(line));
-	if(column>0) objc->addChild("message", newScriptVar(column));
-	return objc;
-}
-CScriptVarPtr CTinyJS::newError(ERROR_TYPES type, const CFunctionsScopePtr &c) {
+static CScriptVarPtr _newError(CTinyJS *context, ERROR_TYPES type, const CFunctionsScopePtr &c) {
 	int i = c->getArgumentsLength();
 	string message, fileName;
 	int line=-1, column=-1; 
-	if(i>0) message	= c->getArgument(0);
-	if(i>1) fileName	= c->getArgument(1);
-	if(i>2) line		= c->getArgument(2);
-	if(i>3) column		= c->getArgument(3);
-	return newError(type, message.c_str(), fileName.c_str(), line, column);
+	if(i>0) message	= c->getArgument(0)->getString();
+	if(i>1) fileName	= c->getArgument(1)->getString();
+	if(i>2) line		= c->getArgument(2)->getInt();
+	if(i>3) column		= c->getArgument(3)->getInt();
+	return ::newScriptVarError(context, type, message.c_str(), fileName.c_str(), line, column);
 }
-void CTinyJS::native_Error(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(Error,c)); }
-void CTinyJS::native_EvalError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(EvalError,c)); }
-void CTinyJS::native_RangeError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(newError(RangeError,c)); }
-void CTinyJS::native_ReferenceError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(ReferenceError,c)); }
-void CTinyJS::native_SyntaxError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(SyntaxError,c)); }
-void CTinyJS::native_TypeError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(newError(TypeError,c)); }
+void CTinyJS::native_Error(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(_newError(this, Error,c)); }
+void CTinyJS::native_EvalError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(_newError(this, EvalError,c)); }
+void CTinyJS::native_RangeError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(_newError(this, RangeError,c)); }
+void CTinyJS::native_ReferenceError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(_newError(this, ReferenceError,c)); }
+void CTinyJS::native_SyntaxError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(_newError(this, SyntaxError,c)); }
+void CTinyJS::native_TypeError(const CFunctionsScopePtr &c, void *data){ c->setReturnVar(_newError(this, TypeError,c)); }
 
 ////////////////////////////////////////////////////////////////////////// 
 /// global functions
@@ -4782,12 +4806,14 @@ void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
 }
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {
-	for(vector<CScriptVarPtr*>::iterator it = pseudo_statics.begin(); it!=pseudo_statics.end(); ++it)
+	for(vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
 		if(**it) (**it)->setTemporaryID_recursive(ID);
+	for(int i=Error; i<ERROR_COUNT; i++)
+		errorPrototypes[i]->setTemporaryID_recursive(ID);
 	root->setTemporaryID_recursive(ID);
 }
 
-void CTinyJS::ClearLostVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/) {
+void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/) {
 	uint32_t UniqueID = getUniqueID(); 
 	setTemporaryID_recursive(UniqueID);
 	if(extra) extra->setTemporaryID_recursive(UniqueID);

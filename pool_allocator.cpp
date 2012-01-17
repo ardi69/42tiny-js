@@ -200,6 +200,8 @@ public:
 	int last_access;
 #endif
 }allocator_pool;
+
+//#define WITH_TIME_LOGGER
 #include "time_logger.h"
 
 TimeLoggerCreate(alloc, false);

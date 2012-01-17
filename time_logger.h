@@ -30,7 +30,7 @@
 
 #ifndef time_logger_h__
 #define time_logger_h__
-#ifdef _DEBUG
+#if defined(_DEBUG) && defined(WITH_TIME_LOGGER)
 
 #include <stdint.h>
 #include <stdio.h>
@@ -120,6 +120,7 @@ private:
 #	define TimeLoggerStart(...) do{}while(0)
 #	define TimeLoggerStop(...) do{}while(0)
 #	define TimeLoggerLogprint(a) do{}while(0)
+#	define TimeLoggerHelper(a)  do{}while(0)
 #endif /* _DEBUG */
 
 
