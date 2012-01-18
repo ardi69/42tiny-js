@@ -84,17 +84,17 @@ int main(int , char **)
 		js->execute("var lets_quit = 0; function quit() { lets_quit = 1; }");
 		js->execute("print(\"Interactive mode... Type quit(); to exit, or print(...); to print something, or dump() to dump the symbol table!\");");
 	} catch (CScriptException *e) {
-		printf("ERROR: %s\n", e->text.c_str());
+		printf("%s\n", e->toString().c_str());
 		delete e;
 	}
-
+	int lineNumber = 0;
 	while (js->evaluate("lets_quit") == "0") {
 		char buffer[2048];
 		fgets ( buffer, sizeof(buffer), stdin );
 		try {
-			js->execute(buffer);
+			js->execute(buffer, "console.input", lineNumber++);
 		} catch (CScriptException *e) {
-			printf("ERROR: %s\n", e->text.c_str());
+			printf("%s\n", e->toString().c_str());
 			delete e;
 		}
 	}

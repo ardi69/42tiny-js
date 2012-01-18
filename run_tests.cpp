@@ -52,6 +52,7 @@
 #		define DEBUG_MEMORY 1
 #	endif
 #endif
+#define _CRT_SECURE_NO_WARNINGS
 
 #include "TinyJS.h"
 #include "TinyJS_Functions.h"
@@ -259,7 +260,7 @@ bool run_test(const char *filename) {
   try {
     s.execute(buffer);
   } catch (CScriptException *e) {
-    printf("ERROR: %s\n", e->text.c_str());
+    printf("%s\n", e->toString().c_str());
 	delete e;
   }
   bool pass = (*s.getRoot()->findChild("result"))->getBool();
