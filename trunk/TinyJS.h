@@ -201,28 +201,30 @@ enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_DEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_DELETABLE | SCRIPTVARLINK_ENUMERABLE,
 };
 enum RUNTIME_FLAGS {
-	RUNTIME_CANRETURN			= 1<<0,
+	RUNTIME_CAN_RETURN		= 1<<0,
 
-	RUNTIME_CANBREAK			= 1<<1,
+	RUNTIME_CAN_BREAK			= 1<<1,
 	RUNTIME_BREAK				= 1<<2,
-	RUNTIME_BREAK_MASK		= RUNTIME_CANBREAK | RUNTIME_BREAK,
+	RUNTIME_BREAK_MASK		= RUNTIME_CAN_BREAK | RUNTIME_BREAK,
 
-	RUNTIME_CANCONTINUE		= 1<<3,
+	RUNTIME_CAN_CONTINUE		= 1<<3,
 	RUNTIME_CONTINUE			= 1<<4,
-	RUNTIME_LOOP_MASK			= RUNTIME_BREAK_MASK | RUNTIME_CANCONTINUE | RUNTIME_CONTINUE,
+	RUNTIME_LOOP_MASK			= RUNTIME_BREAK_MASK | RUNTIME_CAN_CONTINUE | RUNTIME_CONTINUE,
+	RUNTIME_LOOP_CAN_MASK	= RUNTIME_CAN_BREAK | RUNTIME_CAN_CONTINUE,
+	RUNTIME_LOOP_STATE_MASK	= RUNTIME_BREAK | RUNTIME_CONTINUE,
 
 	RUNTIME_NEW					= 1<<5,
 
-	RUNTIME_CANTHROW			= 1<<6,
+	RUNTIME_CAN_THROW			= 1<<6,
 	RUNTIME_THROW				= 1<<7,
-	RUNTIME_THROW_MASK		= RUNTIME_CANTHROW | RUNTIME_THROW,
+	RUNTIME_THROW_MASK		= RUNTIME_CAN_THROW | RUNTIME_THROW,
 
 };
 
-#define SAVE_RUNTIME_RETURN	int old_return_runtimeFlags = runtimeFlags & RUNTIME_CANRETURN
-#define RESTORE_RUNTIME_RETURN	runtimeFlags = (runtimeFlags & ~RUNTIME_CANRETURN) | old_pass_runtimeFlags
-#define SET_RUNTIME_CANRETURN runtimeFlags |= RUNTIME_CANRETURN
-#define IS_RUNTIME_CANRETURN ((runtimeFlags & RUNTIME_CANRETURN) == RUNTIME_CANRETURN)
+#define SAVE_RUNTIME_RETURN	int old_return_runtimeFlags = runtimeFlags & RUNTIME_CAN_RETURN
+#define RESTORE_RUNTIME_RETURN	runtimeFlags = (runtimeFlags & ~RUNTIME_CAN_RETURN) | old_pass_runtimeFlags
+#define SET_RUNTIME_CANRETURN runtimeFlags |= RUNTIME_CAN_RETURN
+#define IS_RUNTIME_CANRETURN ((runtimeFlags & RUNTIME_CAN_RETURN) == RUNTIME_CAN_RETURN)
 
 enum ERROR_TYPES {
 	Error = 0,
@@ -1471,6 +1473,7 @@ private:
 	static bool noexecute;
 	CScriptTokenizer *t;       /// current tokenizer
 	int runtimeFlags;
+	std::string label;
 	std::vector<std::string> loop_labels;
 	std::vector<CScriptVarScopePtr>scopes;
 	CScriptVarScopePtr root;
@@ -1562,11 +1565,21 @@ public:
 	/// Look up in any parent classes of the given object
 //	CScriptVarLink *findInPrototypeChain(const CScriptVarPtr &object, const std::string &name);
 private:
+	//////////////////////////////////////////////////////////////////////////
+	/// addNative-helper
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, CScriptVarFunctionNativePtr Var);
 
-	/// throws an Error
+	//////////////////////////////////////////////////////////////////////////
+	/// throws an Error & Exception
 	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message);
+	void throwException(ERROR_TYPES ErrorType, const std::string &message);
 	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
+	void throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
+
+	//////////////////////////////////////////////////////////////////////////
+	/// LOOP-LABELS
+	bool findLoopLabel(const std::string &Label);
+	void pushLoopLabel(const std::string &Label);
 
 	//////////////////////////////////////////////////////////////////////////
 	/// native Object-Constructors & prototype-functions
