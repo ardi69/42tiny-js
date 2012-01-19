@@ -2750,8 +2750,12 @@ CTinyJS::~CTinyJS() {
 #endif
 }
 
-void CTinyJS::throwError( bool &execute, ERROR_TYPES ErrorType, const std::string &message ) {
-	if(execute && (runtimeFlags & RUNTIME_CANTHROW)) {
+//////////////////////////////////////////////////////////////////////////
+/// throws an Error & Exception
+//////////////////////////////////////////////////////////////////////////
+
+void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message ) {
+	if(execute && (runtimeFlags & RUNTIME_CAN_THROW)) {
 		exceptionVar = newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), t->currentLine(), t->currentColumn());
 		runtimeFlags |= RUNTIME_THROW;
 		execute = false;
@@ -2759,9 +2763,12 @@ void CTinyJS::throwError( bool &execute, ERROR_TYPES ErrorType, const std::strin
 	}
 	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message ) {
+	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
+}
 
-void CTinyJS::throwError( bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
-	if(execute && (runtimeFlags & RUNTIME_CANTHROW)) {
+void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+	if(execute && (runtimeFlags & RUNTIME_CAN_THROW)) {
 		exceptionVar = newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), Pos.currentLine(), Pos.currentColumn());
 		runtimeFlags |= RUNTIME_THROW;
 		execute = false;
@@ -2769,6 +2776,26 @@ void CTinyJS::throwError( bool &execute, ERROR_TYPES ErrorType, const std::strin
 	}
 	throw new CScriptException(message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+	throw new CScriptException(message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// LOOP-LABELS
+//////////////////////////////////////////////////////////////////////////
+
+bool CTinyJS::findLoopLabel(const string &Label) {
+	vector<string>::iterator it = find(loop_labels.begin(), loop_labels.end(), Label);
+	return it != loop_labels.end();
+}
+
+void CTinyJS::pushLoopLabel(const string &Label) {
+	if(findLoopLabel(Label))
+		throwException(SyntaxError, "dublicate label '"+Label+"'"); 
+	loop_labels.push_back(Label);
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::trace() {
 	root->trace();
@@ -2789,6 +2816,7 @@ void CTinyJS::execute(const string &Code, const string &File, int Line, int Colu
 CScriptVarLink CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	CScriptVarLinkPtr v;
 	t = &Tokenizer;
+	loop_labels.clear();
 	try {
 		bool execute = true;
 		do {
@@ -2930,6 +2958,7 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 	CScriptVarLinkPtr returnVar;
 
 	int old_function_runtimeFlags = runtimeFlags; // save runtimeFlags
+	vector<string> old_loop_labels; old_loop_labels.swap(loop_labels); // save loop_labels
 	runtimeFlags &= ~RUNTIME_LOOP_MASK; // clear LOOP-Flags because we can't break or continue a loop from functions-body
 	// execute function!
 	// add the function's execute space to the symbol table so we can recurse
@@ -2942,7 +2971,7 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 			if(runtimeFlags & RUNTIME_THROW)
 				execute = false;
 		} catch (CScriptVarPtr v) {
-			if(runtimeFlags & RUNTIME_CANTHROW) {
+			if(runtimeFlags & RUNTIME_CAN_THROW) {
 				runtimeFlags |= RUNTIME_THROW;
 				execute = false;
 				exceptionVar = v;
@@ -2966,6 +2995,7 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 			execute = true;
 		}
 	}
+	old_loop_labels.swap(loop_labels); // restor loop_labels
 	if(execute && newThis)
 		*newThis = functionRoot->findChild("this");
 	/* get the real return var before we remove it from our function */
@@ -3909,10 +3939,15 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 		break;
 	case LEX_R_DO:
 		if(execute) {
+			string Label;
+			if(label.size()) {
+				Label.swap(label);
+				pushLoopLabel(Label);
+			}
 			t->match(LEX_R_DO);
 			CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
-			int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_MASK;
-			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CANBREAK | RUNTIME_CANCONTINUE;
+			int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_CAN_MASK;
+			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
 			bool loopCond = true;
 			while (loopCond && execute) {
 				t->setPos(loopStart);
@@ -3920,8 +3955,9 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				if(!execute)
 				{
 					// break or continue
-					if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE))
+					if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
 					{
+						label.clear();
 						execute = true;
 						bool Break = (runtimeFlags & RUNTIME_BREAK) != 0;
 						runtimeFlags &= ~(RUNTIME_BREAK | RUNTIME_CONTINUE);
@@ -3946,12 +3982,18 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				}
 				t->match(';');
 			}
-			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | old_loop_runtimeFlags;
+			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
+			if(Label.size()) loop_labels.pop_back();
 		} else 
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_R_WHILE:
 		if(execute) {
+			string Label;
+			if(label.size()) {
+				Label.swap(label);
+				pushLoopLabel(Label);
+			}
 			t->match(LEX_R_WHILE);
 			bool loopCond;
 			t->match('(');
@@ -3962,8 +4004,8 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				t->match(LEX_T_SKIP);
 				CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
 				CScriptTokenizer::ScriptTokenPosition loopEnd = loopStart;
-				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_MASK;
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CANBREAK | RUNTIME_CANCONTINUE;
+				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_CAN_MASK;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
 				while (loopCond && execute) {
 					t->setPos(loopStart);
 					execute_statement(execute);
@@ -3971,8 +4013,9 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 						loopEnd = t->getPos();
 					if(!execute) {
 						// break or continue
-						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE))
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
 						{
+							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK) != 0;
 							runtimeFlags &= ~(RUNTIME_BREAK | RUNTIME_CONTINUE);
@@ -3986,11 +4029,12 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 					}
 				}
 				t->setPos(loopEnd);
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | old_loop_runtimeFlags;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
 			} else {
 				t->check(LEX_T_SKIP);
 				t->skip(t->getToken().Int());
 			}
+			if(Label.size()) loop_labels.pop_back();
 		} else
 			t->skip(t->getToken().Int());
 		break;
@@ -4033,7 +4077,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
 
 				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_MASK;
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CANBREAK | RUNTIME_CANCONTINUE;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CAN_BREAK | RUNTIME_CAN_CONTINUE;
 				for(SCRIPTVAR_CHILDS_it it = (*for_in_var)->Childs.begin(); execute && it != (*for_in_var)->Childs.end(); ++it) {
 					CScriptVarLink *link = for_var.getLink();
 					if(link) {
@@ -4069,6 +4113,11 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 	case LEX_R_FOR:
 		if(execute)
 		{
+			string Label;
+			if(label.size()) {
+				Label.swap(label);
+				pushLoopLabel(Label);
+			}
 			t->match(LEX_R_FOR);
 			t->match('(');
 			CScopeControl ScopeControl(this);
@@ -4095,8 +4144,8 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
 				CScriptTokenizer::ScriptTokenPosition loopEnd = t->getPos();
 
-				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_MASK;
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CANBREAK | RUNTIME_CANCONTINUE;
+				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_CAN_MASK;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
 				while (loopCond && execute) {
 					t->setPos(loopStart);
 					execute_statement(execute);
@@ -4104,7 +4153,8 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 						loopEnd = t->getPos();
 					if(!execute) {
 						// break or continue
-						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE)) {
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label)) {
+							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK)!=0;
 							runtimeFlags &= ~(RUNTIME_BREAK | RUNTIME_CONTINUE);
@@ -4124,38 +4174,59 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 					}
 				}
 				t->setPos(loopEnd);
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | old_loop_runtimeFlags;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
 			} else {
 				execute_statement(noexecute);
 			}
+			if(Label.size()) loop_labels.pop_back();
 		}  else
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_R_BREAK:
-		t->match(LEX_R_BREAK);
-		if(execute) {
-			if(runtimeFlags & RUNTIME_CANBREAK)
-			{
-				runtimeFlags |= RUNTIME_BREAK;
-				execute = false;
+		{
+			if(execute && (runtimeFlags & RUNTIME_CAN_BREAK)==0)
+				throwException(SyntaxError, "'break' must be inside loop or switch");
+			t->match(LEX_R_BREAK);
+			string Label;
+			if(t->tk == LEX_ID) {
+				Label = t->tkStr();
+				if(execute && !findLoopLabel(Label))
+					throwException(SyntaxError, "label '"+Label+"' not found");
+				t->match(LEX_ID);
 			}
-			else
-				throw new CScriptException("'break' must be inside loop or switch", t->currentFile, t->currentLine(), t->currentColumn());
+			if(execute) {
+				if(runtimeFlags & RUNTIME_CAN_BREAK)
+				{
+					label = Label;
+					runtimeFlags |= RUNTIME_BREAK;
+					execute = false;
+				}
+			}
+			t->match(';');
 		}
-		t->match(';');
 		break;
 	case LEX_R_CONTINUE:
-		if(execute) {
-			if(runtimeFlags & RUNTIME_CANCONTINUE)
-			{
-				runtimeFlags |= RUNTIME_CONTINUE;
-				execute = false;
+		{
+			if(execute && (runtimeFlags & RUNTIME_CAN_CONTINUE)==0)
+				throwException(SyntaxError, "'continue' must be inside loop");
+			t->match(LEX_R_CONTINUE);
+			string Label;
+			if(t->tk == LEX_ID) {
+				Label = t->tkStr();
+				if(execute && !findLoopLabel(Label))
+					throwException(SyntaxError, "label '"+Label+"' not found");
+				t->match(LEX_ID);
 			}
-			else
-				throw new CScriptException("'continue' must be inside loop", t->currentFile, t->currentLine(), t->currentColumn());
+			if(execute) {
+				if(runtimeFlags & RUNTIME_CAN_CONTINUE)
+				{
+					label = Label;
+					runtimeFlags |= RUNTIME_CONTINUE;
+					execute = false;
+				}
+			}
+			t->match(';');
 		}
-		t->match(LEX_R_CONTINUE);
-		t->match(';');
 		break;
 	case LEX_R_RETURN:
 		if (execute) {
@@ -4194,7 +4265,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			// save runtimeFlags
 			int old_throw_runtimeFlags = runtimeFlags & RUNTIME_THROW_MASK;
 			// set runtimeFlags
-			runtimeFlags = runtimeFlags | RUNTIME_CANTHROW;
+			runtimeFlags = runtimeFlags | RUNTIME_CAN_THROW;
 
 			execute_block(execute);
 			CScriptVarPtr exceptionVar = this->exceptionVar; // remember exceptionVar
@@ -4235,7 +4306,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				execute_block(finally_execute);
 			}
 			if(isThrow && (runtimeFlags & RUNTIME_THROW)==0) { // no catch-block found and no new exception
-				if(runtimeFlags & RUNTIME_CANTHROW) {				// throw again
+				if(runtimeFlags & RUNTIME_CAN_THROW) {				// throw again
 					runtimeFlags |= RUNTIME_THROW;
 					execute = false;
 					this->exceptionVar = exceptionVar;
@@ -4252,7 +4323,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			t->match(LEX_R_THROW);
 			CScriptVarPtr a = execute_base(execute);
 			if(execute) {
-				if(runtimeFlags & RUNTIME_CANTHROW) {
+				if(runtimeFlags & RUNTIME_CAN_THROW) {
 					runtimeFlags |= RUNTIME_THROW;
 					execute = false;
 					exceptionVar = a;
@@ -4272,7 +4343,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				// save runtimeFlags
 				int old_switch_runtimeFlags = runtimeFlags & RUNTIME_BREAK_MASK;
 				// set runtimeFlags
-				runtimeFlags = (runtimeFlags & ~RUNTIME_BREAK_MASK) | RUNTIME_CANBREAK;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_BREAK_MASK) | RUNTIME_CAN_BREAK;
 				bool found = false ,execute = false;
 				t->match('{');
 				CScopeControl ScopeControl(this);
@@ -4340,8 +4411,13 @@ end_while:
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_T_LABEL:
-		t->match(LEX_T_LABEL); // ignore Labels
-		t->match(':');
+		{
+			string Label = t->tkStr();
+			t->match(LEX_T_LABEL); // ignore Labels
+			t->match(':');
+			if(execute && t->tk >= LEX_TOKEN_LOOP_BEGIN && t->tk <= LEX_TOKEN_LOOP_END)
+				label = Label;
+		}
 		break;
 	case LEX_EOF:
 		t->match(LEX_EOF);
@@ -4591,7 +4667,7 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 	scopes.pop_back(); // go back to the callers scope
 	CScriptVarLinkPtr returnVar;
 	CScriptTokenizer *oldTokenizer = t; t=0;
-	runtimeFlags &= ~RUNTIME_CANRETURN; // we can't return a function from eval-code
+	runtimeFlags &= ~RUNTIME_CAN_RETURN; // we can't return a function from eval-code
 	try {
 		CScriptTokenizer Tokenizer(Code.c_str(), "eval");
 		t = &Tokenizer;
@@ -4603,12 +4679,12 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 	} catch (CScriptException *e) { // script exceptions
 		t = oldTokenizer; // restore tokenizer
 		scopes.push_back(scEvalScope); // restore Scopes;
-		if(runtimeFlags & RUNTIME_CANTHROW) { // an Error in eval is allways catchable
+		if(runtimeFlags & RUNTIME_CAN_THROW) { // an Error in eval is allways catchable
 			CScriptVarPtr E = newScriptVarError(this, e->errorType, e->message.c_str(), e->fileName.c_str(), e->lineNumber, e->column);
 			delete e;
 			throw E;
 		} else
-			throw;
+			throw e;
 	} catch (...) { // all other exceptions
 		t = oldTokenizer; // restore tokenizer
 		scopes.push_back(scEvalScope); // restore Scopes;
