@@ -206,9 +206,15 @@ public:
 
 TimeLoggerCreate(alloc, false);
 TimeLoggerCreate(free, false);
-
+fixed_size_allocator_lock *fixed_size_allocator::locker = 0;
+class lock_help {
+public:
+	lock_help() { if(fixed_size_allocator::locker) fixed_size_allocator::locker->lock(); }
+	~lock_help() { if(fixed_size_allocator::locker) fixed_size_allocator::locker->unlock(); }
+}
 void* fixed_size_allocator::alloc(size_t size, const char *for_class) {
 	TimeLoggerHelper(alloc);
+	lock_help lock;
 	if(!allocator_pool.allocator_pool) {
 		allocator_pool.allocator_pool = new allocator_pool_t();
 		allocator_pool.last_allocate_allocator = allocator_pool.last_free_allocator = 0;
@@ -226,6 +232,7 @@ void* fixed_size_allocator::alloc(size_t size, const char *for_class) {
 }
 void fixed_size_allocator::free(void *p, size_t size) {
 	TimeLoggerHelper(free);
+	lock_help lock;
 	if(!allocator_pool.allocator_pool) {
 		ASSERT(0/* free called but not allocator defined*/);
 		return;

@@ -2001,8 +2001,8 @@ CScriptVarPtr CScriptVarError::_toString(bool execute, int radix) {
 	string message; link = findChildWithPrototypeChain("message"); if(link) 
 		message = (*link)->getString();
 	string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = (*link)->getString();
-	int lineNumber; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = (*link)->getInt();
-	int column; link = findChildWithPrototypeChain("column"); if(link) column = (*link)->getInt();
+	int lineNumber=-1; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = (*link)->getInt();
+	int column=-1; link = findChildWithPrototypeChain("column"); if(link) column = (*link)->getInt();
 	ostringstream msg;
 	msg << name << ": " << message;
 	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
