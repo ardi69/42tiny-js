@@ -734,11 +734,11 @@ string CScriptToken::getParsableString(string &indentString, int &newln, const s
 		OutString.append("(");
 		if(Fnc().arguments.size()) {
 			OutString.append(Fnc().arguments.front());
-			for(vector<string>::iterator it=Fnc().arguments.begin()+1; it!=Fnc().arguments.end(); ++it)
+			for(STRING_VECTOR_it it=Fnc().arguments.begin()+1; it!=Fnc().arguments.end(); ++it)
 				OutString.append(", ").append(*it);
 		}
 		OutString.append(") ");
-		for(TOKEN_VECT::iterator it=Fnc().body.begin(); it != Fnc().body.end(); ++it) {
+		for(TOKEN_VECT_it it=Fnc().body.begin(); it != Fnc().body.end(); ++it) {
 			OutString.append(it->getParsableString(indentString, newln, indent));
 		}
 	} else if(token == '{') {
@@ -776,11 +776,11 @@ void CScriptToken::print(string &indent )
 			printf("%sfunction (", indent.c_str());
 		if(Fnc().arguments.size()) {
 			printf("%s", Fnc().arguments.front().c_str());
-			for(vector<string>::iterator it=Fnc().arguments.begin()+1; it!=Fnc().arguments.end(); ++it)
+			for(STRING_VECTOR_it it=Fnc().arguments.begin()+1; it!=Fnc().arguments.end(); ++it)
 				printf(",%s", it->c_str());
 		}
 		printf(")");
-		for(TOKEN_VECT::iterator it=Fnc().body.begin(); it != Fnc().body.end(); ++it)
+		for(TOKEN_VECT_it it=Fnc().body.begin(); it != Fnc().body.end(); ++it)
 			it->print (indent);
 	} else if(token == '{') {
 		printf("%s{\n", indent.c_str());
@@ -1222,7 +1222,7 @@ void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, bool &Statement, vector<i
 		expression = true;
 		pushToken(Tokens, '(');
 	}
-	vector<string> vars;
+	STRING_VECTOR_t vars;
 	for(;;) {
 		vars.push_back(l->tkStr);
 		pushToken(Tokens, LEX_ID);
@@ -1260,7 +1260,7 @@ void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, bool &Statement, vector<i
 
 			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_R_VAR));
 			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, vars.front()));
-			for(vector<string>::iterator it = vars.begin()+1; it != vars.end(); ++it) {
+			for(STRING_VECTOR_it it = vars.begin()+1; it != vars.end(); ++it) {
 				Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(','));
 				Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, *it));
 			}
@@ -1280,7 +1280,7 @@ void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, bool &Statement, vector<i
 	Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
 
 	Statement = false;
-	vector<string> vars;
+	STRING_VECTOR_t vars;
 	for(;;) 
 	{
 		vars.push_back(l->tkStr);
@@ -1308,7 +1308,7 @@ void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, bool &Statement, vector<i
 
 		Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_R_VAR));
 		Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, vars.front()));
-		for(vector<string>::iterator it = vars.begin()+1; it != vars.end(); ++it) {
+		for(STRING_VECTOR_it it = vars.begin()+1; it != vars.end(); ++it) {
 			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(','));
 			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, *it));
 		}
@@ -1642,6 +1642,18 @@ CScriptVarLink *CScriptVar::findChildOrCreateByPath(const string &path) {
 	CScriptVarLink *l = findChild(childName);
 	if (!l) l = addChild(childName, newScriptVar(Object));
 	return (*l)->findChildOrCreateByPath(path.substr(p+1));
+}
+
+void CScriptVar::keys(std::set<std::string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/)
+{
+	setTemporaryID(ID);
+	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
+		if(!OnlyEnumerable || (*it)->isEnumerable())
+			Keys.insert((*it)->getName());
+	}
+	CScriptVarLink *__proto__ = 0;
+	if( ID && (__proto__ = findChild(TINYJS___PROTO___VAR)) && (*__proto__)->getTempraryID() != ID )
+		(*__proto__)->keys(Keys, OnlyEnumerable, ID);
 }
 
 /// add & remove
@@ -2388,7 +2400,7 @@ bool CScriptVarFunction::isPrimitive()	{ return false; }
 
 string CScriptVarFunction::getString() {return "[ Function ]";}
 string CScriptVarFunction::getVarType() { return "function"; }
-string CScriptVarFunction::getParsableBlockString(TOKEN_VECT::iterator &it, TOKEN_VECT::iterator end, const string indentString, const string indent) {
+string CScriptVarFunction::getParsableBlockString(TOKEN_VECT_it &it, TOKEN_VECT_it end, const string indentString, const string indent) {
 	ostringstream destination;
 	string nl = indent.size() ? "\n" : " ";
 	string my_indentString = indentString;
@@ -2413,11 +2425,11 @@ string CScriptVarFunction::getParsableBlockString(TOKEN_VECT::iterator &it, TOKE
 			OutString.append("(");
 			if(data->arguments.size()) {
 				OutString.append(data->arguments.front());
-				for(vector<string>::iterator it=data->arguments.begin()+1; it!=data->arguments.end(); ++it)
+				for(STRING_VECTOR_it it=data->arguments.begin()+1; it!=data->arguments.end(); ++it)
 					OutString.append(", ").append(*it);
 			}
 			OutString.append(") ");
-			TOKEN_VECT::iterator it=data->body.begin();
+			TOKEN_VECT_it it=data->body.begin();
 			OutString += getParsableBlockString(it, data->body.end(), indentString, indent);
 
 		} else if(it->token == '{') {
@@ -2451,7 +2463,7 @@ string CScriptVarFunction::getParsableString(const string &indentString, const s
 	// get list of parameters
 	if(data->arguments.size()) {
 		destination << data->arguments.front();
-		for(vector<string>::iterator it = data->arguments.begin()+1; it != data->arguments.end(); ++it) {
+		for(STRING_VECTOR_it it = data->arguments.begin()+1; it != data->arguments.end(); ++it) {
 			destination << ", " << *it;
 		}
 	}
@@ -2463,7 +2475,7 @@ string CScriptVarFunction::getParsableString(const string &indentString, const s
 	if(isNative()) {
 		destination << "{ /* native Code */ }";
 	} else {
-		TOKEN_VECT::iterator it=data->body.begin();
+		TOKEN_VECT_it it=data->body.begin();
 		destination << getParsableBlockString(it, data->body.end(), indentString, indent);
 	}
 	return destination.str();
@@ -2685,27 +2697,27 @@ CTinyJS::CTinyJS() {
 
 	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError); 
 	errorPrototypes[EvalError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototypes[EvalError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[EvalError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[EvalError]->addChild("name", newScriptVar("EvalError"));
 
 	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError); 
 	errorPrototypes[RangeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototypes[RangeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[RangeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[RangeError]->addChild("name", newScriptVar("RangeError"));
 
 	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError); 
 	errorPrototypes[ReferenceError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototypes[ReferenceError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[ReferenceError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[ReferenceError]->addChild("name", newScriptVar("ReferenceError"));
 
 	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError); 
 	errorPrototypes[SyntaxError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototypes[SyntaxError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[SyntaxError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[SyntaxError]->addChild("name", newScriptVar("SyntaxError"));
 
 	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError); 
 	errorPrototypes[TypeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	errorPrototypes[TypeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error]);
+	errorPrototypes[TypeError]->addChildNoDup(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[TypeError]->addChild("name", newScriptVar("TypeError"));
 
 	//////////////////////////////////////////////////////////////////////////
@@ -2785,7 +2797,7 @@ void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message, 
 //////////////////////////////////////////////////////////////////////////
 
 bool CTinyJS::findLoopLabel(const string &Label) {
-	vector<string>::iterator it = find(loop_labels.begin(), loop_labels.end(), Label);
+	STRING_VECTOR_it it = find(loop_labels.begin(), loop_labels.end(), Label);
 	return it != loop_labels.end();
 }
 
@@ -2866,11 +2878,11 @@ string CTinyJS::evaluate(const string &Code, const string &File, int Line, int C
 	return evaluate(Code.c_str(), File, Line, Column);
 }
 
-CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, JSCallback ptr, void *userdata) {
-	return addNative(funcDesc, ::newScriptVar(this, ptr, userdata));
+CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
+	return addNative(funcDesc, ::newScriptVar(this, ptr, userdata), LinkFlags);
 }
 
-CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, CScriptVarFunctionNativePtr Var) {
+CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, CScriptVarFunctionNativePtr Var, int LinkFlags) {
 	CScriptLex lex(funcDesc.c_str());
 	CScriptVarPtr base = root;
 
@@ -2899,7 +2911,7 @@ CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, CScriptVa
 	Var->setFunctionData(pFunctionData.release());
 	Var->addChild(TINYJS_PROTOTYPE_CLASS, newScriptVar(Object), SCRIPTVARLINK_WRITABLE);
 
-	base->addChild(funcName,  Var);
+	base->addChild(funcName,  Var, LinkFlags);
 	return Var;
 
 }
@@ -2913,18 +2925,9 @@ CScriptVarLinkPtr CTinyJS::parseFunctionDefinition(CScriptToken &FncToken) {
 	(*funcVar)->addChild(TINYJS_PROTOTYPE_CLASS, newScriptVar(Object), SCRIPTVARLINK_WRITABLE);
 	return funcVar;
 }
-/*
-CScriptVarSmartLink CTinyJS::parseFunctionDefinition() {
-	CScriptTokenDataFnc &Fnc = t->getToken().Fnc();
-	string fncName = (t->tk == LEX_T_FUNCTION_FORCE_ANONYMOUS) ? TINYJS_TEMP_NAME : Fnc.name;
-	CScriptVarSmartLink funcVar = new CScriptVarLink(new CScriptVar(Fnc), fncName);
-	(*funcVar)->addChild("length", new CScriptVar((int)Fnc.parameter.size()));
-	return funcVar;
-}
-*/
 
-CScriptVarLinkPtr CTinyJS::parseFunctionsBodyFromString(const string &Parameter, const string &FncBody) {
-	string Fnc = "function ("+Parameter+"){"+FncBody+"}";
+CScriptVarLinkPtr CTinyJS::parseFunctionsBodyFromString(const string &ArgumentList, const string &FncBody) {
+	string Fnc = "function ("+ArgumentList+"){"+FncBody+"}";
 	CScriptTokenizer tokenizer(Fnc.c_str());
 	return parseFunctionDefinition(tokenizer.getToken());
 }
@@ -2958,7 +2961,7 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 	CScriptVarLinkPtr returnVar;
 
 	int old_function_runtimeFlags = runtimeFlags; // save runtimeFlags
-	vector<string> old_loop_labels; old_loop_labels.swap(loop_labels); // save loop_labels
+	STRING_VECTOR_t old_loop_labels; old_loop_labels.swap(loop_labels); // save loop_labels
 	runtimeFlags &= ~RUNTIME_LOOP_MASK; // clear LOOP-Flags because we can't break or continue a loop from functions-body
 	// execute function!
 	// add the function's execute space to the symbol table so we can recurse
@@ -4041,6 +4044,11 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 	case LEX_T_FOR_IN:
 	case LEX_T_FOR_EACH_IN:
 		if(execute) {
+			string Label;
+			if(label.size()) {
+				Label.swap(label);
+				pushLoopLabel(Label);
+			}
 			bool for_each = t->tk == LEX_T_FOR_EACH_IN;
 			t->match(t->tk);
 			t->match('(');
@@ -4064,7 +4072,9 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			for_in_var = execute_function_call(execute);
 			CheckRightHandVar(execute, for_in_var);
 			t->match(')');
-			if( (*for_in_var)->Childs.size() ) {
+			STRING_SET_t keys;
+			(*for_in_var)->keys(keys, true, getUniqueID());
+			if( keys.size() ) {
 				if(!for_var->isOwned()) {
 					CScriptVarLink *real_for_var;
 					if(for_var->isOwner())
@@ -4076,23 +4086,27 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 
 				CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
 
-				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_MASK;
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_CAN_BREAK | RUNTIME_CAN_CONTINUE;
-				for(SCRIPTVAR_CHILDS_it it = (*for_in_var)->Childs.begin(); execute && it != (*for_in_var)->Childs.end(); ++it) {
+				int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_CAN_MASK;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
+				
+				for(STRING_SET_it it = keys.begin(); execute && it != keys.end(); ++it) {
+//				}
+//				for(SCRIPTVAR_CHILDS_it it = (*for_in_var)->Childs.begin(); execute && it != (*for_in_var)->Childs.end(); ++it) {
 					CScriptVarLink *link = for_var.getLink();
 					if(link) {
 						if (for_each)
-							link->replaceWith(*it);
+							link->replaceWith((*for_in_var)->findChildWithPrototypeChain(*it));
 						else
-							link->replaceWith(newScriptVar((*it)->getName()));
+							link->replaceWith(newScriptVar(*it));
 					} 					else ASSERT(0);
 					t->setPos(loopStart);
 					execute_statement(execute);
 					if(!execute)
 					{
 						// break or continue
-						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE))
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
 						{
+							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK)!=0;
 							runtimeFlags &= ~(RUNTIME_BREAK | RUNTIME_CONTINUE);
@@ -4101,14 +4115,13 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 						// other stuff e.g return, throw
 					}
 				}
-				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | old_loop_runtimeFlags;
+				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
+				if(Label.size()) loop_labels.pop_back();
 			} else {
 				execute_statement(noexecute);
 			}
-		} else {
+		} else
 			t->skip(t->getToken().Int());
-			execute_statement(execute);
-		}
 		break;
 	case LEX_R_FOR:
 		if(execute)
@@ -4435,68 +4448,8 @@ end_while:
 /// Finds a child, looking recursively up the scopes
 CScriptVarLink *CTinyJS::findInScopes(const string &childName) {
 	return scope()->findInScopes(childName);
-/*
-	CScriptVarLink *v = scopes.back()->findChild(childName);
-	if(!v && scopes.front() != scopes.back())
-		v = scopes.front()->findChild(childName);
-	return v;
-*/
 }
 
-/// Get all Keynames of en given object (optionial look up the prototype-chain)
-void CTinyJS::keys(STRING_VECTOR_t &Keys, CScriptVarPtr object, bool WithPrototypeChain) {
-	CScriptVarLink *__proto__;
-	for(SCRIPTVAR_CHILDS_it it = object->Childs.begin(); it != object->Childs.end(); ++it) {
-		if((*it)->isEnumerable())
-			Keys.push_back((*it)->getName());
-
-		if (WithPrototypeChain) {
-			if( (__proto__ = (*(*it))->findChild(TINYJS___PROTO___VAR)) ) 
-				keys(Keys, __proto__, WithPrototypeChain);
-			else if((*(*it))->isString())
-				keys(Keys, stringPrototype, WithPrototypeChain);
-			else if((*(*it))->isArray())
-				keys(Keys, arrayPrototype, WithPrototypeChain);
-			else if((*(*it))->isFunction())
-				keys(Keys, functionPrototype, WithPrototypeChain);
-			else
-				keys(Keys, objectPrototype, false);
-		}
-	}
-}
-#if 0
-/// Look up in any parent classes of the given object
-CScriptVarLink *CTinyJS::findInPrototypeChain(CScriptVarPtr object, const string &name) {
-	unsigned int uniqueID = getUniqueID();
-	// Look for links to actual parent classes
-	CScriptVarLink *__proto__;
-//	CScriptVar *_object = object;
-	while( (__proto__ = object->findChild(TINYJS___PROTO___VAR)) ) {
-			CScriptVarLink *implementation = (*__proto__)->findChild(name);
-			if (implementation){
-				return implementation;
-			}
-			object = __proto__.getVarPtr();
-	}
-/*
-	if (object->isString()) {
-		CScriptVarLink *implementation = stringPrototype->findChild(name);
-		if (implementation) return implementation;
-	}
-	if (object->isArray()) {
-		CScriptVarLink *implementation = arrayPrototype->findChild(name);
-		if (implementation) return implementation;
-	}
-	if (object->isFunction()) {
-		CScriptVarLink *implementation = functionPrototype->findChild(name);
-		if (implementation) return implementation;
-	}
-	CScriptVarLink *implementation = objectPrototype->findChild(name);
-	if (implementation) return implementation;
-*/
-	return 0;
-}
-#endif
 //////////////////////////////////////////////////////////////////////////
 /// Object
 //////////////////////////////////////////////////////////////////////////
