@@ -211,7 +211,7 @@ class lock_help {
 public:
 	lock_help() { if(fixed_size_allocator::locker) fixed_size_allocator::locker->lock(); }
 	~lock_help() { if(fixed_size_allocator::locker) fixed_size_allocator::locker->unlock(); }
-}
+};
 void* fixed_size_allocator::alloc(size_t size, const char *for_class) {
 	TimeLoggerHelper(alloc);
 	lock_help lock;

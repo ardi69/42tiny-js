@@ -119,7 +119,9 @@ enum LEX_TYPES {
 	LEX_R_DO,
 	LEX_R_WHILE,
 	LEX_R_FOR,
-#define LEX_TOKEN_LOOP_END LEX_R_FOR
+	LEX_T_FOR_IN,
+	LEX_T_FOR_EACH_IN,
+#define LEX_TOKEN_LOOP_END LEX_T_FOR_EACH_IN
 	LEX_R_IN,
 	LEX_R_BREAK,
 	LEX_R_CONTINUE,
@@ -149,9 +151,6 @@ enum LEX_TYPES {
 	LEX_T_FUNCTION_OPERATOR,
 	LEX_T_GET,
 	LEX_T_SET,
-
-	LEX_T_FOR_IN,
-	LEX_T_FOR_EACH_IN,
 
 	LEX_T_SKIP,
 
@@ -193,12 +192,13 @@ enum SCRIPTVAR_FLAGS {
 };
 */
 enum SCRIPTVARLINK_FLAGS {
-	SCRIPTVARLINK_OWNED			= 1<<0,
-	SCRIPTVARLINK_WRITABLE		= 1<<1,
-	SCRIPTVARLINK_DELETABLE		= 1<<2,
-	SCRIPTVARLINK_ENUMERABLE	= 1<<3,
-	SCRIPTVARLINK_HIDDEN			= 1<<4,
-	SCRIPTVARLINK_DEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_DELETABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_OWNED				= 1<<0,
+	SCRIPTVARLINK_WRITABLE			= 1<<1,
+	SCRIPTVARLINK_DELETABLE			= 1<<2,
+	SCRIPTVARLINK_ENUMERABLE		= 1<<3,
+	SCRIPTVARLINK_HIDDEN				= 1<<4,
+	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_DELETABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_NATIVEDEFAULT	= SCRIPTVARLINK_WRITABLE,
 };
 enum RUNTIME_FLAGS {
 	RUNTIME_CAN_RETURN		= 1<<0,
@@ -257,6 +257,9 @@ extern const char *ERROR_NAME[];
 
 typedef std::vector<std::string> STRING_VECTOR_t;
 typedef STRING_VECTOR_t::iterator STRING_VECTOR_it;
+
+typedef std::set<std::string> STRING_SET_t;
+typedef STRING_SET_t::iterator STRING_SET_it;
 
 /// convert the given string into a quoted string suitable for javascript
 std::string getJSString(const std::string &str);
@@ -346,7 +349,7 @@ public:
 	std::string file;
 	int line;
 	std::string name;
-	std::vector<std::string> arguments;
+	STRING_VECTOR_t arguments;
 	TOKEN_VECT body;
 private:
 };
@@ -410,7 +413,7 @@ public:
 			return *this;
 		}
 		TOKEN_VECT *tokens;
-		TOKEN_VECT::iterator pos;
+		TOKEN_VECT_it pos;
 		int currentLine()		{ return pos->line; }
 		int currentColumn()	{ return pos->column; }
 	};
@@ -541,7 +544,7 @@ public:
 	CScriptVarLink *findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
 	CScriptVarLink *findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
 	CScriptVarLink *findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
-
+	void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
 	/// add & remove
 	CScriptVarLink *addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
 	CScriptVarLink *addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
@@ -1206,7 +1209,7 @@ public:
 	void setFunctionData(CScriptTokenDataFnc *Data);
 private:
 	CScriptTokenDataFnc *data;
-	std::string getParsableBlockString(TOKEN_VECT::iterator &it, TOKEN_VECT::iterator end, const std::string indentString, const std::string indent);
+	std::string getParsableBlockString(TOKEN_VECT_it &it, TOKEN_VECT_it end, const std::string indentString, const std::string indent);
 
 
 	friend define_newScriptVar_Fnc(Function, CTinyJS *Context, CScriptTokenDataFnc *);
@@ -1445,11 +1448,11 @@ public:
 		\endcode
 	*/
 
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0);
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_NATIVEDEFAULT);
 	template<class C>
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0)
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_NATIVEDEFAULT)
 	{
-		return addNative(funcDesc, ::newScriptVar<C>(this, class_ptr, class_fnc, userdata));
+		return addNative(funcDesc, ::newScriptVar<C>(this, class_ptr, class_fnc, userdata), LinkFlags);
 	}
 
 	/// Send all variables to stdout
@@ -1474,7 +1477,7 @@ private:
 	CScriptTokenizer *t;       /// current tokenizer
 	int runtimeFlags;
 	std::string label;
-	std::vector<std::string> loop_labels;
+	STRING_VECTOR_t loop_labels;
 	std::vector<CScriptVarScopePtr>scopes;
 	CScriptVarScopePtr root;
 	const CScriptVarScopePtr &scope() { return scopes.back(); }
@@ -1555,19 +1558,13 @@ private:
 	CScriptVarLinkPtr execute_statement(bool &execute);
 	// parsing utility functions
 	CScriptVarLinkPtr parseFunctionDefinition(CScriptToken &FncToken);
-//	CScriptVarSmartLink parseFunctionDefinition();
-//	void parseFunctionArguments(CScriptVar *funcVar);
-	CScriptVarLinkPtr parseFunctionsBodyFromString(const std::string &Parameter, const std::string &FncBody);
+	CScriptVarLinkPtr parseFunctionsBodyFromString(const std::string &ArgumentList, const std::string &FncBody);
 public:
 	CScriptVarLink *findInScopes(const std::string &childName); ///< Finds a child, looking recursively up the scopes
-	/// Get all Keynames of en given object (optionial look up the prototype-chain)
-	void keys(STRING_VECTOR_t &Keys, CScriptVarPtr object, bool WithPrototypeChain);
-	/// Look up in any parent classes of the given object
-//	CScriptVarLink *findInPrototypeChain(const CScriptVarPtr &object, const std::string &name);
 private:
 	//////////////////////////////////////////////////////////////////////////
 	/// addNative-helper
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, CScriptVarFunctionNativePtr Var);
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, CScriptVarFunctionNativePtr Var, int LinkFlags);
 
 	//////////////////////////////////////////////////////////////////////////
 	/// throws an Error & Exception
