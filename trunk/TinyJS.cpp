@@ -660,7 +660,7 @@ void CScriptLex::getNextToken() {
 }
 
 // ----------------------------------------------------------------------------------- CSCRIPTTOKEN
-CScriptToken::CScriptToken(CScriptLex *l, int Match) : line(l->currentLine), column(l->currentColumn()), token(l->tk), intData(0)
+CScriptToken::CScriptToken(CScriptLex *l, int Match, int Alternate) : line(l->currentLine), column(l->currentColumn()), token(l->tk), intData(0)
 {
 	if(token == LEX_INT)
 		intData = strtol(l->tkStr.c_str(),0,0);
@@ -674,7 +674,7 @@ CScriptToken::CScriptToken(CScriptLex *l, int Match) : line(l->currentLine), col
 		fncData->ref();
 	}
 	if(Match>=0)
-		l->match(Match);
+		l->match(Match, Alternate);
 	else
 		l->match(l->tk); 
 }
@@ -820,6 +820,7 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		tokens.clear();
 		tokenScopeStack.clear();
 		vector<int> blockStart(1, tokens.size()), marks;
+		STRING_VECTOR_t labels;
 		bool statement = true;
 		if(l->tk == '§') { // special-Token at Start means the code begins not at Statement-Level
 			l->match('§');
@@ -827,6 +828,7 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		}
 		do {
 			tokenizeToken(tokens, statement, blockStart, marks);
+			//_tokenizeStatement(tokens, blockStart, marks, labels);
 		} while (l->tk!=LEX_EOF);
 		pushToken(tokens); // add LEX_EOF-Token
 		TOKEN_VECT(tokens).swap(tokens);//	tokens.shrink_to_fit();
@@ -1392,8 +1394,580 @@ void CScriptTokenizer::tokenizeToken(TOKEN_VECT &Tokens, bool &Statement, vector
 		pushToken(Tokens);
 	}
 }
-int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match) {
-	Tokens.push_back(CScriptToken(l, Match));
+static inline void _setTokenSkip(TOKEN_VECT &Tokens, vector<int> &Marks) {
+	int tokenBeginIdx = Marks.back();
+	Marks.pop_back();
+	Tokens[tokenBeginIdx].Int() = Tokens.size()-tokenBeginIdx;
+}
+
+void CScriptTokenizer::_tokenizeCatch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	Marks.push_back(pushToken(Tokens, LEX_R_CATCH)); // push Token & push tokenBeginIdx
+	pushToken(Tokens, '(');
+	pushToken(Tokens, LEX_ID);
+	if(l->tk == LEX_R_IF) {
+		pushToken(Tokens);
+		_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	}
+	pushToken(Tokens, ')');
+	_tokenizeBlock(Tokens, BlockStart, Marks, Labels);
+	_setTokenSkip(Tokens, Marks);
+}
+void CScriptTokenizer::_tokenizeTry(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	bool isTry = l->tk == LEX_R_TRY;
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+	_tokenizeBlock(Tokens, BlockStart, Marks, Labels);
+	_setTokenSkip(Tokens, Marks);
+
+	if(l->tk != LEX_R_FINALLY && isTry) {
+		while(l->tk == LEX_R_CATCH && isTry)
+			_tokenizeCatch(Tokens, BlockStart, Marks, Labels);
+	}
+	if(l->tk == LEX_R_FINALLY && isTry)
+		_tokenizeTry(Tokens, BlockStart, Marks, Labels);
+}
+void CScriptTokenizer::_tokenizeSwitch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+	pushToken(Tokens, '(');
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, ')');
+
+	Marks.push_back(pushToken(Tokens, '{')); // push Token & push blockBeginIdx
+	BlockStart.push_back(Tokens.size());	// push Block-Start (one Token after '{')
+
+	for(bool hasDefault=false;;) {
+		if( l->tk == LEX_R_CASE || l->tk == LEX_R_DEFAULT) {
+			if(l->tk == LEX_R_CASE) {
+				Marks.push_back(pushToken(Tokens)); // push Token & push caseBeginIdx
+				_tokenizeExpression(Tokens, BlockStart, Marks, Labels); 
+				setTokenSkip(Tokens, Marks);
+			} else { // default
+				if(hasDefault) throw new CScriptException(SyntaxError, "more than one switch default", l->currentFile, l->currentLine, l->currentColumn());
+				hasDefault = true;
+				pushToken(Tokens);
+			}
+
+			Marks.push_back(pushToken(Tokens, ':'));
+			while(l->tk != '}' && l->tk != LEX_R_CASE && l->tk != LEX_R_DEFAULT && l->tk != LEX_EOF )
+				_tokenizeStatement(Tokens, BlockStart, Marks, Labels); 
+			setTokenSkip(Tokens, Marks);
+		} else if(l->tk == '}') {
+			break;
+		} else
+			throw new CScriptException(SyntaxError, "invalid switch statement", l->currentFile, l->currentLine, l->currentColumn());
+	}
+	pushToken(Tokens, '}');
+	BlockStart.pop_back();
+
+	_setTokenSkip(Tokens, Marks);
+	_setTokenSkip(Tokens, Marks);
+}
+void CScriptTokenizer::_tokenizeWith(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+	pushToken(Tokens, '(');
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, ')');
+
+	BlockStart.push_back(Tokens.size()); // set a blockStart
+	_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	BlockStart.pop_back();
+
+	_setTokenSkip(Tokens, Marks);
+}
+void CScriptTokenizer::_tokenizeWhile(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+	pushToken(Tokens, '(');
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, ')');
+
+	Marks.push_back(Tokens.size()); // push skiperBeginIdx
+	Tokens.push_back(CScriptToken(LEX_T_SKIP)); // skip 
+
+	BlockStart.push_back(Tokens.size()); // set a blockStart
+	_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	BlockStart.pop_back();
+
+	_setTokenSkip(Tokens, Marks);
+
+	_setTokenSkip(Tokens, Marks);
+}
+void CScriptTokenizer::_tokenizeDo(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+	BlockStart.push_back(Tokens.size()); // set a blockStart
+	_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	BlockStart.pop_back();
+	pushToken(Tokens, LEX_R_WHILE);
+	pushToken(Tokens, '(');
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, ')');
+	pushToken(Tokens, ';');
+
+	_setTokenSkip(Tokens, Marks);
+}
+
+void CScriptTokenizer::_tokenizeIf(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+	pushToken(Tokens, '(');
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, ')');
+
+	Marks.push_back(Tokens.size()); // push skiperBeginIdx
+	Tokens.push_back(CScriptToken(LEX_T_SKIP)); // skip 
+
+	BlockStart.push_back(Tokens.size()); // set a blockStart
+	_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	BlockStart.pop_back();
+
+	_setTokenSkip(Tokens, Marks);
+
+	if(l->tk == LEX_R_ELSE) {
+		Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+		BlockStart.push_back(Tokens.size()); // set a blockStart
+		_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+		BlockStart.pop_back();
+
+		_setTokenSkip(Tokens, Marks);
+	}
+
+	_setTokenSkip(Tokens, Marks);
+}
+
+static void _fix_BlockStarts_Marks(vector<int> &BlockStart, vector<int> &Marks, int start, int diff) {
+	for(vector<int>::iterator it = BlockStart.begin(); it != BlockStart.end(); ++it)
+		if(*it >= start) *it += diff;
+	for(vector<int>::iterator it = Marks.begin(); it != Marks.end(); ++it)
+		if(*it >= start) *it += diff;
+}
+void CScriptTokenizer::_tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	const char *prev_pos=l->tokenStart;
+	const char *prev_line_start=l->currentLineStart;
+	int prev_line = l->currentLine;
+	bool for_in, for_each_in;
+	l->match(LEX_R_FOR);
+	if((for_in = for_each_in = (l->tk == LEX_ID && l->tkStr == "each"))) {
+		l->match(LEX_ID);
+	}
+	if(!for_in) {
+		l->match('(');
+		if(l->tk == LEX_R_VAR)
+			l->match(LEX_R_VAR);
+		else if(l->tk == LEX_R_LET)
+			l->match(LEX_R_LET);
+		if(l->tk == LEX_ID) {
+			l->match(LEX_ID);
+			if(l->tk == LEX_R_IN)
+				for_in = true;
+		}
+	}
+	l->reset(prev_pos, prev_line, prev_line_start);
+
+
+	l->match(LEX_R_FOR);
+	if(for_each_in) {
+		l->match(LEX_ID);
+	}
+
+	Marks.push_back(Tokens.size()); // push tokenBeginIdx
+	Tokens.push_back(CScriptToken(for_in?(for_each_in?LEX_T_FOR_EACH_IN:LEX_T_FOR_IN):LEX_R_FOR));
+
+	BlockStart.push_back(pushToken(Tokens, '(')+1); // set BlockStart - no forwarde for(let ...
+	if(for_in) {
+		if(l->tk == LEX_R_VAR) {
+			l->match(LEX_R_VAR);
+
+			int tokenInsertIdx = BlockStart.front();
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_R_VAR));
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, l->tkStr));
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(';'));
+			_fix_BlockStarts_Marks(BlockStart, Marks, BlockStart.front(), 3);
+		} else if(l->tk == LEX_R_LET) {
+			pushToken(Tokens, LEX_R_LET);
+		}
+		pushToken(Tokens, LEX_ID);
+		pushToken(Tokens, LEX_R_IN);
+	} else {
+		if(l->tk == LEX_R_VAR)
+			_tokenizeVar(Tokens, BlockStart, Marks, Labels);
+		else if(l->tk == LEX_R_LET)
+			_tokenizeLet(Tokens, true, BlockStart, Marks, Labels);
+		else
+			_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+		pushToken(Tokens, ';');
+		_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+		pushToken(Tokens, ';');
+	}
+	_tokenizeExpression(Tokens, BlockStart, Marks, Labels); 
+	BlockStart.pop_back(); // pop_back / "no forwarde for(let ... "-prevention
+	pushToken(Tokens, ')');
+
+	BlockStart.push_back(Tokens.size()); // set a blockStart
+	_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	BlockStart.pop_back();
+
+	_setTokenSkip(Tokens, Marks);
+}
+void CScriptTokenizer::_tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	bool forward = false;
+	int tk = l->tk;
+	if(tk == LEX_ID && (l->tkStr=="get"||l->tkStr=="set")) {
+		string tkStr = l->tkStr;
+		tk = tkStr=="get"?LEX_T_GET:LEX_T_SET;
+		l->match(LEX_ID);
+		if(l->tk != LEX_ID) { // is not a getter or setter 
+			tokens.push_back(CScriptToken(LEX_ID, tkStr));
+			return;
+		}
+	} else {
+		l->match(LEX_R_FUNCTION);
+		if(!Statement) tk = LEX_T_FUNCTION_OPERATOR;
+	}
+	if(tk == LEX_R_FUNCTION) // only forward functions 
+		forward = TOKEN_VECT::size_type(BlockStart.front()) != Tokens.size();
+
+	CScriptToken FncToken(tk);
+	CScriptTokenDataFnc &FncData = FncToken.Fnc();
+	if(l->tk == LEX_ID) {
+		FncData.name = l->tkStr;
+		l->match(LEX_ID);
+	} else {
+		//ASSERT(Statement == false);
+	}
+
+	l->match('(');
+	while(l->tk != ')') {
+		FncData.arguments.push_back(l->tkStr);
+		l->match(LEX_ID);
+		if (l->tk!=')') l->match(',',')'); 
+	}
+	l->match(')');
+	FncData.file = l->currentFile;
+	FncData.line = l->currentLine;
+
+	vector<int> functionBlockStart, marks;
+	functionBlockStart.push_back(FncData.body.size()+1);
+	l->check('{');
+	bool FncStatement = true; // functions-block starts always in Statement-Level
+	_tokenizeBlock(FncData.body, functionBlockStart, Marks, Labels);
+
+	if(forward) {
+		int tokenInsertIdx = BlockStart.back();
+		Tokens.insert(Tokens.begin()+BlockStart.front(), FncToken);
+		_fix_BlockStarts_Marks(BlockStart, Marks, tokenInsertIdx, 1);
+	}
+	else
+		Tokens.push_back(FncToken);
+}
+
+void CScriptTokenizer::_tokenizeLet(TOKEN_VECT &Tokens, bool Statement, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	bool forward = TOKEN_VECT::size_type(BlockStart.back()) != Tokens.size();
+	bool let_is_Statement = Statement, expression=false;
+
+	Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
+	Statement = false;
+
+	if(l->tk == '(' || !let_is_Statement) {
+		expression = true;
+		pushToken(Tokens, '(');
+	}
+	STRING_VECTOR_t vars;
+	for(;;) {
+		vars.push_back(l->tkStr);
+		pushToken(Tokens, LEX_ID);
+		if(l->tk=='=') {
+			pushToken(Tokens);
+			_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+		}
+		if(l->tk==',')
+			pushToken(Tokens);
+		else
+			break;
+	}
+	if(expression) {
+		pushToken(Tokens, ')');
+		Statement = let_is_Statement;
+		if(Statement) 
+			_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+		_setTokenSkip(Tokens, Marks);
+	} else {
+		pushToken(Tokens, ';');
+		Statement = true;
+
+		_setTokenSkip(Tokens, Marks);
+
+		if(forward) // copy a let-deklaration at the begin of the last block
+		{
+			int tokenBeginIdx = BlockStart.back(), tokenInsertIdx = tokenBeginIdx;
+
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_R_VAR));
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, vars.front()));
+			for(STRING_VECTOR_it it = vars.begin()+1; it != vars.end(); ++it) {
+				Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(','));
+				Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, *it));
+			}
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(';'));// insert at the begin var name; 
+			Tokens[tokenBeginIdx].Int() = tokenInsertIdx-tokenBeginIdx;
+
+			_fix_BlockStarts_Marks(BlockStart, Marks, tokenBeginIdx, tokenInsertIdx-tokenBeginIdx);
+		}
+	}
+}
+
+void CScriptTokenizer::_tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+
+	bool forward = TOKEN_VECT::size_type(BlockStart.front()) != Tokens.size(); // forwarde only if the var-Statement not the first Statement of the Scope
+
+	Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
+
+	STRING_VECTOR_t vars;
+	for(;;) 
+	{
+		vars.push_back(l->tkStr);
+		pushToken(Tokens, LEX_ID);
+		if(l->tk=='=') {
+			pushToken(Tokens);
+			_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+		}
+		if(l->tk==',')
+			pushToken(Tokens);
+		else
+			break;
+	}
+	pushToken(Tokens, ';');
+
+	_setTokenSkip(Tokens, Marks);
+
+	if(forward) // copy a var-deklaration at the begin of the scope
+	{
+		int tokenBeginIdx = BlockStart.front(), tokenInsertIdx = tokenBeginIdx;
+
+		Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_R_VAR));
+		Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, vars.front()));
+		for(STRING_VECTOR_it it = vars.begin()+1; it != vars.end(); ++it) {
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(','));
+			Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(LEX_ID, *it));
+		}
+		Tokens.insert(Tokens.begin()+tokenInsertIdx++, CScriptToken(';'));// insert at the begin var name; 
+		Tokens[tokenBeginIdx].Int() = tokenInsertIdx-tokenBeginIdx;
+
+		_fix_BlockStarts_Marks(BlockStart, Marks, tokenBeginIdx, tokenInsertIdx-tokenBeginIdx);
+	}
+}
+
+
+void CScriptTokenizer::_tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	switch(l->tk) {
+	case LEX_ID:
+		{
+			pushToken(Tokens);
+		}
+		break;
+	case LEX_INT:
+	case LEX_FLOAT:
+	case LEX_STR:
+	case LEX_R_TRUE:
+	case LEX_R_FALSE:
+	case LEX_R_NULL:
+		pushToken(Tokens);
+		break;
+	case '{':
+		pushToken(Tokens);
+		while (l->tk != '}') {
+			if(l->tk == LEX_STR) {
+				string id = l->tkStr;
+				pushToken(Tokens);
+				if(l->tk==':' && id=="get" || id=="set") {
+				}
+			}
+			if(l->tk == LEX_ID) {
+				pushToken(Tokens);
+				pushToken(Tokens, ':');
+				_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+			}
+			if (l->tk != '}') pushToken(Tokens, ',', '}');
+		}
+		pushToken(Tokens);
+		break;
+	case '[':
+		pushToken(Tokens);
+		while (l->tk != ']') {
+			_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+			if (l->tk != ']') pushToken(Tokens, ',', ']');
+		}
+		pushToken(Tokens);
+		break;
+	case LEX_R_LET: // let as expression
+		_tokenizeLet(Tokens, false, BlockStart, Marks, Labels);
+		break;
+	case LEX_R_FUNCTION:
+		_tokenizeFunction(Tokens, false, BlockStart, Marks, Labels);
+		break;
+	case LEX_R_NEW: 
+		pushToken(Tokens);
+		_tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, true);
+		break;
+	case '(':
+		pushToken(Tokens);
+		_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+		pushToken(Tokens, ')');
+		break;
+	default:
+		pushToken(Tokens, LEX_EOF);
+	}
+}
+void CScriptTokenizer::_tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	while(l->tk == '.' || l->tk == '[') {
+		if(l->tk == '.') {
+			pushToken(Tokens);
+			pushToken(Tokens , LEX_ID);
+		} else {
+			pushToken(Tokens);
+			_tokenizeExpression(Tokens, BlockStart, Marks, Labels);
+			pushToken(Tokens, ']');
+		}
+	}
+}
+void CScriptTokenizer::_tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, bool for_new/*=false*/) {
+	_tokenizeLiteral(Tokens, BlockStart, Marks, Labels);
+	_tokenizeMember(Tokens, BlockStart, Marks, Labels);
+	while(l->tk == '(') {
+		pushToken(Tokens);
+		while(l->tk!=')') {
+			_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+			if (l->tk!=')') pushToken(Tokens, ',', ')' );
+		}
+		pushToken(Tokens);
+		if(for_new) break;
+		_tokenizeMember(Tokens, BlockStart, Marks, Labels);
+	}
+}
+void CScriptTokenizer::_tokenizeRightToLeft(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	switch(l->tk) {
+	case '-':
+	case '+':
+	case '!':
+	case '~':
+	case LEX_R_TYPEOF:
+	case LEX_R_VOID:
+	case LEX_R_DELETE:
+		pushToken(Tokens);
+		_tokenizeRightToLeft(Tokens, BlockStart, Marks, Labels);
+		break;
+	case LEX_PLUSPLUS: // pre-increment		
+	case LEX_MINUSMINUS: // pre-decrement 	
+		pushToken(Tokens);
+	default:
+		_tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels);
+
+	}
+	if (l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS) { // post-in-/de-crement
+		pushToken(Tokens);
+	}
+}
+static int Right2Left_begin[] = { LEX_OROR, LEX_ANDAND, '|', 
+												'^', '&', 
+												'<', LEX_LEQUAL, '>', LEX_GEQUAL, LEX_R_IN, LEX_R_INSTANCEOF,
+												LEX_EQUAL, LEX_NEQUAL, LEX_TYPEEQUAL, LEX_NTYPEEQUAL,
+												LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU,
+												'+', '-',
+												'*', '/', '%' 
+											};
+static int *Right2Left_end = &Right2Left_begin[sizeof(Right2Left_begin)/sizeof(Right2Left_begin[0])];
+static bool Right2Left_sorted = false;
+void CScriptTokenizer::_tokenizeLeftToRight(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	_tokenizeRightToLeft(Tokens, BlockStart, Marks, Labels);
+	if(!Right2Left_sorted) Right2Left_sorted = (sort(Right2Left_begin, Right2Left_end), true);
+
+	for(;;) {
+		int *found = lower_bound(Right2Left_begin, Right2Left_end, l->tk);
+		if(found != Right2Left_end && *found == l->tk) {
+			pushToken(Tokens);
+			_tokenizeRightToLeft(Tokens, BlockStart, Marks, Labels);
+		} else
+			break;
+	}
+}
+void CScriptTokenizer::_tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	_tokenizeLeftToRight(Tokens, BlockStart, Marks, Labels);
+	if(l->tk == '?') {
+		pushToken(Tokens);
+		_tokenizeCondition(Tokens, BlockStart, Marks, Labels);
+		pushToken(Tokens, ':');
+		_tokenizeCondition(Tokens, BlockStart, Marks, Labels);
+	}
+}
+void CScriptTokenizer::_tokenizeAssignment(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	_tokenizeCondition(Tokens, BlockStart, Marks, Labels);
+	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) ) {
+		pushToken(Tokens);
+		_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+	}
+}
+void CScriptTokenizer::_tokenizeExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+	while(l->tk == ',') {
+		pushToken(Tokens);
+		_tokenizeAssignment(Tokens, BlockStart, Marks, Labels);
+	}
+}
+void CScriptTokenizer::_tokenizeBlock(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	Marks.push_back(pushToken(Tokens, '{')); // push Token & push BeginIdx
+	BlockStart.push_back(Tokens.size());	// push Block-Start (one Token after '{')
+
+	while(l->tk != '}' && l->tk != LEX_EOF) 
+		_tokenizeStatement(Tokens, BlockStart, Marks, Labels);
+	pushToken(Tokens, '}');
+
+	BlockStart.pop_back(); // clean-up BlockStarts
+
+	_setTokenSkip(Tokens, Marks);
+}
+
+
+void CScriptTokenizer::_tokenizeStatement(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels) {
+	bool Statement=true;
+	switch(l->tk)
+	{
+	case '{':				_tokenizeBlock(Tokens, BlockStart, Marks, Labels); break;
+	case ';':				pushToken(Tokens); break;
+	case LEX_R_VAR:		_tokenizeVar(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_LET:		_tokenizeLet(Tokens, true, BlockStart, Marks, Labels); break;
+	case LEX_R_WITH:		_tokenizeWith(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_IF:			_tokenizeIf(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_SWITCH:	_tokenizeSwitch(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_DO:			_tokenizeDo(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_WHILE:		_tokenizeWhile(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_FOR:		_tokenizeFor(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_BREAK:		pushToken(Tokens); break;
+	case LEX_R_CONTINUE:	pushToken(Tokens); break;
+	case LEX_R_FUNCTION:	_tokenizeFunction(Tokens, true, BlockStart, Marks, Labels); break;
+	case LEX_R_RETURN:	pushToken(Tokens); break;
+	case LEX_R_TRY:		_tokenizeTry(Tokens, BlockStart, Marks, Labels); break;
+	case LEX_R_THROW:		pushToken(Tokens); break;
+	case LEX_ID:
+		{
+			string id = l->tkStr;
+			_tokenizeExpression(Tokens, BlockStart, Marks, Labels); 
+			if(l->tk == ':') {
+				l->match(':');
+				do ; while(0);
+			}
+		}
+		break;
+	default:					_tokenizeExpression(Tokens, BlockStart, Marks, Labels); break;
+	}
+}
+
+
+int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match, int Alternate) {
+	Tokens.push_back(CScriptToken(l, Match, Alternate));
 	return Tokens.size()-1;
 }
 
