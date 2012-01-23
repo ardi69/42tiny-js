@@ -369,7 +369,7 @@ class CScriptToken : public fixed_size_object<CScriptToken>
 {
 public:
 	CScriptToken() : line(0), column(0), token(0) {}
-	CScriptToken(CScriptLex *l, int Match=-1);
+	CScriptToken(CScriptLex *l, int Match=-1, int Alternate=-1);
 	CScriptToken(uint16_t Tk, int IntData=0);
 	CScriptToken(uint16_t Tk, const std::string &TkStr);
 	CScriptToken(const  CScriptToken &Copy) : token(0) { *this = Copy; }
@@ -452,8 +452,30 @@ private:
 	void tokenizeVar(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
 	void tokenizeStatement(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
 	void tokenizeToken(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	int pushToken(TOKEN_VECT &Tokens, int Match=-1);
+	int pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
 	void throwTokenNotExpected();
+	void _tokenizeLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeMember(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeFunctionCall(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, bool for_new=false);
+	void _tokenizeRightToLeft(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeLeftToRight(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeCondition(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeBlock(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeStatement(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+
+	void _tokenizeCatch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeTry(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeSwitch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeWith(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeWhile(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeDo(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeIf(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeFor(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeLet(TOKEN_VECT &Tokens, bool Statement, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
+	void _tokenizeVar(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels);
 	CScriptLex *l;
 	TOKEN_VECT tokens;
 	ScriptTokenPosition prevPos;
