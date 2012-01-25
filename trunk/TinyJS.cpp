@@ -281,6 +281,7 @@ void CScriptLex::reset(const char *toPos, int Line, const char *LineStart) {
 	tkStr = "";
 	currentLine = Line;
 	currentLineStart = LineStart;
+	lineBreakBeforeToken = false;
 	currCh = nextCh = 0;
 	getNextCh(); // currCh
 	getNextCh(); // nextCh
@@ -301,7 +302,9 @@ void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
 }
 void CScriptLex::match(int expected_tk1, int alternate_tk/*=-1*/) {
 	check(expected_tk1, alternate_tk);
+	int line = currentLine;
 	getNextToken();
+	lineBreakBeforeToken = line != currentLine;
 }
 
 string CScriptLex::getTokenStr(int token) {
@@ -823,19 +826,20 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		vector<int> blockStart(1, tokens.size()), marks;
 		STRING_VECTOR_t labels, loopLabels;
 		bool statement = true;
-		int flags=0;
 		if(l->tk == '§') { // special-Token at Start means the code begins not at Statement-Level
 			l->match('§');
+#if USE_OLD_TOKENIZER
 			statement = false;
 		}
 		do {
-#ifdef USE_OLD_TOKENIZER
 			tokenizeToken(tokens, statement, blockStart, marks);
-#else /*USE_NEW_TOKENIZER*/
-			tokenizeStatement(tokens, blockStart, marks, labels, loopLabels, flags);
-#endif /*USE_NEW_TOKENIZER*/
+#else /*USE_OLD_TOKENIZER*/
+			tokenizeLiteral(tokens, blockStart, marks, labels, loopLabels, 0);
+		} else do {
+			tokenizeStatement(tokens, blockStart, marks, labels, loopLabels, 0);
+#endif /*USE_OLD_TOKENIZER*/
 		} while (l->tk!=LEX_EOF);
-		pushToken(tokens); // add LEX_EOF-Token
+		pushToken(tokens, LEX_EOF); // add LEX_EOF-Token
 		TOKEN_VECT(tokens).swap(tokens);//	tokens.shrink_to_fit();
 		pushTokenScope(tokens);
 		currentFile = l->currentFile;
@@ -907,13 +911,18 @@ static void fix_BlockStarts_Marks(vector<int> &BlockStart, vector<int> &Marks, i
 }
 
 enum {
-	LexFlags_Label			= 1<<8,
-	LexFlags_Label_Mask	= LexFlags_Label-1,
-	LexFlags_CanLabel		= 1<<9,
-	LexFlags_CanBreak		= 1<<10,
+	LexFlags_CanLabel		= 1<<8,
+	LexFlags_Label_Mask	= LexFlags_CanLabel-1,
+	LexFlags_CanBreak		= 1<<9,
+	LexFlags_CanContinue	= 1<<10,
+	LexFlags_CanReturn	= 1<<11,
+	LexFlags_asStatement	= 1<<12,
+	LexFlags_forFor		= 1<<13,
+	LexFlags_isAccessor	= 1<<14,
+	LexFlags_callForNew	= 1<<15,
 };
 
-#ifdef USE_OLD_TOKENIZER
+#if USE_OLD_TOKENIZER
 
 void CScriptTokenizer::tokenizeCatch(TOKEN_VECT &Tokens, bool &Statement, vector<int> &BlockStart, vector<int> &Marks) {
 	if(!Statement)	throwTokenNotExpected();
@@ -1413,7 +1422,7 @@ void CScriptTokenizer::tokenizeToken(TOKEN_VECT &Tokens, bool &Statement, vector
 
 #else /*USE_NEW_TOKENIZER*/
 
-void CScriptTokenizer::tokenizeCatch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeCatch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	Marks.push_back(pushToken(Tokens, LEX_R_CATCH)); // push Token & push tokenBeginIdx
 	pushToken(Tokens, '(');
 	pushToken(Tokens, LEX_ID);
@@ -1425,20 +1434,39 @@ void CScriptTokenizer::tokenizeCatch(TOKEN_VECT &Tokens, vector<int> &BlockStart
 	tokenizeBlock(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	setTokenSkip(Tokens, Marks);
 }
-void CScriptTokenizer::tokenizeTry(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeTry(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	bool isTry = l->tk == LEX_R_TRY;
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+	// inject & push BLIND_T_LABELS
+	unsigned int label_count = 0;
+	if( (label_count = Flags & LexFlags_Label_Mask) ) {
+		ASSERT(Labels.size()>=label_count);
+		for(unsigned int i=0; i<label_count; i++) {
+			string &label = *(Labels.end()-label_count+i);
+			LoopLabels.push_back(label);
+			Tokens.push_back(CScriptToken(LEX_T_BLIND_LABEL, label));
+		}
+		Flags &= ~LexFlags_Label_Mask;
+	}
+
 	tokenizeBlock(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+
+	// pop BLIND_T_LABELS
+	for(unsigned int i=0; i<label_count; i++)
+		LoopLabels.pop_back();
+
 	setTokenSkip(Tokens, Marks);
 
 	if(l->tk != LEX_R_FINALLY && isTry) {
+		l->check(LEX_R_CATCH, LEX_R_FINALLY);
 		while(l->tk == LEX_R_CATCH && isTry)
 			tokenizeCatch(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	}
 	if(l->tk == LEX_R_FINALLY && isTry)
 		tokenizeTry(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 }
-void CScriptTokenizer::tokenizeSwitch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeSwitch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
 	pushToken(Tokens, '(');
@@ -1448,7 +1476,6 @@ void CScriptTokenizer::tokenizeSwitch(TOKEN_VECT &Tokens, vector<int> &BlockStar
 	Marks.push_back(pushToken(Tokens, '{')); // push Token & push blockBeginIdx
 	BlockStart.push_back(Tokens.size());	// push Block-Start (one Token after '{')
 
-	unsigned int old_in_switch = Flags & LexFlags_CanBreak;
 	Flags |= LexFlags_CanBreak;
 	for(bool hasDefault=false;;) {
 		if( l->tk == LEX_R_CASE || l->tk == LEX_R_DEFAULT) {
@@ -1471,14 +1498,13 @@ void CScriptTokenizer::tokenizeSwitch(TOKEN_VECT &Tokens, vector<int> &BlockStar
 		} else
 			throw new CScriptException(SyntaxError, "invalid switch statement", l->currentFile, l->currentLine, l->currentColumn());
 	}
-	Flags = (Flags & ~LexFlags_CanBreak) | old_in_switch;
 	pushToken(Tokens, '}');
 	BlockStart.pop_back();
 
 	setTokenSkip(Tokens, Marks);
 	setTokenSkip(Tokens, Marks);
 }
-void CScriptTokenizer::tokenizeWith(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeWith(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
 
@@ -1492,8 +1518,21 @@ void CScriptTokenizer::tokenizeWith(TOKEN_VECT &Tokens, vector<int> &BlockStart,
 
 	setTokenSkip(Tokens, Marks);
 }
-void CScriptTokenizer::tokenizeWhile(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeWhile(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
+
+	// inject & push BLIND_T_LABELS
+	unsigned int label_count = 0;
+	if( (label_count = Flags & LexFlags_Label_Mask) ) {
+		ASSERT(Labels.size()>=label_count);
+		for(unsigned int i=0; i<label_count; i++) {
+			string &label = *(Labels.end()-label_count+i);
+			LoopLabels.push_back(label);
+			Tokens.push_back(CScriptToken(LEX_T_BLIND_LABEL, label));
+		}
+		Flags &= ~LexFlags_Label_Mask;
+	}
+
 	pushToken(Tokens, '(');
 	tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	pushToken(Tokens, ')');
@@ -1502,18 +1541,34 @@ void CScriptTokenizer::tokenizeWhile(TOKEN_VECT &Tokens, vector<int> &BlockStart
 	Tokens.push_back(CScriptToken(LEX_T_SKIP)); // skip 
 
 	BlockStart.push_back(Tokens.size()); // set a blockStart
-	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_CanBreak | LexFlags_CanContinue);
 	BlockStart.pop_back();
+
+	// pop BLIND_T_LABELS
+	for(unsigned int i=0; i<label_count; i++)
+		LoopLabels.pop_back();
 
 	setTokenSkip(Tokens, Marks);
 
 	setTokenSkip(Tokens, Marks);
 }
-void CScriptTokenizer::tokenizeDo(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeDo(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
 
+	// inject & push BLIND_T_LABELS
+	unsigned int label_count = 0;
+	if( (label_count = Flags & LexFlags_Label_Mask) ) {
+		ASSERT(Labels.size()>=label_count);
+		for(unsigned int i=0; i<label_count; i++) {
+			string &label = *(Labels.end()-label_count+i);
+			LoopLabels.push_back(label);
+			Tokens.push_back(CScriptToken(LEX_T_BLIND_LABEL, label));
+		}
+		Flags &= ~LexFlags_Label_Mask;
+	}
+
 	BlockStart.push_back(Tokens.size()); // set a blockStart
-	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_CanBreak | LexFlags_CanContinue);
 	BlockStart.pop_back();
 	pushToken(Tokens, LEX_R_WHILE);
 	pushToken(Tokens, '(');
@@ -1521,10 +1576,14 @@ void CScriptTokenizer::tokenizeDo(TOKEN_VECT &Tokens, vector<int> &BlockStart, v
 	pushToken(Tokens, ')');
 	pushToken(Tokens, ';');
 
+	// pop BLIND_T_LABELS
+	for(unsigned int i=0; i<label_count; i++)
+		LoopLabels.pop_back();
+
 	setTokenSkip(Tokens, Marks);
 }
 
-void CScriptTokenizer::tokenizeIf(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeIf(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
 
@@ -1554,9 +1613,8 @@ void CScriptTokenizer::tokenizeIf(TOKEN_VECT &Tokens, vector<int> &BlockStart, v
 	setTokenSkip(Tokens, Marks);
 }
 
-void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 
-	unsigned int label_count = 0;
 	const char *prev_pos=l->tokenStart;
 	const char *prev_line_start=l->currentLineStart;
 	int prev_line = l->currentLine;
@@ -1583,6 +1641,8 @@ void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 	if(for_in) Tokens[Tokens.size()-1].token = for_each_in?LEX_T_FOR_EACH_IN:LEX_T_FOR_IN;
 	if(for_each_in) l->match(LEX_ID);
 
+	// inject & push BLIND_T_LABELS
+	unsigned int label_count = 0;
 	if( (label_count = Flags & LexFlags_Label_Mask) ) {
 		ASSERT(Labels.size()>=label_count);
 		for(unsigned int i=0; i<label_count; i++) {
@@ -1610,13 +1670,15 @@ void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 		pushToken(Tokens, LEX_R_IN);
 	} else {
 		if(l->tk == LEX_R_VAR)
-			tokenizeVar(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+			tokenizeVar(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_forFor);
 		else if(l->tk == LEX_R_LET)
-			tokenizeLet(Tokens, true, BlockStart, Marks, Labels, LoopLabels, Flags);
+			tokenizeLet(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_forFor | LexFlags_asStatement);
 		else
 			tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		l->check(';'); // no automatic ;-injection
 		pushToken(Tokens, ';');
 		tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		l->check(';'); // no automatic ;-injection
 		pushToken(Tokens, ';');
 	}
 	tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); 
@@ -1624,16 +1686,27 @@ void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 	pushToken(Tokens, ')');
 
 	BlockStart.push_back(Tokens.size()); // set a blockStart
-	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+	tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_CanBreak | LexFlags_CanContinue);
 	BlockStart.pop_back();
 
+	// pop BLIND_T_LABELS
 	for(unsigned int i=0; i<label_count; i++)
 		LoopLabels.pop_back();
 	setTokenSkip(Tokens, Marks);
 }
-void CScriptTokenizer::tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeFunction(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	bool forward = false;
+	bool Statement = (Flags & LexFlags_asStatement) != 0;
+	bool Accessor = (Flags & LexFlags_isAccessor) != 0;
+	Flags &= ~(LexFlags_asStatement | LexFlags_isAccessor);
+
 	int tk = l->tk;
+	if(Accessor) {
+		tk = Tokens.back().String()=="get"?LEX_T_GET:LEX_T_SET;
+		Tokens.pop_back();
+/*
+	}
+
 	if(tk == LEX_ID && (l->tkStr=="get"||l->tkStr=="set")) {
 		string tkStr = l->tkStr;
 		tk = tkStr=="get"?LEX_T_GET:LEX_T_SET;
@@ -1642,6 +1715,7 @@ void CScriptTokenizer::tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, vect
 			tokens.push_back(CScriptToken(LEX_ID, tkStr));
 			return;
 		}
+*/
 	} else {
 		l->match(LEX_R_FUNCTION);
 		if(!Statement) tk = LEX_T_FUNCTION_OPERATOR;
@@ -1669,10 +1743,10 @@ void CScriptTokenizer::tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, vect
 	FncData.line = l->currentLine;
 
 	vector<int> functionBlockStart, marks;
+	STRING_VECTOR_t labels, loopLabels;
 	functionBlockStart.push_back(FncData.body.size()+1);
 	l->check('{');
-	bool FncStatement = true; // functions-block starts always in Statement-Level
-	tokenizeBlock(FncData.body, functionBlockStart, Marks, Labels, LoopLabels, Flags);
+	tokenizeBlock(FncData.body, functionBlockStart, marks, labels, loopLabels, LexFlags_CanReturn);
 
 	if(forward) {
 		int tokenInsertIdx = BlockStart.back();
@@ -1683,15 +1757,15 @@ void CScriptTokenizer::tokenizeFunction(TOKEN_VECT &Tokens, bool Statement, vect
 		Tokens.push_back(FncToken);
 }
 
-void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, bool Statement, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
-
-	bool forward = TOKEN_VECT::size_type(BlockStart.back()) != Tokens.size();
-	bool let_is_Statement = Statement, expression=false;
+void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+	bool forFor = (Flags & LexFlags_forFor)!=0;
+	bool Statement = (Flags & LexFlags_asStatement)!=0; Flags &= ~(LexFlags_forFor | LexFlags_asStatement);
+	bool forward = !forFor && TOKEN_VECT::size_type(BlockStart.back()) != Tokens.size();
+	bool expression=false;
 
 	Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
-	Statement = false;
 
-	if(l->tk == '(' || !let_is_Statement) {
+	if(!forFor && (l->tk == '(' || !Statement)) {
 		expression = true;
 		pushToken(Tokens, '(');
 	}
@@ -1710,13 +1784,11 @@ void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, bool Statement, vector<in
 	}
 	if(expression) {
 		pushToken(Tokens, ')');
-		Statement = let_is_Statement;
 		if(Statement) 
 			tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 		setTokenSkip(Tokens, Marks);
 	} else {
-		pushToken(Tokens, ';');
-		Statement = true;
+		if(!forFor) pushToken(Tokens, ';');
 
 		setTokenSkip(Tokens, Marks);
 
@@ -1738,7 +1810,9 @@ void CScriptTokenizer::tokenizeLet(TOKEN_VECT &Tokens, bool Statement, vector<in
 	}
 }
 
-void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+
+	bool forFor = (Flags & LexFlags_forFor)!=0; Flags &= ~LexFlags_forFor;
 
 	bool forward = TOKEN_VECT::size_type(BlockStart.front()) != Tokens.size(); // forwarde only if the var-Statement not the first Statement of the Scope
 
@@ -1758,7 +1832,7 @@ void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 		else
 			break;
 	}
-	pushToken(Tokens, ';');
+	if(!forFor) pushToken(Tokens, ';');
 
 	setTokenSkip(Tokens, Marks);
 
@@ -1779,20 +1853,17 @@ void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 	}
 }
 
-void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
-	int flags = Flags; Flags &= ~LexFlags_CanLabel;
+void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	switch(l->tk) {
 	case LEX_ID:
 		{
 			string label = l->tkStr;
 			pushToken(Tokens);
-			if(l->tk==':' && flags & LexFlags_CanLabel) {
+			if(l->tk==':' && Flags & LexFlags_CanLabel) {
 				if(find(Labels.begin(), Labels.end(), label) != Labels.end()) 
 					throw new CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine, l->currentColumn()-label.size());
 				Tokens[Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
 				Labels.push_back(label);
-				pushToken(Tokens);
-				Flags |= LexFlags_Label;
 			}
 		}
 		break;
@@ -1810,10 +1881,13 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 			if(l->tk == LEX_STR) {
 				string id = l->tkStr;
 				pushToken(Tokens);
-				if(l->tk==':' && id=="get" || id=="set") {
+				if(l->tk==LEX_ID && (id=="get" || id=="set"))
+					tokenizeFunction(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+				else {
+					pushToken(Tokens, ':');
+					tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 				}
-			}
-			if(l->tk == LEX_ID) {
+			} else if(l->tk == LEX_ID) {
 				pushToken(Tokens);
 				pushToken(Tokens, ':');
 				tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
@@ -1831,14 +1905,14 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 		pushToken(Tokens);
 		break;
 	case LEX_R_LET: // let as expression
-		tokenizeLet(Tokens, false, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeLet(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 		break;
 	case LEX_R_FUNCTION:
-		tokenizeFunction(Tokens, false, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeFunction(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 		break;
 	case LEX_R_NEW: 
 		pushToken(Tokens);
-		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, true);
+		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_callForNew);
 		break;
 	case '(':
 		pushToken(Tokens);
@@ -1849,7 +1923,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 		pushToken(Tokens, LEX_EOF);
 	}
 }
-void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	while(l->tk == '.' || l->tk == '[') {
 		if(l->tk == '.') {
 			pushToken(Tokens);
@@ -1861,9 +1935,9 @@ void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStar
 		}
 	}
 }
-void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags, bool for_new/*=false*/) {
+void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+	bool for_new = (Flags & LexFlags_callForNew)!=0; Flags &= ~LexFlags_callForNew;
 	tokenizeLiteral(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
-	if(Flags & LexFlags_Label) return;
 	tokenizeMember(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	while(l->tk == '(') {
 		pushToken(Tokens);
@@ -1877,7 +1951,7 @@ void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &Blo
 	}
 }
 
-void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	static int Left2Right_begin[] = { 
 		/* Precedence 5 */		'*', '/', '%', 
 		/* Precedence 6 */		'+', '-',
@@ -1914,7 +1988,6 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 			}
 		}
 		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
-		if(Flags & LexFlags_Label) return;
 		
 		if (l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS) { // post-in-/de-crement
 			pushToken(Tokens); // Precedence 4
@@ -1927,7 +2000,7 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 	}
 }
 
-void CScriptTokenizer::tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	tokenizeSubExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	if(l->tk == '?') {
 		pushToken(Tokens);
@@ -1936,21 +2009,21 @@ void CScriptTokenizer::tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockS
 		tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	}
 }
-void CScriptTokenizer::tokenizeAssignment(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeAssignment(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) ) {
 		pushToken(Tokens);
 		tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	}
 }
-void CScriptTokenizer::tokenizeExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	while(l->tk == ',') {
 		pushToken(Tokens);
 		tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	}
 }
-void CScriptTokenizer::tokenizeBlock(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
+void CScriptTokenizer::tokenizeBlock(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	Marks.push_back(pushToken(Tokens, '{')); // push Token & push BeginIdx
 	BlockStart.push_back(Tokens.size());	// push Block-Start (one Token after '{')
 
@@ -1964,8 +2037,7 @@ void CScriptTokenizer::tokenizeBlock(TOKEN_VECT &Tokens, vector<int> &BlockStart
 }
 
 
-void CScriptTokenizer::tokenizeStatement(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int &Flags) {
-	bool Statement=true;
+void CScriptTokenizer::tokenizeStatement(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	switch(l->tk) {
 	default:
 		Flags &= ~LexFlags_Label_Mask; 
@@ -1974,6 +2046,7 @@ void CScriptTokenizer::tokenizeStatement(TOKEN_VECT &Tokens, vector<int> &BlockS
 	case LEX_R_DO:
 	case LEX_R_WHILE:
 	case LEX_R_FOR:
+	case LEX_R_TRY:
 		break;
 	}
 	switch(l->tk)
@@ -1981,48 +2054,67 @@ void CScriptTokenizer::tokenizeStatement(TOKEN_VECT &Tokens, vector<int> &BlockS
 	case '{':				tokenizeBlock(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case ';':				pushToken(Tokens); break;
 	case LEX_R_VAR:		tokenizeVar(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
-	case LEX_R_LET:		tokenizeLet(Tokens, true, BlockStart, Marks, Labels, LoopLabels, Flags); break;
+	case LEX_R_LET:		tokenizeLet(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_asStatement); break;
 	case LEX_R_WITH:		tokenizeWith(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case LEX_R_IF:			tokenizeIf(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case LEX_R_SWITCH:	tokenizeSwitch(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case LEX_R_DO:			tokenizeDo(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case LEX_R_WHILE:		tokenizeWhile(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
 	case LEX_R_FOR:		tokenizeFor(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
-	case LEX_R_FUNCTION:	tokenizeFunction(Tokens, true, BlockStart, Marks, Labels, LoopLabels, Flags); break;
-	case LEX_R_RETURN:	pushToken(Tokens); break;
+	case LEX_R_FUNCTION:	tokenizeFunction(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_asStatement); break;
 	case LEX_R_TRY:		tokenizeTry(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
-	case LEX_R_THROW:		pushToken(Tokens); break;
-	case LEX_R_BREAK:		
+	case LEX_R_RETURN:	
+			if( (Flags & LexFlags_CanReturn)==0) 
+				throw new CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine, l->currentColumn());
+	case LEX_R_THROW:	
 		{
-			int line = l->currentLine;
 			pushToken(Tokens);
-			if(l->tk == 
+			if(l->tk != ';' && !l->lineBreakBeforeToken) {
+				tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+			}
+			pushToken(Tokens, ';'); // push ';'
 		}
 		break;
+	case LEX_R_BREAK:		
 	case LEX_R_CONTINUE:	
 		{
-			int line = l->currentLine;
-			pushToken(Tokens); 
+			bool isBreak = l->tk == LEX_R_BREAK;
+			pushToken(Tokens);
+			if(l->tk != ';' && !l->lineBreakBeforeToken) {
+				l->check(LEX_ID);
+				if(find(LoopLabels.begin(), LoopLabels.end(), l->tkStr) == LoopLabels.end())
+					throw new CScriptException(SyntaxError, "label '"+l->tkStr+"' not found", l->currentFile, l->currentLine, l->currentColumn());
+				pushToken(Tokens); // push 'Label'
+			} else if((Flags & (isBreak ? LexFlags_CanBreak : LexFlags_CanContinue) )==0) 
+				throw new CScriptException(SyntaxError, 
+											isBreak ? "'break' must be inside loop or switch" : "'continue' must be inside loop", 
+											l->currentFile, l->currentLine, l->currentColumn());
+			pushToken(Tokens, ';'); // push ';'
 		}
 		break;
 	case LEX_ID:
-		Flags |= LexFlags_CanLabel;
-		tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); 
-		if(Flags & LexFlags_Label) {
-			Flags = ((Flags+1) & LexFlags_Label_Mask) | (Flags & ~(LexFlags_Label_Mask | LexFlags_Label));
-			tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
-			Labels.pop_back();
-		} else
-			Flags &= ~LexFlags_Label_Mask;
+		{
+			STRING_VECTOR_t::size_type label_count = Labels.size();
+			tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | LexFlags_CanLabel); 
+			if(label_count < Labels.size() && l->tk == ':') {
+				pushToken(Tokens); // push ':'
+				tokenizeStatement(Tokens, BlockStart, Marks, Labels, LoopLabels, (Flags & ~LexFlags_Label_Mask) | ((Flags+1) & LexFlags_Label_Mask));
+				Labels.pop_back();
+			} else
+			pushToken(Tokens, ';');
+		}
 		break;
-	default:					tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); break;
+	default:					tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags); pushToken(Tokens, ';'); break;
 	}
 }
 #endif /*USE_NEW_TOKENIZER*/
 
 
 int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match, int Alternate) {
-	Tokens.push_back(CScriptToken(l, Match, Alternate));
+	if(Match == ';' && l->tk != ';' && (l->lineBreakBeforeToken || l->tk=='}' || l->tk==LEX_EOF))
+		Tokens.push_back(CScriptToken(';')); // inject ';'
+	else
+		Tokens.push_back(CScriptToken(l, Match, Alternate));
 	return Tokens.size()-1;
 }
 
@@ -3424,6 +3516,7 @@ void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message, 
 //////////////////////////////////////////////////////////////////////////
 /// LOOP-LABELS
 //////////////////////////////////////////////////////////////////////////
+#if USE_OLD_TOKENIZER
 
 bool CTinyJS::findLoopLabel(const string &Label) {
 	STRING_VECTOR_it it = find(loop_labels.begin(), loop_labels.end(), Label);
@@ -3435,6 +3528,8 @@ void CTinyJS::pushLoopLabel(const string &Label) {
 		throwException(SyntaxError, "dublicate label '"+Label+"'"); 
 	loop_labels.push_back(Label);
 }
+
+#endif /*USE_OLD_TOKENIZER*/
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3465,7 +3560,9 @@ CScriptVarLink CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 		} while (t->tk!=LEX_EOF);
 	} catch (...) {
 		runtimeFlags = 0; // clean up runtimeFlags
+#if USE_OLD_TOKENIZER
 		loop_labels.clear();
+#endif /*USE_OLD_TOKENIZER*/
 		t=0; // clean up Tokenizer
 		throw; // 
 	}
@@ -3589,8 +3686,10 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 	arguments->addChild("length", newScriptVar(length_arguments));
 	CScriptVarLinkPtr returnVar;
 
-	int old_function_runtimeFlags = runtimeFlags; // save runtimeFlags
+#if USE_OLD_TOKENIZER
 	STRING_VECTOR_t old_loop_labels; old_loop_labels.swap(loop_labels); // save loop_labels
+#endif /*USE_OLD_TOKENIZER*/
+	int old_function_runtimeFlags = runtimeFlags; // save runtimeFlags
 	runtimeFlags &= ~RUNTIME_LOOP_MASK; // clear LOOP-Flags because we can't break or continue a loop from functions-body
 	// execute function!
 	// add the function's execute space to the symbol table so we can recurse
@@ -3627,7 +3726,9 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 			execute = true;
 		}
 	}
+#if USE_OLD_TOKENIZER
 	old_loop_labels.swap(loop_labels); // restor loop_labels
+#endif /*USE_OLD_TOKENIZER*/
 	if(execute && newThis)
 		*newThis = functionRoot->findChild("this");
 	/* get the real return var before we remove it from our function */
@@ -4571,12 +4672,19 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 		break;
 	case LEX_R_DO:
 		if(execute) {
+#if USE_OLD_TOKENIZER
 			string Label;
 			if(label.size()) {
 				Label.swap(label);
 				pushLoopLabel(Label);
 			}
+#endif /*USE_OLD_TOKENIZER*/
 			t->match(LEX_R_DO);
+			STRING_VECTOR_t myLabels;
+			while(t->tk == LEX_T_BLIND_LABEL) {
+				myLabels.push_back(t->tkStr());
+				t->match(LEX_T_BLIND_LABEL);
+			}
 			CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
 			int old_loop_runtimeFlags = runtimeFlags & RUNTIME_LOOP_CAN_MASK;
 			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
@@ -4587,8 +4695,13 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				if(!execute)
 				{
 					// break or continue
-					if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
-					{
+#if USE_OLD_TOKENIZER
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label)) {
+#else /*USE_OLD_TOKENIZER*/
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) 
+							&& 
+							(label.empty() || find(myLabels.begin(), myLabels.end(), label) != myLabels.end())) {
+#endif /*USE_OLD_TOKENIZER*/
 						label.clear();
 						execute = true;
 						bool Break = (runtimeFlags & RUNTIME_BREAK) != 0;
@@ -4615,18 +4728,27 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				t->match(';');
 			}
 			runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
+#if USE_OLD_TOKENIZER
 			if(Label.size()) loop_labels.pop_back();
+#endif /*USE_OLD_TOKENIZER*/
 		} else 
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_R_WHILE:
 		if(execute) {
+#if USE_OLD_TOKENIZER
 			string Label;
 			if(label.size()) {
 				Label.swap(label);
 				pushLoopLabel(Label);
 			}
+#endif /*USE_OLD_TOKENIZER*/
 			t->match(LEX_R_WHILE);
+			STRING_VECTOR_t myLabels;
+			while(t->tk == LEX_T_BLIND_LABEL) {
+				myLabels.push_back(t->tkStr());
+				t->match(LEX_T_BLIND_LABEL);
+			}
 			bool loopCond;
 			t->match('(');
 			CScriptTokenizer::ScriptTokenPosition condStart = t->getPos();
@@ -4645,8 +4767,13 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 						loopEnd = t->getPos();
 					if(!execute) {
 						// break or continue
-						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
-						{
+#if USE_OLD_TOKENIZER
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label)) {
+#else /*USE_OLD_TOKENIZER*/
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) 
+							&& 
+							(label.empty() || find(myLabels.begin(), myLabels.end(), label) != myLabels.end())) {
+#endif /*USE_OLD_TOKENIZER*/
 							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK) != 0;
@@ -4666,20 +4793,29 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				t->check(LEX_T_SKIP);
 				t->skip(t->getToken().Int());
 			}
+#if USE_OLD_TOKENIZER
 			if(Label.size()) loop_labels.pop_back();
+#endif /*USE_OLD_TOKENIZER*/
 		} else
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_T_FOR_IN:
 	case LEX_T_FOR_EACH_IN:
 		if(execute) {
+#if USE_OLD_TOKENIZER
 			string Label;
 			if(label.size()) {
 				Label.swap(label);
 				pushLoopLabel(Label);
 			}
+#endif /*USE_OLD_TOKENIZER*/
 			bool for_each = t->tk == LEX_T_FOR_EACH_IN;
 			t->match(t->tk);
+			STRING_VECTOR_t myLabels;
+			while(t->tk == LEX_T_BLIND_LABEL) {
+				myLabels.push_back(t->tkStr());
+				t->match(LEX_T_BLIND_LABEL);
+			}
 			t->match('(');
 			CScriptVarLinkPtr for_var;
 			CScriptVarLinkPtr for_in_var;
@@ -4719,8 +4855,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_MASK) | RUNTIME_LOOP_CAN_MASK;
 				
 				for(STRING_SET_it it = keys.begin(); execute && it != keys.end(); ++it) {
-//				}
-//				for(SCRIPTVAR_CHILDS_it it = (*for_in_var)->Childs.begin(); execute && it != (*for_in_var)->Childs.end(); ++it) {
+
 					CScriptVarLink *link = for_var.getLink();
 					if(link) {
 						if (for_each)
@@ -4730,11 +4865,15 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 					} 					else ASSERT(0);
 					t->setPos(loopStart);
 					execute_statement(execute);
-					if(!execute)
-					{
+					if(!execute) {
 						// break or continue
-						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label))
-						{
+#if USE_OLD_TOKENIZER
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label)) {
+#else /*USE_OLD_TOKENIZER*/
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) 
+							&& 
+							(label.empty() || find(myLabels.begin(), myLabels.end(), label) != myLabels.end())) {
+#endif /*USE_OLD_TOKENIZER*/
 							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK)!=0;
@@ -4745,7 +4884,9 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 					}
 				}
 				runtimeFlags = (runtimeFlags & ~RUNTIME_LOOP_CAN_MASK) | old_loop_runtimeFlags;
+#if USE_OLD_TOKENIZER
 				if(Label.size()) loop_labels.pop_back();
+#endif /*USE_OLD_TOKENIZER*/
 			} else {
 				execute_statement(noexecute);
 			}
@@ -4755,11 +4896,13 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 	case LEX_R_FOR:
 		if(execute)
 		{
+#if USE_OLD_TOKENIZER
 			string Label;
 			if(label.size()) {
 				Label.swap(label);
 				pushLoopLabel(Label);
 			}
+#endif /*USE_OLD_TOKENIZER*/
 			t->match(LEX_R_FOR);
 			STRING_VECTOR_t myLabels;
 			while(t->tk == LEX_T_BLIND_LABEL) {
@@ -4800,7 +4943,13 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 						loopEnd = t->getPos();
 					if(!execute) {
 						// break or continue
+#if USE_OLD_TOKENIZER
 						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) && (label.empty() || label == Label)) {
+#else /*USE_OLD_TOKENIZER*/
+						if(runtimeFlags & (RUNTIME_BREAK | RUNTIME_CONTINUE) 
+							&& 
+							(label.empty() || find(myLabels.begin(), myLabels.end(), label) != myLabels.end())) {
+#endif /*USE_OLD_TOKENIZER*/
 							label.clear();
 							execute = true;
 							bool Break = (runtimeFlags & RUNTIME_BREAK)!=0;
@@ -4825,11 +4974,14 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			} else {
 				execute_statement(noexecute);
 			}
+#if USE_OLD_TOKENIZER
 			if(Label.size()) loop_labels.pop_back();
+#endif /*USE_OLD_TOKENIZER*/
 		}  else
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_R_BREAK:
+#if USE_OLD_TOKENIZER
 		{
 			if(execute && (runtimeFlags & RUNTIME_CAN_BREAK)==0)
 				throwException(SyntaxError, "'break' must be inside loop or switch");
@@ -4852,7 +5004,10 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			t->match(';');
 		}
 		break;
+#else /*USE_OLD_TOKENIZER*/
+#endif /*USE_OLD_TOKENIZER*/
 	case LEX_R_CONTINUE:
+#if USE_OLD_TOKENIZER
 		{
 			if(execute && (runtimeFlags & RUNTIME_CAN_CONTINUE)==0)
 				throwException(SyntaxError, "'continue' must be inside loop");
@@ -4875,16 +5030,33 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			t->match(';');
 		}
 		break;
+#else /*USE_OLD_TOKENIZER*/
+		if(execute) {
+			runtimeFlags |= t->tk==LEX_R_BREAK ? RUNTIME_BREAK : RUNTIME_CONTINUE;
+			execute = false;
+		}
+		t->match(t->tk);
+		if(t->tk == LEX_ID) {
+			if(execute) label = t->tkStr();
+			t->match(LEX_ID);
+		}
+		t->match(';');
+		break;
+#endif /*USE_OLD_TOKENIZER*/
 	case LEX_R_RETURN:
 		if (execute) {
+#if USE_OLD_TOKENIZER
 			if (IS_RUNTIME_CANRETURN) {
+#endif /*USE_OLD_TOKENIZER*/
 				t->match(LEX_R_RETURN);
 				CScriptVarPtr result;
 				if (t->tk != ';')
 					result = execute_base(execute);
 				if(result) scope()->scopeVar()->addChildNoDup(TINYJS_RETURN_VAR, result);
+#if USE_OLD_TOKENIZER
 			} else 
 				throw new CScriptException("'return' statement, but not in a function.", t->currentFile, t->currentLine(), t->currentColumn());
+#endif /*USE_OLD_TOKENIZER*/
 			execute = false;
 		}
 		else {
@@ -4909,7 +5081,12 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 	case LEX_R_TRY:
 		if(execute) {
 			t->match(LEX_R_TRY);
-			// save runtimeFlags
+			STRING_VECTOR_t myLabels;
+			while(t->tk == LEX_T_BLIND_LABEL) {
+				myLabels.push_back(t->tkStr());
+				t->match(LEX_T_BLIND_LABEL);
+			}
+		// save runtimeFlags
 			int old_throw_runtimeFlags = runtimeFlags & RUNTIME_THROW_MASK;
 			// set runtimeFlags
 			runtimeFlags = runtimeFlags | RUNTIME_CAN_THROW;
@@ -5062,7 +5239,7 @@ end_while:
 			string Label = t->tkStr();
 			t->match(LEX_T_LABEL);
 			t->match(':');
-#ifdef USE_OLD_TOKENIZER
+#if USE_OLD_TOKENIZER
 			if(execute && t->tk >= LEX_TOKEN_LOOP_BEGIN && t->tk <= LEX_TOKEN_LOOP_END)
 				label = Label;
 #else /*USE_OLD_TOKENIZER*/
@@ -5070,7 +5247,7 @@ end_while:
 				execute_statement(execute);
 				if(!execute) {
 					if(runtimeFlags & (RUNTIME_BREAK) && Label == label) { // break this label
-						runtimeFlags &= ~ RUNTIME_BREAK;
+						runtimeFlags &= ~RUNTIME_BREAK;
 						execute = true;
 					}
 				}
