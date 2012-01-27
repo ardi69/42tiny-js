@@ -47,8 +47,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define USE_OLD_TOKENIZER 1
-
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
 #endif
@@ -110,8 +108,9 @@ enum LEX_TYPES {
 	LEX_STR,
 	LEX_REGEXP,
 	LEX_T_LABEL,
-	LEX_T_BLIND_LABEL,
-#define LEX_TOKEN_STRING_END LEX_T_BLIND_LABEL
+	LEX_T_DUMMY_LABEL,
+	LEX_T_LOOP_LABEL,
+#define LEX_TOKEN_STRING_END LEX_T_LOOP_LABEL
 
 	LEX_FLOAT,
 
@@ -440,23 +439,6 @@ public:
 	int currentColumn() { return getPos().currentColumn();}
 	std::string &tkStr() { return getToken().String(); }
 private:
-#if USE_OLD_TOKENIZER
-	void tokenizeCatch(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeTry(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeSwitch(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeWith(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeWhile(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeDo(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeIf(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeForIn(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeFor(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeFunction(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeBlock(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeLet(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeVar(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeStatement(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	void tokenizeToken(TOKEN_VECT &Tokens, bool &Statement, std::vector<int> &BlockStart, std::vector<int> &Marks);
-#else /*USE_OLD_TOKENIZER*/
 	void tokenizeCatch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeTry(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeSwitch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
@@ -479,7 +461,6 @@ private:
 	void tokenizeBlock(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeStatement(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 
-#endif /*USE_OLD_TOKENIZER*/
 	int pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
 	void throwTokenNotExpected();
 	CScriptLex *l;
@@ -1220,19 +1201,21 @@ inline define_newScriptVar_Fnc(Double, CTinyJS *Context, double Obj) { return ne
 //////////////////////////////////////////////////////////////////////////
 
 define_ScriptVarPtr_Type(Function);
-class CScriptVarFunction : public CScriptVar {
+class CScriptVarFunction : public CScriptVarObject {
 protected:
 	CScriptVarFunction(CTinyJS *Context, CScriptTokenDataFnc *Data);
-	CScriptVarFunction(const CScriptVarFunction &Copy) : CScriptVar(Copy), data(Copy.data) { data->ref(); } ///< Copy protected -> use clone for public
+	CScriptVarFunction(const CScriptVarFunction &Copy) : CScriptVarObject(Copy), data(Copy.data) { data->ref(); } ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarFunction();
 	virtual CScriptVarPtr clone();
+	virtual bool isObject(); // { return true; }
 	virtual bool isFunction(); // { return true; }
 	virtual bool isPrimitive(); // { return false; } 
 
-	virtual std::string getString(); // {return "[ Function ]";}
+//	virtual std::string getString(); // {return "[ Function ]";}
 	virtual std::string getVarType(); // { return "function"; }
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent);
+	virtual CScriptVarPtr _toString(bool execute, int radix=0);
 	virtual CScriptTokenDataFnc *getFunctionData();
 	void setFunctionData(CScriptTokenDataFnc *Data);
 private:
@@ -1505,9 +1488,6 @@ private:
 	CScriptTokenizer *t;       /// current tokenizer
 	int runtimeFlags;
 	std::string label;
-#if USE_OLD_TOKENIZER
-	STRING_VECTOR_t loop_labels;
-#endif /*USE_OLD_TOKENIZER*/
 	std::vector<CScriptVarScopePtr>scopes;
 	CScriptVarScopePtr root;
 	const CScriptVarScopePtr &scope() { return scopes.back(); }
@@ -1602,13 +1582,6 @@ private:
 	void throwException(ERROR_TYPES ErrorType, const std::string &message);
 	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
 	void throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
-
-	//////////////////////////////////////////////////////////////////////////
-	/// LOOP-LABELS
-#if USE_OLD_TOKENIZER
-	bool findLoopLabel(const std::string &Label);
-	void pushLoopLabel(const std::string &Label);
-#endif /*USE_OLD_TOKENIZER*/
 
 	//////////////////////////////////////////////////////////////////////////
 	/// native Object-Constructors & prototype-functions
