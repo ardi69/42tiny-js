@@ -256,8 +256,8 @@ bool isAlphaNum(const string &str) {
 string CScriptException::toString() {
 	ostringstream msg;
 	msg << ERROR_NAME[errorType] << ": " << message;
-	if(lineNumber >= 0) msg << " at Line:" << lineNumber;
-	if(column >=0) msg << " Column:" << column;
+	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
+	if(column >=0) msg << " Column:" << column+1;
 	if(fileName.length()) msg << " in " << fileName;
 	return msg.str();
 }
@@ -630,7 +630,7 @@ void CScriptLex::getNextToken() {
 			tk = LEX_ASTERISKEQUAL;
 			getNextCh();
 		} else if (tk=='/') {
-			// check if it's a Regex-Literal
+			// check if it's a RegExp-Literal
 			tk = LEX_REGEXP;
 			for(uint16_t *p = not_allowed_tokens_befor_regexp; *p; p++) {
 				if(*p==last_tk) { tk = '/'; break; }
@@ -649,7 +649,7 @@ void CScriptLex::getNextToken() {
 					do {
 						tkStr.append(1, currCh);
 						getNextCh();
-					} while (currCh && currCh=='g' && currCh=='i' && currCh=='m' && currCh=='y');
+					} while (currCh=='g' || currCh=='i' || currCh=='m' || currCh=='y');
 				} else
 					throw new CScriptException(SyntaxError, "unterminated regular expression literal", currentFile, currentLine, currentColumn());
 			} else if(currCh=='=') {
@@ -1339,6 +1339,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 	case LEX_INT:
 	case LEX_FLOAT:
 	case LEX_STR:
+	case LEX_REGEXP:
 	case LEX_R_TRUE:
 	case LEX_R_FALSE:
 	case LEX_R_NULL:
@@ -1347,16 +1348,16 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 	case '{':
 		Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
 		while (l->tk != '}') {
-			if(l->tk == LEX_STR) {
+			if(l->tk == LEX_ID) {
 				string id = l->tkStr;
 				pushToken(Tokens);
 				if(l->tk==LEX_ID && (id=="get" || id=="set"))
-					tokenizeFunction(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+					tokenizeFunction(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags|TOKENIZE_FLAGS_isAccessor);
 				else {
 					pushToken(Tokens, ':');
 					tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 				}
-			} else if(l->tk == LEX_ID) {
+			} else if(l->tk == LEX_STR) {
 				pushToken(Tokens);
 				pushToken(Tokens, ':');
 				tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
@@ -1369,8 +1370,9 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 	case '[':
 		Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
 		while (l->tk != ']') {
-			tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
-			if (l->tk != ']') pushToken(Tokens, ',', ']');
+			if(l->tk != ',')
+				tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+			if (l->tk != ']') pushToken(Tokens, ',');
 		}
 		pushToken(Tokens);
 		setTokenSkip(Tokens, Marks);
@@ -1617,6 +1619,7 @@ void CScriptVarLink::replaceWith(const CScriptVarPtr &newVar) {
 // ----------------------------------------------------------------------------------- CSCRIPTVAR
 
 CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
+	extensible = true;
 	context = Context;
 	temporaryID = 0;
 	if(context->first) {
@@ -1635,6 +1638,7 @@ CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 #endif
 }
 CScriptVar::CScriptVar(const CScriptVar &Copy) {
+	extensible = Copy.extensible;
 	context = Copy.context;
 	temporaryID = 0;
 	if(context->first) {
@@ -1673,6 +1677,7 @@ CScriptVar::~CScriptVar(void) {
 bool CScriptVar::isObject()		{return false;}
 bool CScriptVar::isError()			{return false;}
 bool CScriptVar::isArray()			{return false;}
+bool CScriptVar::isRegExp()		{return false;}
 bool CScriptVar::isAccessor()		{return false;}
 bool CScriptVar::isNull()			{return false;}
 bool CScriptVar::isUndefined()	{return false;}
@@ -1973,6 +1978,7 @@ string CScriptVar::getFlagsAsString() {
 	if (isInt()) flagstr = flagstr + "INTEGER ";
 	if (isBool()) flagstr = flagstr + "BOOLEAN ";
 	if (isString()) flagstr = flagstr + "STRING ";
+	if (isRegExp()) flagstr = flagstr + "REGEXP ";
 	if (isNaN()) flagstr = flagstr + "NaN ";
 	if (isInfinity()) flagstr = flagstr + "INFINITY ";
 	return flagstr;
@@ -2212,6 +2218,14 @@ CScriptVarPtr CScriptVarError::_toString(bool execute, int radix) {
 
 declare_dummy_t(Accessor);
 CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
+CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context, JSCallback getterFnc, void *getterData, JSCallback setterFnc, void *setterData) 
+	: CScriptVar(Context, Context->objectPrototype) 
+{
+	if(getterFnc)
+		addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, getterFnc, getterData), 0);
+	if(setterFnc)
+		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, setterFnc, setterData), 0);
+}
 CScriptVarAccessor::~CScriptVarAccessor() {}
 CScriptVarPtr CScriptVarAccessor::clone() { return new CScriptVarAccessor(*this); }
 bool CScriptVarAccessor::isAccessor() { return true; }
@@ -2248,11 +2262,10 @@ string CScriptVarAccessor::getParsableString(const string &indentString, const s
 string CScriptVarAccessor::getVarType() { return "accessor"; }
 
 
-
 ////////////////////////////////////////////////////////////////////////// CScriptVarArray
 
 declare_dummy_t(Array);
-CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVar(Context, Context->arrayPrototype) {
+CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype) {
 	CScriptVarLink *acc = addChild("length", newScriptVar(Accessor), 0);
 	CScriptVarFunctionPtr getter(::newScriptVar(Context, this, &CScriptVarArray::native_Length, 0));
 	getter->setFunctionData(new CScriptTokenDataFnc);
@@ -2262,17 +2275,6 @@ CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVar(Context, Context
 CScriptVarArray::~CScriptVarArray() {}
 CScriptVarPtr CScriptVarArray::clone() { return new CScriptVarArray(*this); }
 bool CScriptVarArray::isArray() { return true; }
-bool CScriptVarArray::isPrimitive()	{ return false; } 
-string CScriptVarArray::getString() { 
-	ostringstream destination;
-	int len = getArrayLength();
-	for (int i=0;i<len;i++) {
-		destination << getArrayIndex(i)->getString();
-		if (i<len-1) destination  << ", ";
-	}
-	return destination.str();
-}
-string CScriptVarArray::getVarType() { return "object"; }
 string CScriptVarArray::getParsableString(const string &indentString, const string &indent) {
 	ostringstream destination;
 	string nl = indent.size() ? "\n" : " ";
@@ -2291,9 +2293,18 @@ string CScriptVarArray::getParsableString(const string &indentString, const stri
 	destination << "]";
 	return destination.str();
 }
+CScriptVarPtr CScriptVarArray::_toString( bool execute, int radix/*=0*/ ) {
+	ostringstream destination;
+	int len = getArrayLength();
+	for (int i=0;i<len;i++) {
+		destination << getArrayIndex(i)->getString();
+		if (i<len-1) destination  << ", ";
+	}
+	return newScriptVar(destination.str());
 
-void CScriptVarArray::native_Length(const CFunctionsScopePtr &c, void *data)
-{
+}
+
+void CScriptVarArray::native_Length(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(newScriptVar(c->getArgument("this")->getArrayLength()));
 }
 
@@ -2349,7 +2360,7 @@ int CScriptVarString::getInt() {return strtol(data.c_str(),0,0); }
 bool CScriptVarString::getBool() {return data.length()!=0;}
 double CScriptVarString::getDouble() {return strtod(data.c_str(),0);}
 string CScriptVarString::getString() { return data; }
-string CScriptVarString::getParsableString() { return getJSString(data); }
+string CScriptVarString::getParsableString(const std::string &indentString, const std::string &indent) { return getJSString(data); }
 string CScriptVarString::getVarType() { return "string"; }
 CScriptVarPtr CScriptVarString::getNumericVar() {
 	string the_string = getString();
@@ -2367,6 +2378,60 @@ CScriptVarPtr CScriptVarString::getNumericVar() {
 }
 
 void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(newScriptVar((int)this->data.size()));
+}
+
+////////////////////////////////////////////////////////////////////////// CScriptVarRegExp
+
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexPrototype), data(Data), flags(Flags) {
+	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
+	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
+	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
+	addChild("sticky", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
+}
+CScriptVarRegExp::~CScriptVarRegExp() {}
+CScriptVarPtr CScriptVarRegExp::clone() { return new CScriptVarRegExp(*this); }
+bool CScriptVarRegExp::isRegExp() { return true; }
+//int CScriptVarRegExp::getInt() {return strtol(data.c_str(),0,0); }
+//bool CScriptVarRegExp::getBool() {return data.length()!=0;}
+//double CScriptVarRegExp::getDouble() {return strtod(data.c_str(),0);}
+string CScriptVarRegExp::getString() { return "/"+data+"/"+flags; }
+string CScriptVarRegExp::getParsableString(const string &indentString, const string &indent) { return getString(); }
+CScriptVarPtr CScriptVarRegExp::_toString(bool execute, int radix) {
+	return newScriptVar(getString());
+}
+//string CScriptVarRegExp::getVarType() { return "string"; }
+/*
+CScriptVarPtr CScriptVarRegExp::getNumericVar() {
+	string the_string = getString();
+	double d;
+	char *endptr;//=NULL;
+	int i = strtol(the_string.c_str(),&endptr,0);
+	if(*endptr == '\0')
+		return newScriptVar(i);
+	if(*endptr=='.' || *endptr=='e' || *endptr=='E') {
+		d = strtod(the_string.c_str(),&endptr);
+		if(*endptr == '\0')
+			return newScriptVar(d);
+	}
+	return CScriptVar::getNumericVar();
+}
+*/
+void CScriptVarRegExp::native_Global(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(constScriptVar(Global()));
+}
+void CScriptVarRegExp::native_IgnoreCase(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(constScriptVar(IgnoreCase()));
+}
+void CScriptVarRegExp::native_Multiline(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(constScriptVar(Multiline()));
+}
+void CScriptVarRegExp::native_Sticky(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(constScriptVar(Sticky()));
+}
+
+
+void CScriptVarRegExp::native_Length(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(newScriptVar((int)this->data.size()));
 }
 
@@ -2755,6 +2820,10 @@ int CScriptVarScopeFnc::getArgumentsLength() {
 	return arguments ? (*arguments)->getInt() : 0;
 }
 
+void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const std::string &message ) {
+	throw newScriptVarError(context, ErrorType, message.c_str());
+}
+
 
 
 ////////////////////////////////////////////////////////////////////////// CScriptVarScopeLet
@@ -2824,9 +2893,11 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Object()", this, &CTinyJS::native_Object);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
-	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_hasOwnProperty); 
-	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_valueOf); 
-	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_toString); 
+	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_preventExtensions); 
+	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isExtensible); 
+	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty); 
+	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf); 
+	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString); 
 	pseudo_refered.push_back(&objectPrototype);
 	pseudo_refered.push_back(&objectPrototype_valueOf);
 	pseudo_refered.push_back(&objectPrototype_toString);
@@ -2846,6 +2917,14 @@ CTinyJS::CTinyJS() {
 	stringPrototype->addChild("valueOf", objectPrototype_valueOf);
 	stringPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_refered.push_back(&stringPrototype);
+
+	//////////////////////////////////////////////////////////////////////////
+	// RegExp
+	var = addNative("function RegExp()", this, &CTinyJS::native_String);
+	regexPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	regexPrototype->addChild("valueOf", objectPrototype_valueOf);
+	regexPrototype->addChild("toString", objectPrototype_toString);
+	pseudo_refered.push_back(&regexPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
@@ -2873,8 +2952,8 @@ CTinyJS::CTinyJS() {
 	// Function
 	var = addNative("function Function(params, body)", this, &CTinyJS::native_Function); 
 	var->addChildNoDup(TINYJS_PROTOTYPE_CLASS, functionPrototype);
-	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_call); 
-	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_apply); 
+	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_prototype_call); 
+	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_prototype_apply); 
 	functionPrototype->addChild("valueOf", objectPrototype_valueOf);
 	functionPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_refered.push_back(&functionPrototype);
@@ -3079,6 +3158,7 @@ CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, CScriptVa
 	}
 
 	auto_ptr<CScriptTokenDataFnc> pFunctionData(new CScriptTokenDataFnc);
+	pFunctionData->name = funcName;
 	lex.match('(');
 	while (lex.tk!=')') {
 		pFunctionData->arguments.push_back(lex.tkStr);
@@ -3138,8 +3218,6 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 	arguments->addChild("length", newScriptVar(length_arguments));
 	CScriptVarLinkPtr returnVar;
 
-	int old_function_runtimeFlags = runtimeFlags; // save runtimeFlags
-	runtimeFlags &= ~RUNTIME_LOOP_MASK; // clear LOOP-Flags because we can't break or continue a loop from functions-body
 	// execute function!
 	// add the function's execute space to the symbol table so we can recurse
 	CScopeControl ScopeControl(this);
@@ -3147,7 +3225,6 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 	if (Function->isNative()) {
 		try {
 			CScriptVarFunctionNativePtr(Function)->callFunction(functionRoot);
-			runtimeFlags = old_function_runtimeFlags | (runtimeFlags & RUNTIME_THROW); // restore runtimeFlags
 			if(runtimeFlags & RUNTIME_THROW)
 				execute = false;
 		} catch (CScriptVarPtr v) {
@@ -3156,7 +3233,7 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 				execute = false;
 				exceptionVar = v;
 			} else
-				throw new CScriptException(SyntaxError, "uncaught exception: '"+v->getString()+"' in: native function '"+Function->getFunctionData()->name+"'");
+				throw new CScriptException(SyntaxError, v->getString()+"' in: native function '"+Function->getFunctionData()->name+"'");
 		}
 	} else {
 		/* we just want to execute the block, but something could
@@ -3165,12 +3242,10 @@ CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &
 		string oldFile = t->currentFile;
 		t->currentFile = Fnc->file;
 		t->pushTokenScope(Fnc->body);
-		SET_RUNTIME_CANRETURN;
 		execute_block(execute);
 		t->currentFile = oldFile;
 
 		// because return will probably have called this, and set execute to false
-		runtimeFlags = old_function_runtimeFlags | (runtimeFlags & RUNTIME_THROW); // restore runtimeFlags
 		if(!(runtimeFlags & RUNTIME_THROW)) {
 			execute = true;
 		}
@@ -3384,6 +3459,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 	case LEX_INT:
 		{
 			CScriptVarPtr a = newScriptVar(t->getToken().Int());
+			a->setExtensible(false);
 			t->match(LEX_INT);
 			return a;
 		}
@@ -3399,6 +3475,16 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 		{
 			CScriptVarPtr a = newScriptVar(t->getToken().String());
 			t->match(LEX_STR);
+			return a;
+		}
+		break;
+	case LEX_REGEXP:
+		{
+			string::size_type pos = t->getToken().String().find_last_of('/');
+			string source = t->getToken().String().substr(1, pos-1);
+			string flags = t->getToken().String().substr(pos+1);
+			CScriptVarPtr a = newScriptVar(source, flags);
+			t->match(LEX_REGEXP);
 			return a;
 		}
 		break;
@@ -3447,7 +3533,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 			t->match('[');
 			int idx = 0;
 			while (t->tk != ']') {
-				CScriptVarLinkPtr a = execute_assignment(execute);
+				CScriptVarLinkPtr a = t->tk==',' ? constScriptVar(Undefined) : execute_assignment(execute);
 				if (execute) {
 					contents->addChild(int2string(idx), a);
 				}
@@ -3958,6 +4044,8 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(bool &execute) {
 			else if(lhs->isWritable()) {
 				if (op=='=') {
 					if (!lhs->isOwned() && !lhs_is_accessor) {
+						if(lhs->isOwner() && !lhs->getOwner()->isExtensible())
+							return rhs->getVarPtr();
 						CScriptVarLink *realLhs;
 						if(lhs->isOwner())
 							realLhs = lhs->getOwner()->addChildNoDup(lhs->getName(), lhs);
@@ -4475,9 +4563,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			t->match(')');
 			if(execute) {
 				// save runtimeFlags
-				int old_switch_runtimeFlags = runtimeFlags & RUNTIME_BREAK_MASK;
 				// set runtimeFlags
-				runtimeFlags = (runtimeFlags & ~RUNTIME_BREAK_MASK) | RUNTIME_CAN_BREAK;
 				bool found = false ,execute = false;
 				t->match('{');
 				CScopeControl ScopeControl(this);
@@ -4535,8 +4621,6 @@ end_while:
 					t->match('}');
 					if(!found || (runtimeFlags & RUNTIME_BREAK) )
 						execute = true;
-					// restore runtimeFlags
-					runtimeFlags = (runtimeFlags & ~RUNTIME_BREAK_MASK) | old_switch_runtimeFlags;
 				} else
 					throw new CScriptException("invalid switch statement");
 			} else
@@ -4597,20 +4681,46 @@ void CTinyJS::native_Object(const CFunctionsScopePtr &c, void *data) {
 	} else
 		c->setReturnVar(objc);
 }
-void CTinyJS::native_Object_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
-	c->setReturnVar(c->constScriptVar(c->getArgument("this")->findChild(c->getArgument("prop")->getString()) != 0));
-}
 void CTinyJS::native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *data) {
 	if(c->getArgumentsLength()>=1) {
-		c->setReturnVar(c->getArgument(0)->findChild(TINYJS___PROTO___VAR));
+		CScriptVarPtr obj = c->getArgument(0);
+		if(obj->isObject()) {
+			c->setReturnVar(obj->findChild(TINYJS___PROTO___VAR));
+			return;
+		}
 	}
+	c->throwError(TypeError, "argument is not an object");
 	// TODO throw error 
 }
-void CTinyJS::native_Object_valueOf(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Object_preventExtensions(const CFunctionsScopePtr &c, void *data) {
+	if(c->getArgumentsLength()>=1) {
+		CScriptVarPtr obj = c->getArgument(0);
+		if(obj->isObject()) {
+			c->setReturnVar(constScriptVar(obj->isExtensible()));
+			return;
+		}
+	}
+	c->throwError(TypeError, "argument is not an object");
+}
+void CTinyJS::native_Object_isExtensible(const CFunctionsScopePtr &c, void *data) {
+	if(c->getArgumentsLength()>=1) {
+		CScriptVarPtr obj = c->getArgument(0);
+		if(obj->isObject()) {
+			obj->setExtensible(false);
+			return;
+		}
+	}
+	c->throwError(TypeError, "argument is not an object");
+}
+
+void CTinyJS::native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(c->constScriptVar(c->getArgument("this")->findChild(c->getArgument("prop")->getString()) != 0));
+}
+void CTinyJS::native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data) {
 	bool execute = true;
 	c->setReturnVar(c->getArgument("this")->_valueOf(execute));
 }
-void CTinyJS::native_Object_toString(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Object_prototype_toString(const CFunctionsScopePtr &c, void *data) {
 	bool execute = true;
 	int radix = 10;
 	if(c->getArgumentsLength()>=1) radix = c->getArgument("radix")->getInt();
@@ -4697,7 +4807,7 @@ void CTinyJS::native_Function(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(parseFunctionsBodyFromString(params,body));
 }
 
-void CTinyJS::native_Function_call(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Function_prototype_call(const CFunctionsScopePtr &c, void *data) {
 	int length = c->getArgumentsLength();
 	CScriptVarPtr Fnc = c->getArgument("this");
 	CScriptVarPtr This = c->getArgument(0);
@@ -4707,7 +4817,7 @@ void CTinyJS::native_Function_call(const CFunctionsScopePtr &c, void *data) {
 	bool execute = true;
 	callFunction(execute, Fnc, Params, This);
 }
-void CTinyJS::native_Function_apply(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr Fnc = c->getArgument("this");
 	CScriptVarPtr This = c->getArgument(0);
 	CScriptVarPtr Array = c->getArgument(1);
@@ -4754,7 +4864,6 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 	scopes.pop_back(); // go back to the callers scope
 	CScriptVarLinkPtr returnVar;
 	CScriptTokenizer *oldTokenizer = t; t=0;
-	runtimeFlags &= ~RUNTIME_CAN_RETURN; // we can't return a function from eval-code
 	try {
 		CScriptTokenizer Tokenizer(Code.c_str(), "eval");
 		t = &Tokenizer;
