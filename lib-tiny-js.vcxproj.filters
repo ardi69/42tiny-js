@@ -41,9 +41,6 @@
     <ClInclude Include="TinyJS_MathFunctions.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
-    <ClInclude Include="smart_pointer.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
     <ClInclude Include="pool_allocator.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>

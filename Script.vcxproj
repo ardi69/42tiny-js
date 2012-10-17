@@ -92,12 +92,6 @@
     <ClCompile Include="Script.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Script.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="lib-tiny-js.vcxproj">
       <Project>{9751c465-0294-43cd-a5d9-bd038aba3961}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
