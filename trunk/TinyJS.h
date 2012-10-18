@@ -1562,7 +1562,7 @@ public:
 	CScriptVarPtr objectPrototype_toString; /// Built in object class
 	CScriptVarPtr arrayPrototype; /// Built in array class
 	CScriptVarPtr stringPrototype; /// Built in string class
-	CScriptVarPtr regexPrototype; /// Built in string class
+	CScriptVarPtr regexpPrototype; /// Built in string class
 	CScriptVarPtr numberPrototype; /// Built in number class
 	CScriptVarPtr booleanPrototype; /// Built in boolean class
 	CScriptVarPtr functionPrototype; /// Built in function class
@@ -1647,6 +1647,8 @@ private:
 	void native_Array(const CFunctionsScopePtr &c, void *data);
 
 	void native_String(const CFunctionsScopePtr &c, void *data);
+
+	void native_RegExp(const CFunctionsScopePtr &c, void *data);
 
 	void native_Number(const CFunctionsScopePtr &c, void *data);
 

@@ -1362,7 +1362,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 				pushToken(Tokens, ':');
 				tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 			}
-			if (l->tk != '}') pushToken(Tokens, ',', '}');
+			if (l->tk != '}') pushToken(Tokens, ',');
 		}
 		pushToken(Tokens);
 		setTokenSkip(Tokens, Marks);
@@ -2383,7 +2383,7 @@ void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
 
 ////////////////////////////////////////////////////////////////////////// CScriptVarRegExp
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexPrototype), data(Data), flags(Flags) {
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), data(Data), flags(Flags) {
 	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
 	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
 	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
@@ -2920,11 +2920,11 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// RegExp
-	var = addNative("function RegExp()", this, &CTinyJS::native_String);
-	regexPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
-	regexPrototype->addChild("valueOf", objectPrototype_valueOf);
-	regexPrototype->addChild("toString", objectPrototype_toString);
-	pseudo_refered.push_back(&regexPrototype);
+	var = addNative("function RegExp()", this, &CTinyJS::native_RegExp);
+	regexpPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	regexpPrototype->addChild("valueOf", objectPrototype_valueOf);
+	regexpPrototype->addChild("toString", objectPrototype_toString);
+	pseudo_refered.push_back(&regexpPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
@@ -4755,6 +4755,26 @@ void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarLink *This = c->findChild("this");
 	This->replaceWith(newScriptVar(ObjectWrap, arg));
 	c->setReturnVar(arg);
+}
+
+//////////////////////////////////////////////////////////////////////////
+/// RegExp
+//////////////////////////////////////////////////////////////////////////
+
+void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
+	int arglen = c->getArgumentsLength();
+	string RegExp, Flags;
+	if(arglen>=1) {
+		RegExp = c->getArgument(0)->getString();
+		if(arglen>=2) {
+			Flags = c->getArgument(1)->getString();
+			string::size_type pos = Flags.find_first_not_of("igmy");
+			if(pos != string::npos) {
+				c->throwError(SyntaxError, string("invalid regular expression flag ")+Flags[pos]);
+			}
+		} 
+	}
+	c->setReturnVar(newScriptVar(RegExp, Flags));
 }
 
 //////////////////////////////////////////////////////////////////////////
