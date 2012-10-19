@@ -47,12 +47,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-#ifdef __GNUC__
-#	include <tr1/regex>
-#else
-#	include <regex>
-#endif
-
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
 #endif
@@ -920,12 +914,12 @@ class CScriptVarAccessor : public CScriptVar {
 protected:
 	CScriptVarAccessor(CTinyJS *Context);
 	CScriptVarAccessor(CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
-	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData=0, void(C::*setterFnc)(const CFunctionsScopePtr &, void *)=0, void *setterData=0) : CScriptVar(Context, Context->objectPrototype) {
+	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData=0, void(C::*setterFnc)(const CFunctionsScopePtr &, void *)=0, void *setterData=0); /* : CScriptVar(Context, Context->objectPrototype) {
 		if(getterFnc)
 			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, class_ptr, getterFnc, getterData), 0);
 		if(setterFnc)
 			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
-	}
+	} */
 	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVar(Copy) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarAccessor();
@@ -1692,5 +1686,11 @@ public:
 template<typename T>
 inline const CScriptVarPtr &CScriptVar::constScriptVar(T t) { return context->constScriptVar(t); }
 //////////////////////////////////////////////////////////////////////////
+template<class C>	CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData) : CScriptVar(Context, Context->objectPrototype) {
+	if(getterFnc)
+		addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, class_ptr, getterFnc, getterData), 0);
+	if(setterFnc)
+		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
+}
 
 #endif
