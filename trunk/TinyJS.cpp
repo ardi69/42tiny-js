@@ -3533,7 +3533,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 			t->match('[');
 			int idx = 0;
 			while (t->tk != ']') {
-				CScriptVarLinkPtr a = t->tk==',' ? constScriptVar(Undefined) : execute_assignment(execute);
+				CScriptVarLinkPtr a; if(t->tk==',') a=constScriptVar(Undefined); else a=execute_assignment(execute);
 				if (execute) {
 					contents->addChild(int2string(idx), a);
 				}
