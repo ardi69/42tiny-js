@@ -51,10 +51,6 @@
 #	define ASSERT(X) assert(X)
 #endif
 
-#ifndef __GNUC__
-#	define __attribute__(x)
-#endif
-
 #ifdef _MSC_VER
 #	define DEPRECATED(_Text) __declspec(deprecated(_Text))
 #elif defined(__GNUC__)
@@ -914,12 +910,7 @@ class CScriptVarAccessor : public CScriptVar {
 protected:
 	CScriptVarAccessor(CTinyJS *Context);
 	CScriptVarAccessor(CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
-	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData=0, void(C::*setterFnc)(const CFunctionsScopePtr &, void *)=0, void *setterData=0); /* : CScriptVar(Context, Context->objectPrototype) {
-		if(getterFnc)
-			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, class_ptr, getterFnc, getterData), 0);
-		if(setterFnc)
-			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
-	} */
+	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData=0, void(C::*setterFnc)(const CFunctionsScopePtr &, void *)=0, void *setterData=0); /* function block defined at the end of this file */
 	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVar(Copy) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarAccessor();
@@ -986,9 +977,11 @@ public:
 	virtual std::string getString(); // { return "null"; };
 	virtual std::string getVarType(); // { return "null"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-	friend define_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t);
+	friend define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t);
+	friend define_newScriptVar_NamedFnc(Null, CTinyJS *Context);
 };
-inline define_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t) { return new CScriptVarNull(Context); }
+inline define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t) { return new CScriptVarNull(Context); }
+inline define_newScriptVar_NamedFnc(Null, CTinyJS *Context) { return new CScriptVarNull(Context); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1076,31 +1069,34 @@ inline define_newScriptVar_Fnc(String, CTinyJS *Context, char *Obj) { return new
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarRegExp
 //////////////////////////////////////////////////////////////////////////
+#ifndef NO_REGEXP
 
 define_ScriptVarPtr_Type(RegExp);
 class CScriptVarRegExp : public CScriptVarObject {
 protected:
 	CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags);
-	CScriptVarRegExp(const CScriptVarRegExp &Copy) : CScriptVarObject(Copy), data(Copy.data), flags(Copy.flags) {} ///< Copy protected -> use clone for public
+	CScriptVarRegExp(const CScriptVarRegExp &Copy) : CScriptVarObject(Copy), regexp(Copy.regexp), flags(Copy.flags) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarRegExp();
 	virtual CScriptVarPtr clone();
 	virtual bool isRegExp(); // { return true; }
-//	virtual int getInt(); // {return strtol(data.c_str(),0,0); }
-//	virtual bool getBool(); // {return data.length()!=0;}
-//	virtual double getDouble(); // {return strtod(data.c_str(),0);}
-	virtual std::string getString(); // { return data; }
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); // { return getJSString(data); }
+//	virtual int getInt(); // {return strtol(regexp.c_str(),0,0); }
+//	virtual bool getBool(); // {return regexp.length()!=0;}
+//	virtual double getDouble(); // {return strtod(regexp.c_str(),0);}
+	virtual std::string getString(); // { return regexp; }
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); // { return getJSString(regexp); }
 //	virtual std::string getVarType(); // { return "string"; }
 //	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+
+	CScriptVarPtr exec(const std::string Str);
 
 	bool Global() { return flags.find('g')!=std::string::npos; }
 	bool IgnoreCase() { return flags.find('i')!=std::string::npos; }
 	bool Multiline() { return flags.find('m')!=std::string::npos; }
 	bool Sticky() { return flags.find('y')!=std::string::npos; }
 protected:
-	std::string data;
+	std::string regexp;
 	std::string flags;
 private:
 	void native_Global(const CFunctionsScopePtr &c, void *data);
@@ -1110,8 +1106,10 @@ private:
 	void native_Length(const CFunctionsScopePtr &c, void *data);
 
 	friend define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &, const std::string &);
+
 };
 inline define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &Obj, const std::string &Flags) { return new CScriptVarRegExp(Context, Obj, Flags); }
+#endif /* NO_REGEXP */
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1519,6 +1517,7 @@ public:
 	template<typename T>	CScriptVarPtr newScriptVar(T t) { return ::newScriptVar(this, t); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return ::newScriptVar(this, t1, t2); }
 	const CScriptVarPtr &constScriptVar(Undefined_t)	{ return constUndefined; }
+	const CScriptVarPtr &constScriptVar(Null_t)			{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)			{ return constNaN; }
 	const CScriptVarPtr &constScriptVar(Infinity t)		{ return t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
 	const CScriptVarPtr &constScriptVar(bool Val)		{ return Val?constTrue:constFalse; }
@@ -1564,6 +1563,7 @@ public:
 private:
 	CScriptVarPtr errorPrototypes[ERROR_COUNT]; /// Built in error class
 	CScriptVarPtr constUndefined;
+	CScriptVarPtr constNull;
 	CScriptVarPtr constNaN;
 	CScriptVarPtr constInfinityPositive;
 	CScriptVarPtr constInfinityNegative;

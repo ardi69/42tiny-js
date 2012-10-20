@@ -30,6 +30,17 @@
 #include <algorithm>
 #include "TinyJS.h"
 
+#ifndef NO_REGEXP 
+#	if defined HAVE_TR1_REGEX
+#		include <tr1/regex>
+		using namespace std::tr1;
+#	elif defined HAVE_BOOST_REGEX
+#		include <boost/tr1/tr1/regex>
+		using namespace boost;
+#	else
+#		include <regex>
+#	endif
+#endif
 using namespace std;
 // ----------------------------------------------- Actual Functions
 
@@ -176,8 +187,24 @@ static void scStringFromCharCode(const CFunctionsScopePtr &c, void *) {
 	c->setReturnVar(c->newScriptVar(str));
 }
 
+//////////////////////////////////////////////////////////////////////////
+// RegExp-Stuff
+//////////////////////////////////////////////////////////////////////////
+
+#ifndef NO_REGEXP
+
+static void scRegExpExec(const CFunctionsScopePtr &c, void *) {
+	CScriptVarRegExpPtr This = c->getArgument("this");
+	if(This)
+		c->setReturnVar(This->exec(c->getArgument("str")->getString()));
+	else
+		c->throwError(TypeError, "Object is not an RegExp in exec(str)");
+}
+//print(/a.*l(l)/.exec("Hallo"))
+#endif /* NO_REGEXP */
 
 // ----------------------------------------------- Register Functions
+//typedef basic_regex<char> regex;
 void registerStringFunctions(CTinyJS *tinyJS) {
 	CScriptVarPtr fnc;
 	// charAt
@@ -226,5 +253,9 @@ void registerStringFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function charToInt(ch)", scCharToInt, 0); //  convert a character to an int - get its value
 	
 	tinyJS->addNative("function String.prototype.fromCharCode(char)", scStringFromCharCode, 0);
+#ifndef NO_REGEXP
+	tinyJS->addNative("function RegExp.prototype.exec(str)", scRegExpExec, 0);
+#endif /* NO_REGEXP */
+
 }
 
