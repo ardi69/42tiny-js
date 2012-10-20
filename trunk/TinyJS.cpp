@@ -56,51 +56,20 @@
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
 #endif
-#if 0
-inline CScriptVarSmartLink &CScriptVarSmartLink::operator = (CScriptVarPtr Var) {
-	if(link && !link->isOwned()) delete link; 
-	link = new CScriptVarLink(Var);
-/*
-	if (!link || link->isOwned()) 
-		link = new CScriptVarLink(Var);
-	else {
-		link->replaceWith(Var);
-		link->name=TINYJS_TEMP_NAME;
-	} 
-*/
-	return *this;
-}
-inline CScriptVarSmartLink &CScriptVarSmartLink::operator = (const CScriptVarSmartLink &Link) { 
-	if(link && !link->isOwned()) delete link; 
-	link = Link.link; 
-	((CScriptVarSmartLink &)Link).link = 0; // explicit cast to a non const ref
-	return *this;
-}
 
-// this operator corresponds "CLEAN(link); link = Link;"
-inline CScriptVarSmartLink &CScriptVarSmartLink::operator = (CScriptVarLink *Link) {
-	if(link && !link->isOwned()) delete link; 
-	link = Link; 
-	return *this;
-}
-// this operator corresponds "link->replaceWith(Link->get())"
-inline CScriptVarSmartLink &CScriptVarSmartLink::operator <<(CScriptVarSmartLink &Link) {
-	ASSERT(link && Link.link);
-	link->replaceWith(Link.link);
-	return *this;
-}
+#ifndef NO_REGEXP 
+#	if defined HAVE_TR1_REGEX
+#		include <tr1/regex>
+using namespace std::tr1;
+#	elif defined HAVE_BOOST_REGEX
+#		include <boost/tr1/tr1/regex>
+using namespace boost;
+#	else
+#		include <regex>
+#	endif
 #endif
 
 using namespace std;
-
-#ifdef __GNUC__
-#	define vsprintf_s vsnprintf
-#	define vsnprintf_s(buffer, size, len, format, args) vsnprintf(buffer, size, format, args)
-#	define sprintf_s snprintf
-#	define _strdup strdup
-#else
-#	define __attribute__(x)
-#endif
 
 // ----------------------------------------------------------------------------------- Memory Debug
 
@@ -194,14 +163,14 @@ void replace(string &str, char textFrom, const char *textTo) {
 	}
 }
 string int2string(int intData) {
-	char buffer[32];
-	sprintf_s(buffer, sizeof(buffer), "%d", intData);
-	return buffer;
+	ostringstream str;
+	str << intData;
+	return str.str();
 }
 string float2string(const double &floatData) {
-	char buffer[32];
-	sprintf_s(buffer, sizeof(buffer), "%f", floatData);
-	return buffer;
+	ostringstream str;
+	str << floatData;
+	return str.str();
 }
 /// convert the given string into a quoted string suitable for javascript
 string getJSString(const string &str) {
@@ -224,8 +193,10 @@ string getJSString(const string &str) {
 			default: {
 					int nCh = ((int)nStr[i]) & 0xff;
 					if(nCh<32 || nCh>127) {
-						char buffer[5];
-						sprintf_s(buffer, sizeof(buffer), "\\x%02X", nCh);
+						char buffer[5] = "\\x00";
+						static char hex[] = "0123456789ABCDEF";
+						buffer[2] = hex[(nCh>>4)&0x0f];
+						buffer[3] = hex[nCh&0x0f];
 						replaceWith = buffer;
 					} else replace=false;
 				}
@@ -646,6 +617,9 @@ void CScriptLex::getNextToken() {
 					getNextCh();
 				}
 				if(currCh == '/') {
+					try { regex(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
+						throw new CScriptException(SyntaxError, e.what(), currentFile, currentLine, currentColumn());
+					}
 					do {
 						tkStr.append(1, currCh);
 						getNextCh();
@@ -2383,7 +2357,9 @@ void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
 
 ////////////////////////////////////////////////////////////////////////// CScriptVarRegExp
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), data(Data), flags(Flags) {
+#ifndef NO_REGEXP
+
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Data), flags(Flags) {
 	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
 	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
 	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
@@ -2392,10 +2368,10 @@ CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, co
 CScriptVarRegExp::~CScriptVarRegExp() {}
 CScriptVarPtr CScriptVarRegExp::clone() { return new CScriptVarRegExp(*this); }
 bool CScriptVarRegExp::isRegExp() { return true; }
-//int CScriptVarRegExp::getInt() {return strtol(data.c_str(),0,0); }
-//bool CScriptVarRegExp::getBool() {return data.length()!=0;}
-//double CScriptVarRegExp::getDouble() {return strtod(data.c_str(),0);}
-string CScriptVarRegExp::getString() { return "/"+data+"/"+flags; }
+//int CScriptVarRegExp::getInt() {return strtol(regexp.c_str(),0,0); }
+//bool CScriptVarRegExp::getBool() {return regexp.length()!=0;}
+//double CScriptVarRegExp::getDouble() {return strtod(regexp.c_str(),0);}
+string CScriptVarRegExp::getString() { return "/"+regexp+"/"+flags; }
 string CScriptVarRegExp::getParsableString(const string &indentString, const string &indent) { return getString(); }
 CScriptVarPtr CScriptVarRegExp::_toString(bool execute, int radix) {
 	return newScriptVar(getString());
@@ -2432,9 +2408,26 @@ void CScriptVarRegExp::native_Sticky(const CFunctionsScopePtr &c, void *data) {
 
 
 void CScriptVarRegExp::native_Length(const CFunctionsScopePtr &c, void *data) {
-	c->setReturnVar(newScriptVar((int)this->data.size()));
+	c->setReturnVar(newScriptVar((int)this->regexp.size()));
 }
 
+CScriptVarPtr CScriptVarRegExp::exec( const std::string Str )
+{
+	regex::flag_type flags = regex_constants::ECMAScript;
+	if(IgnoreCase()) flags |= regex_constants::icase;
+	smatch match;
+	if(regex_search(Str, match, regex(regexp, flags))) {
+		CScriptVarArrayPtr retVar = newScriptVar(Array);
+		retVar->addChild("input", newScriptVar(Str));
+		retVar->addChild("index", newScriptVar(match.position(0)));
+		for(smatch::size_type idx=0; idx<match.size(); idx++)
+			retVar->addChild(int2string(idx), newScriptVar(match[idx].str()));
+		return retVar;
+	}
+	return constScriptVar(Null);
+}
+
+#endif /* NO_REGEXP */
 
 ////////////////////////////////////////////////////////////////////////// CScriptVarIntegerBase
 
@@ -2920,11 +2913,14 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// RegExp
+#ifndef NO_REGEXP
+
 	var = addNative("function RegExp()", this, &CTinyJS::native_RegExp);
 	regexpPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	regexpPrototype->addChild("valueOf", objectPrototype_valueOf);
 	regexpPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_refered.push_back(&regexpPrototype);
+#endif /* NO_REGEXP */
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
@@ -2997,6 +2993,7 @@ CTinyJS::CTinyJS() {
 	// add global built-in vars & constants
 	root->addChild("undefined", constUndefined = newScriptVarUndefined(this), SCRIPTVARLINK_ENUMERABLE);
 	pseudo_refered.push_back(&constUndefined);
+	constNull	= newScriptVarNull(this);	pseudo_refered.push_back(&constNull);
 	root->addChild("NaN", constNaN, SCRIPTVARLINK_ENUMERABLE);
 	root->addChild("Infinity", constInfinityPositive, SCRIPTVARLINK_ENUMERABLE);
 	constFalse	= newScriptVarBool(this, false);	pseudo_refered.push_back(&constFalse);
@@ -3478,6 +3475,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 			return a;
 		}
 		break;
+#ifndef NO_REGEXP
 	case LEX_REGEXP:
 		{
 			string::size_type pos = t->getToken().String().find_last_of('/');
@@ -3488,6 +3486,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 			return a;
 		}
 		break;
+#endif /* NO_REGEXP */
 	case '{':
 		if(execute) {
 			CScriptVarPtr contents(newScriptVar(Object));
@@ -3627,7 +3626,7 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 		return constScriptVar(false);
 	case LEX_R_NULL:
 		t->match(LEX_R_NULL);
-		return newScriptVar(Null);
+		return constScriptVar(Null);
 	case '(':
 		if(execute) {
 			t->match('(');
@@ -4760,12 +4759,16 @@ void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
 //////////////////////////////////////////////////////////////////////////
 /// RegExp
 //////////////////////////////////////////////////////////////////////////
+#ifndef NO_REGEXP
 
 void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	int arglen = c->getArgumentsLength();
 	string RegExp, Flags;
 	if(arglen>=1) {
 		RegExp = c->getArgument(0)->getString();
+		try { regex(RegExp, regex_constants::ECMAScript); } catch(regex_error e) {
+			c->throwError(SyntaxError, e.what());
+		}
 		if(arglen>=2) {
 			Flags = c->getArgument(1)->getString();
 			string::size_type pos = Flags.find_first_not_of("igmy");
@@ -4776,6 +4779,7 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	}
 	c->setReturnVar(newScriptVar(RegExp, Flags));
 }
+#endif /* NO_REGEXP */
 
 //////////////////////////////////////////////////////////////////////////
 /// Number
