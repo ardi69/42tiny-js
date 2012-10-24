@@ -1074,7 +1074,7 @@ inline define_newScriptVar_Fnc(String, CTinyJS *Context, char *Obj) { return new
 define_ScriptVarPtr_Type(RegExp);
 class CScriptVarRegExp : public CScriptVarObject {
 protected:
-	CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags);
+	CScriptVarRegExp(CTinyJS *Context, const std::string &Source, const std::string &Flags);
 	CScriptVarRegExp(const CScriptVarRegExp &Copy) : CScriptVarObject(Copy), regexp(Copy.regexp), flags(Copy.flags) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarRegExp();
@@ -1089,12 +1089,15 @@ public:
 //	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 	virtual CScriptVarPtr _toString(bool execute, int radix=0);
 
-	CScriptVarPtr exec(const std::string Str);
+	CScriptVarPtr exec(const std::string &Input, bool Test=false);
 
 	bool Global() { return flags.find('g')!=std::string::npos; }
 	bool IgnoreCase() { return flags.find('i')!=std::string::npos; }
-	bool Multiline() { return flags.find('m')!=std::string::npos; }
+	bool Multiline() { return true; /* currently always true -- flags.find('m')!=std::string::npos;*/ }
 	bool Sticky() { return flags.find('y')!=std::string::npos; }
+	const std::string &Regexp() { return regexp; }
+	unsigned int LastIndex();
+	void LastIndex(unsigned int Idx);
 protected:
 	std::string regexp;
 	std::string flags;
@@ -1103,7 +1106,7 @@ private:
 	void native_IgnoreCase(const CFunctionsScopePtr &c, void *data);
 	void native_Multiline(const CFunctionsScopePtr &c, void *data);
 	void native_Sticky(const CFunctionsScopePtr &c, void *data);
-	void native_Length(const CFunctionsScopePtr &c, void *data);
+	void native_Source(const CFunctionsScopePtr &c, void *data);
 
 	friend define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &, const std::string &);
 
@@ -1588,7 +1591,9 @@ private:
 
 public:
 	// function call
+	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 	CScriptVarPtr callFunction(bool &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	const CScriptVarPtr &getExeptionVar() { return exceptionVar; }
 	//
 	// parsing - in order of precedence
 

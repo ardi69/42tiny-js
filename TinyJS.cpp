@@ -60,10 +60,10 @@
 #ifndef NO_REGEXP 
 #	if defined HAVE_TR1_REGEX
 #		include <tr1/regex>
-using namespace std::tr1;
+		using namespace std::tr1;
 #	elif defined HAVE_BOOST_REGEX
-#		include <boost/tr1/tr1/regex>
-using namespace boost;
+#		include <boost/regex.hpp>
+		using namespace boost;
 #	else
 #		include <regex>
 #	endif
@@ -485,19 +485,22 @@ void CScriptLex::getNextToken() {
 					case 'v': tkStr += '\v'; break;
 					case 'x': { // hex digits
 						getNextCh();
-						char buf[3]="\0\0";
-						for(int i=0; i<2 && isHexadecimal(currCh); i++)
-						{
-							buf[i] = currCh; getNextCh();
-						}
-						tkStr += (char)strtol(buf, 0, 16);
+						if(isHexadecimal(currCh)) {
+							char buf[3]="\0\0";
+							buf[0] = currCh;
+							for(int i=0; i<2 && isHexadecimal(nextCh); i++) {
+								getNextCh(); buf[i] = currCh;
+							}
+							tkStr += (char)strtol(buf, 0, 16);
+						} else
+							throw new CScriptException(SyntaxError, "malformed hexadezimal character escape sequence", currentFile, currentLine, currentColumn());	
 					}
 					default: {
 						if(isOctal(currCh)) {
 							char buf[4]="\0\0\0";
-							for(int i=0; i<3 && isOctal(currCh); i++)
-							{
-								buf[i] = currCh; getNextCh();
+							buf[0] = currCh;
+							for(int i=1; i<3 && isOctal(nextCh); i++) {
+								getNextCh(); buf[i] = currCh;
 							}
 							tkStr += (char)strtol(buf, 0, 8);
 						}
@@ -617,9 +620,11 @@ void CScriptLex::getNextToken() {
 					getNextCh();
 				}
 				if(currCh == '/') {
+#ifndef NO_REGEXP
 					try { regex(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
 						throw new CScriptException(SyntaxError, e.what(), currentFile, currentLine, currentColumn());
 					}
+#endif /* NO_REGEXP */
 					do {
 						tkStr.append(1, currCh);
 						getNextCh();
@@ -1685,7 +1690,7 @@ CScriptVarPtr CScriptVar::getNumericVar() {
 CScriptVarPtr CScriptVar::getPrimitivVar() {
 	bool execute=true;
 	CScriptVarPtr var = getPrimitivVar(execute);
-//	if(!execute) TODO
+	if(!execute) throw (CScriptVarPtr)context->getExeptionVar();
 	return var;
 }
 CScriptVarPtr CScriptVar::getPrimitivVar(bool execute) {
@@ -2359,11 +2364,13 @@ void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
 
 #ifndef NO_REGEXP
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Data, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Data), flags(Flags) {
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
 	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
 	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
 	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
 	addChild("sticky", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
+	addChild("regexp", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
+	addChild("lastIndex", newScriptVar(0));
 }
 CScriptVarRegExp::~CScriptVarRegExp() {}
 CScriptVarPtr CScriptVarRegExp::clone() { return new CScriptVarRegExp(*this); }
@@ -2376,23 +2383,6 @@ string CScriptVarRegExp::getParsableString(const string &indentString, const str
 CScriptVarPtr CScriptVarRegExp::_toString(bool execute, int radix) {
 	return newScriptVar(getString());
 }
-//string CScriptVarRegExp::getVarType() { return "string"; }
-/*
-CScriptVarPtr CScriptVarRegExp::getNumericVar() {
-	string the_string = getString();
-	double d;
-	char *endptr;//=NULL;
-	int i = strtol(the_string.c_str(),&endptr,0);
-	if(*endptr == '\0')
-		return newScriptVar(i);
-	if(*endptr=='.' || *endptr=='e' || *endptr=='E') {
-		d = strtod(the_string.c_str(),&endptr);
-		if(*endptr == '\0')
-			return newScriptVar(d);
-	}
-	return CScriptVar::getNumericVar();
-}
-*/
 void CScriptVarRegExp::native_Global(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(constScriptVar(Global()));
 }
@@ -2405,25 +2395,50 @@ void CScriptVarRegExp::native_Multiline(const CFunctionsScopePtr &c, void *data)
 void CScriptVarRegExp::native_Sticky(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(constScriptVar(Sticky()));
 }
-
-
-void CScriptVarRegExp::native_Length(const CFunctionsScopePtr &c, void *data) {
-	c->setReturnVar(newScriptVar((int)this->regexp.size()));
+void CScriptVarRegExp::native_Source(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(newScriptVar(regexp));
+}
+unsigned int CScriptVarRegExp::LastIndex() {
+	CScriptVarPtr lastIndex = findChild("lastIndex");
+	if(lastIndex) return lastIndex->getInt();
+	return 0;
+}
+void CScriptVarRegExp::LastIndex(unsigned int Idx) {
+	addChildNoDup("lastIndex", newScriptVar((int)Idx));
 }
 
-CScriptVarPtr CScriptVarRegExp::exec( const std::string Str )
+CScriptVarPtr CScriptVarRegExp::exec( const std::string &Input, bool Test /*= false*/ )
 {
+	string Str=Input;
 	regex::flag_type flags = regex_constants::ECMAScript;
 	if(IgnoreCase()) flags |= regex_constants::icase;
-	smatch match;
-	if(regex_search(Str, match, regex(regexp, flags))) {
-		CScriptVarArrayPtr retVar = newScriptVar(Array);
-		retVar->addChild("input", newScriptVar(Str));
-		retVar->addChild("index", newScriptVar(match.position(0)));
-		for(smatch::size_type idx=0; idx<match.size(); idx++)
-			retVar->addChild(int2string(idx), newScriptVar(match[idx].str()));
-		return retVar;
+	bool global = Global(), sticky = Sticky();
+	unsigned int lastIndex = LastIndex();
+	int offset = 0;
+	if(global || sticky) {
+		if(lastIndex > Str.length()) goto failed; 
+		offset=lastIndex;
 	}
+	{
+		regex_constants::match_flag_type mflag = sticky?regex_constants::match_continuous:regex_constants::match_default;
+		if(offset) mflag |= regex_constants::match_prev_avail;
+		smatch match;
+		if(regex_search(Str.cbegin()+offset, Str.cend(), match, regex(regexp, flags), mflag) ) {
+			LastIndex(offset+match.position()+match.str().length());
+			if(Test) return constScriptVar(true);
+
+			CScriptVarArrayPtr retVar = newScriptVar(Array);
+			retVar->addChild("input", newScriptVar(Input));
+			retVar->addChild("index", newScriptVar(match.position()));
+			for(smatch::size_type idx=0; idx<match.size(); idx++)
+				retVar->addChild(int2string(idx), newScriptVar(match[idx].str()));
+			return retVar;
+		}
+	}
+failed:
+	if(global || sticky) 
+		LastIndex(0); 
+	if(Test) return constScriptVar(false);
 	return constScriptVar(Null);
 }
 
@@ -3186,6 +3201,12 @@ CScriptVarLinkPtr CTinyJS::parseFunctionsBodyFromString(const string &ArgumentLi
 	CScriptTokenizer tokenizer(Fnc.c_str());
 	return parseFunctionDefinition(tokenizer.getToken());
 }
+CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+	bool execute=true;
+	CScriptVarPtr retVar = callFunction(execute, Function, Arguments, This, newThis);
+	if(!execute) throw exceptionVar;
+	return retVar;
+}
 
 CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 //CScriptVarSmartLink CTinyJS::callFunction(CScriptVarSmartLink &Function, vector<CScriptVarSmartLink> &Arguments, const CScriptVarPtr& This, bool &execute) {
@@ -3321,8 +3342,8 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 	// special for strings and string '+'
 	// both a String or one a String and op='+'
 	if( (a_isString && b_isString) || ((a_isString || b_isString) && op == '+')) {
-		string da = a->getString();
-		string db = b->getString();
+		string da = a->isNull() ? "" : a->getString();
+		string db = b->isNull() ? "" : b->getString();
 		switch (op) {
 		case '+':			return newScriptVar(da+db);
 		case LEX_EQUAL:	return constScriptVar(da==db);
@@ -3671,11 +3692,10 @@ CScriptVarLinkPtr CTinyJS::execute_member(CScriptVarLinkPtr &parent, bool &execu
 					t->skip(t->getToken().Int());
 			}
 			if (execute) {
-				bool in_prototype = false;
+				bool need_temporary = false;
 				CScriptVarLink *child = (*a)->findChildWithPrototypeChain(name);
-//				if ( !child && (child = findInPrototypeChain(a, name)) )
-				if ( child && child->getOwner() != a->getVarPtr().getVar() ) 
-					in_prototype = true;
+				if ( !a.getRealLink() || (child && child->getOwner() != a->getVarPtr().getVar()) ) 
+					need_temporary = true;
 				if (!child) {
 					/* if we haven't found this defined yet, use the built-in
 						'length' properly */
@@ -3691,7 +3711,7 @@ CScriptVarLinkPtr CTinyJS::execute_member(CScriptVarLinkPtr &parent, bool &execu
 				}
 				if(child) {
 					parent = a;
-					if(in_prototype) {
+					if(need_temporary) {
 						a(child->getVarPtr(), child->getName());
 						a->setOwner(parent->getVarPtr().getVar()); // fake owner - but not set Owned -> for assignment stuff
 					} else
@@ -3727,7 +3747,7 @@ CScriptVarLinkPtr CTinyJS::execute_function_call(bool &execute) {
 				if (execute) {
 					arguments.push_back(value);
 				}
-				if (t->tk!=')') { t->match(',',')'); /*path+=',';*/ }
+				if (t->tk!=')') { t->match(','); /*path+=',';*/ }
 			}
 			t->match(')'); //path+=')';
 			// setup a return variable
@@ -4771,7 +4791,7 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 		}
 		if(arglen>=2) {
 			Flags = c->getArgument(1)->getString();
-			string::size_type pos = Flags.find_first_not_of("igmy");
+			string::size_type pos = Flags.find_first_not_of("gimy");
 			if(pos != string::npos) {
 				c->throwError(SyntaxError, string("invalid regular expression flag ")+Flags[pos]);
 			}
@@ -4838,8 +4858,7 @@ void CTinyJS::native_Function_prototype_call(const CFunctionsScopePtr &c, void *
 	vector<CScriptVarPtr> Params;
 	for(int i=1; i<length; i++)
 		Params.push_back(c->getArgument(i));
-	bool execute = true;
-	callFunction(execute, Fnc, Params, This);
+	callFunction(Fnc, Params, This);
 }
 void CTinyJS::native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr Fnc = c->getArgument("this");
@@ -4853,8 +4872,7 @@ void CTinyJS::native_Function_prototype_apply(const CFunctionsScopePtr &c, void 
 		if(value) Params.push_back(value);
 		else Params.push_back(constScriptVar(Undefined));
 	}
-	bool execute = true;
-	callFunction(execute, Fnc, Params, This);
+	callFunction(Fnc, Params, This);
 }
 
 ////////////////////////////////////////////////////////////////////////// 
