@@ -70,6 +70,9 @@ void js_dump(const CFunctionsScopePtr &v, void *) {
 
 int main(int , char **)
 {
+//	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
+//	setlocale( LC_ALL, ".858" );
+//	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 	CTinyJS *js = new CTinyJS();
 	/* add the functions from TinyJS_Functions.cpp */
 	registerFunctions(js);

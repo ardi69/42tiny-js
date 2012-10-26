@@ -1052,6 +1052,7 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); // { return getJSString(data); }
 	virtual std::string getVarType(); // { return "string"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
+	int getChar(int Idx);
 protected:
 	std::string data;
 private:
@@ -1098,6 +1099,8 @@ public:
 	const std::string &Regexp() { return regexp; }
 	unsigned int LastIndex();
 	void LastIndex(unsigned int Idx);
+
+	static const char *ErrorStr(int Error);
 protected:
 	std::string regexp;
 	std::string flags;

@@ -174,12 +174,12 @@ string float2string(const double &floatData) {
 }
 /// convert the given string into a quoted string suitable for javascript
 string getJSString(const string &str) {
-	string nStr = str;
-	for (size_t i=0;i<nStr.size();i++) {
-		const char *replaceWith = "";
-		bool replace = true;
-
-		switch (nStr[i]) {
+	char buffer[5] = "\\x00";
+	string nStr; nStr.reserve(str.length());
+	nStr.push_back('\"');
+	for (string::const_iterator i=str.begin();i!=str.end();i++) {
+		const char *replaceWith = 0;
+		switch (*i) {
 			case '\\': replaceWith = "\\\\"; break;
 			case '\n': replaceWith = "\\n"; break;
 			case '\r': replaceWith = "\\r"; break;
@@ -191,23 +191,22 @@ string getJSString(const string &str) {
 			case '"': replaceWith = "\\\""; break;
 //			case '\'': replaceWith = "\\'"; break;
 			default: {
-					int nCh = ((int)nStr[i]) & 0xff;
+					int nCh = ((unsigned char)*i) & 0xff;
 					if(nCh<32 || nCh>127) {
-						char buffer[5] = "\\x00";
 						static char hex[] = "0123456789ABCDEF";
 						buffer[2] = hex[(nCh>>4)&0x0f];
 						buffer[3] = hex[nCh&0x0f];
 						replaceWith = buffer;
-					} else replace=false;
+					};
 				}
 		}
-
-		if (replace) {
-			nStr = nStr.substr(0, i) + replaceWith + nStr.substr(i+1);
-			i += strlen(replaceWith)-1;
-		}
+		if (replaceWith)
+			nStr.append(replaceWith);
+		else
+			nStr.push_back(*i);
 	}
-	return "\"" + nStr + "\"";
+	nStr.push_back('\"');
+	return nStr;
 }
 
 /** Is the string alphanumeric */
@@ -622,7 +621,7 @@ void CScriptLex::getNextToken() {
 				if(currCh == '/') {
 #ifndef NO_REGEXP
 					try { regex(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
-						throw new CScriptException(SyntaxError, e.what(), currentFile, currentLine, currentColumn());
+						throw new CScriptException(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, currentLine, currentColumn());
 					}
 #endif /* NO_REGEXP */
 					do {
@@ -1312,6 +1311,11 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 					throw new CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine, l->currentColumn()-label.size());
 				Tokens[Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
 				Labels.push_back(label);
+			} else if(label=="this") {
+				if( l->tk == '=' || (l->tk >= LEX_ASSIGNMENTS_BEGIN && l->tk <= LEX_ASSIGNMENTS_END) )
+					throw new CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine, l->currentColumn()-label.size());
+				if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
+					throw new CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine, l->currentColumn()-label.size());
 			}
 		}
 		break;
@@ -1436,8 +1440,13 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 				break;
 			case LEX_PLUSPLUS: // pre-increment		
 			case LEX_MINUSMINUS: // pre-decrement 	
-				Flags &= ~TOKENIZE_FLAGS_canLabel;
-				pushToken(Tokens); // Precedence 4
+				{
+					int tk = l->tk;
+					Flags &= ~TOKENIZE_FLAGS_canLabel;
+					pushToken(Tokens); // Precedence 4
+					if(l->tk == LEX_ID && l->tkStr == "this")
+						throw new CScriptException(SyntaxError, tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine, l->currentColumn());
+				}
 			default:
 				right2left_end = true;
 			}
@@ -2355,6 +2364,12 @@ CScriptVarPtr CScriptVarString::getNumericVar() {
 	}
 	return CScriptVar::getNumericVar();
 }
+int CScriptVarString::getChar(int Idx) {
+	if((string::size_type)Idx >= data.length())
+		return -1;
+	else
+		return (unsigned char)data[Idx];
+}
 
 void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(newScriptVar((int)this->data.size()));
@@ -2440,6 +2455,26 @@ failed:
 		LastIndex(0); 
 	if(Test) return constScriptVar(false);
 	return constScriptVar(Null);
+}
+
+const char * CScriptVarRegExp::ErrorStr( int Error )
+{
+	switch(Error) {
+	case regex_constants::error_badbrace: return "the expression contained an invalid count in a { } expression";
+	case regex_constants::error_badrepeat: return "a repeat expression (one of '*', '?', '+', '{' in most contexts) was not preceded by an expression";
+	case regex_constants::error_brace: return "the expression contained an unmatched '{' or '}'";
+	case regex_constants::error_brack: return "the expression contained an unmatched '[' or ']'";
+	case regex_constants::error_collate: return "the expression contained an invalid collating element name";
+	case regex_constants::error_complexity: return "an attempted match failed because it was too complex";
+	case regex_constants::error_ctype: return "the expression contained an invalid character class name";
+	case regex_constants::error_escape: return "the expression contained an invalid escape sequence";
+	case regex_constants::error_paren: return "the expression contained an unmatched '(' or ')'";
+	case regex_constants::error_range: return "the expression contained an invalid character range specifier";
+	case regex_constants::error_space: return "parsing a regular expression failed because there were not enough resources available";
+	case regex_constants::error_stack: return "an attempted match failed because there was not enough memory available";
+	case regex_constants::error_backref: return "the expression contained an invalid back reference";
+	default: return "";
+	}
 }
 
 #endif /* NO_REGEXP */
@@ -3467,8 +3502,12 @@ CScriptVarLinkPtr CTinyJS::execute_literals(bool &execute) {
 				} else {
 					a(constScriptVar(Undefined), t->tkStr());
 				}
-			} else if(t->tkStr() == "this")
+			} 
+/*
+			prvention for assignment to this is now done by the tokenizer
+			else if(t->tkStr() == "this")
 				a(a->getVarPtr()); // prevent assign to this
+*/
 			t->match(LEX_ID);
 			return a;
 		}
@@ -3675,40 +3714,27 @@ CScriptVarLinkPtr CTinyJS::execute_member(CScriptVarLinkPtr &parent, bool &execu
 			if(execute && ((*a)->isUndefined() || (*a)->isNull())) {
 				throwError(execute, TypeError, a->getName() + " is " + (*a)->getString());
 			}
-			string name;
+			string name; int isIndex=false;
 			if(t->tk == '.') {
 				t->match('.');
 				name = t->tkStr();
-//				path += "."+name;
 				t->match(LEX_ID);
 			} else {
 				if(execute) {
 					t->match('[');
 					CScriptVarLinkPtr index = execute_expression(execute);
 					name = (*index)->getString();
-//					path += "["+name+"]";
 					t->match(']');
+					isIndex = true;
 				} else
 					t->skip(t->getToken().Int());
 			}
 			if (execute) {
 				bool need_temporary = false;
 				CScriptVarLink *child = (*a)->findChildWithPrototypeChain(name);
-				if ( !a.getRealLink() || (child && child->getOwner() != a->getVarPtr().getVar()) ) 
+				CScriptVar *aVar = a->getVarPtr().getVar();
+				if ( (!a.getRealLink() && aVar != root.getVar()) || (child && child->getOwner() != aVar) ) 
 					need_temporary = true;
-				if (!child) {
-					/* if we haven't found this defined yet, use the built-in
-						'length' properly */
-					if ((*a)->isArray() && name == "length") {
-						int l = (*a)->getArrayLength();
-						child = new CScriptVarLink(newScriptVar(l));
-					} else if ((*a)->isString() && name == "length") {
-						int l = (*a)->getString().size();
-						child = new CScriptVarLink(newScriptVar(l));
-					} else {
-						//child = (*a)->addChild(name);
-					}
-				}
 				if(child) {
 					parent = a;
 					if(need_temporary) {
@@ -3718,7 +3744,12 @@ CScriptVarLinkPtr CTinyJS::execute_member(CScriptVarLinkPtr &parent, bool &execu
 						a = child;
 				} else {
 					CScriptVar *owner = a->getVarPtr().getVar();
-					a(constScriptVar(Undefined), name);
+					if (isIndex && (*a)->isString() && name.find_first_not_of("0123456789") == string::npos) {
+						int Char = CScriptVarStringPtr(**a)->getChar(strtol(name.c_str(),0,0));
+						child = a(newScriptVar(string(1, (char)Char)), name, 0).getLink();
+					} 
+					if(!child)
+						a(constScriptVar(Undefined), name);
 					a->setOwner(owner);  // fake owner - but not set Owned -> for assignment stuff
 				}
 			}
@@ -4035,10 +4066,8 @@ CScriptVarLinkPtr CTinyJS::execute_condition(bool &execute)
 		bool cond = execute && (*a)->getBool();
 		CScriptVarLinkPtr b;
 		a = execute_condition(cond ? execute : noexecute ); // L<-R
-//		CheckRightHandVar(execute, a);
 		t->match(':');
 		b = execute_condition(cond ? noexecute : execute); // R-L
-//		CheckRightHandVar(execute, b);
 		if(!cond)
 			return b;
 	}
@@ -4078,33 +4107,12 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(bool &execute) {
 					CScriptVarPtr result;
 					static int assignments[] = {'+', '-', '*', '/', '%', LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU, '&', '|', '^'};
 					result = mathsOp(execute, lhs, rhs, assignments[op-LEX_PLUSEQUAL]);
-/*
-					if (op==LEX_PLUSEQUAL)
-						result = mathsOp(execute, lhs, rhs, '+');
-					else if (op==LEX_MINUSEQUAL)
-						result = mathsOp(execute, lhs, rhs, '-');
-					else if (op==LEX_ASTERISKEQUAL)
-						result = mathsOp(execute, lhs, rhs, '*');
-					else if (op==LEX_SLASHEQUAL)
-						result = mathsOp(execute, lhs, rhs, '/');
-					else if (op==LEX_PERCENTEQUAL)
-						result = mathsOp(execute, lhs, rhs, '%');
-					else if (op==LEX_LSHIFTEQUAL)
-						result = mathsOp(execute, lhs, rhs, LEX_LSHIFT);
-					else if (op==LEX_RSHIFTEQUAL)
-						result = mathsOp(execute, lhs, rhs, LEX_RSHIFT);
-					else if (op==LEX_RSHIFTUEQUAL)
-						result = mathsOp(execute, lhs, rhs, LEX_RSHIFTU);
-					else if (op==LEX_ANDEQUAL)
-						result = mathsOp(execute, lhs, rhs, '&');
-					else if (op==LEX_OREQUAL)
-						result = mathsOp(execute, lhs, rhs, '|');
-					else if (op==LEX_XOREQUAL)
-						result = mathsOp(execute, lhs, rhs, '^');
-*/					
 					lhs->replaceWith(result);
 					return result;
 				}
+			} else {
+				// lhs is not writable we ignore lhs & use rhs
+				return rhs->getVarPtr();
 			}
 		}
 	}
@@ -4787,7 +4795,7 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	if(arglen>=1) {
 		RegExp = c->getArgument(0)->getString();
 		try { regex(RegExp, regex_constants::ECMAScript); } catch(regex_error e) {
-			c->throwError(SyntaxError, e.what());
+			c->throwError(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 		}
 		if(arglen>=2) {
 			Flags = c->getArgument(1)->getString();
