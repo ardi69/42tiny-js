@@ -271,15 +271,18 @@ bool run_test(const char *filename) {
   if (pass)
     printf("PASS\n");
   else {
-    char fn[64];
+	 char fn[64];
     sprintf(fn, "%s.fail.txt", filename);
+
+	 /* logging is currently deactivated because stack-overflow by recursive vars
     FILE *f = fopen(fn, "wt");
     if (f) {
+		 
       std::string symbols = s.getRoot()->getParsableString("", "   ");
       fprintf(f, "%s", symbols.c_str());
       fclose(f);
     }
-
+	 */
     printf("FAIL - symbols written to %s\n", fn);
   }
 
