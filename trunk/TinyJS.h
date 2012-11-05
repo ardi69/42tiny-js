@@ -45,7 +45,7 @@
 #include <set>
 #include "pool_allocator.h"
 #include <stdint.h>
-#include <assert.h>
+#include <cassert>
 
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
@@ -429,12 +429,13 @@ private:
 	void tokenizeLet(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeVar(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 
-	void tokenizeLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeMember(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeFunctionCall(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeSubExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeCondition(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
+	void tokenizeLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
+	void tokenizeMember(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
+	void tokenizeFunctionCall(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
+	void tokenizeSubExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
+	void tokenizeCondition(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
+	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeBlock(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeStatement(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
@@ -719,42 +720,6 @@ protected:
 // to create a CScriptVarPtr always call getValue to call getter if's needed
 inline CScriptVarPtr::CScriptVarPtr(const CScriptVarLink *Link) : var(0) { if(Link) { var = Link->getVarPtr()->ref(); } }
 
-
-//////////////////////////////////////////////////////////////////////////
-/// CScriptVarLinkTmp / CScriptVarLinkTmpPtr
-//////////////////////////////////////////////////////////////////////////
-class CScriptVarLinkTmp : public CScriptVarLink{
-private:
-	CScriptVarLinkTmp(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLink(var, name, flags) {
-		refs=1;
-	}
-	int refs;
-	CScriptVarLinkTmp *ref() { refs++; return this;}
-	void unref() { if(--refs == 0) delete this; }
-	friend class CScriptVarLinkTmpPtr;
-};
-class CScriptVarLinkTmpPtr{
-public:
-	CScriptVarLinkTmpPtr() : link(0) {}
-	CScriptVarLinkTmpPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
-		link = new CScriptVarLinkTmp(var, name, flags);
-	}
-	CScriptVarLinkTmpPtr(const CScriptVarLinkTmpPtr &Copy) : link(Copy.link) { if(link) link->ref(); }
-	CScriptVarLinkTmpPtr &operator=(const CScriptVarLinkTmpPtr &Copy) { 
-		if(link!=Copy.link) { if(link) link->unref(); link=Copy.link; if(link) link->ref(); } return *this; }
-	~CScriptVarLinkTmpPtr() { if(link) link->unref(); }
-	operator bool() const { return link != 0; }
-	int refs() { return link ? link->refs : 0; }
-	CScriptVarLink *operator->() const { return link; }
-	operator CScriptVarLink *() const { return link; }
-
-private:
-	CScriptVarLinkTmp *link;
-};
-
-
-
-
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarSmartLink
 //////////////////////////////////////////////////////////////////////////
@@ -802,7 +767,34 @@ private:
 	void clear_tmp_link();
 
 	CScriptVarLink *link;
-	CScriptVarLinkTmpPtr tmp_link;
+	class CScriptVarLinkTmpPtr{
+		public:
+			CScriptVarLinkTmpPtr() : link(0) {}
+			CScriptVarLinkTmpPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
+				link = new CScriptVarLinkTmp(var, name, flags);
+			}
+			CScriptVarLinkTmpPtr(const CScriptVarLinkTmpPtr &Copy) : link(Copy.link) { if(link) link->ref(); }
+			CScriptVarLinkTmpPtr &operator=(const CScriptVarLinkTmpPtr &Copy) { 
+				if(link!=Copy.link) { if(link) link->unref(); link=Copy.link; if(link) link->ref(); } return *this; }
+			~CScriptVarLinkTmpPtr() { if(link) link->unref(); }
+			operator bool() const { return link != 0; }
+			int refs() { return link ? link->refs : 0; }
+			CScriptVarLink *operator->() const { return link; }
+			operator CScriptVarLink *() const { return link; }
+
+		private:
+			class CScriptVarLinkTmp : public CScriptVarLink{
+			private:
+				CScriptVarLinkTmp(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLink(var, name, flags) {
+					refs=1;
+				}
+				int refs;
+				CScriptVarLinkTmp *ref() { refs++; return this;}
+				void unref() { if(--refs == 0) delete this; }
+				friend class CScriptVarLinkTmpPtr;
+			} *link;
+		} tmp_link;
+
 };
 inline CScriptVarPtr::CScriptVarPtr(const CScriptVarLinkPtr &Link) : var(0) { if(Link) { var = Link->getVarPtr()->ref(); } }
 
