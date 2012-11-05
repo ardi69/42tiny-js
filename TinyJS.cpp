@@ -41,15 +41,7 @@
 #		define DEBUG_MEMORY 1
 #	endif
 #endif
-#include <cassert>
-#include <cstring>
 #include <sstream>
-#include <cstdlib>
-#include <cstdio>
-#include <climits>
-#include <cmath>
-#include <memory> // for auto_ptr
-#include <algorithm>
 
 #include "TinyJS.h"
 
@@ -806,7 +798,8 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		STRING_VECTOR_t labels, loopLabels;
 		if(l->tk == '§') { // special-Token at Start means the code begins not at Statement-Level
 			l->match('§');
-			tokenizeLiteral(tokens, blockStart, marks, labels, loopLabels, 0);
+			int State=0;
+			tokenizeLiteral(tokens, blockStart, marks, labels, loopLabels, 0, State);
 		} else do {
 			tokenizeStatement(tokens, blockStart, marks, labels, loopLabels, 0);
 		} while (l->tk!=LEX_EOF);
@@ -882,16 +875,19 @@ static void fix_BlockStarts_Marks(vector<int> &BlockStart, vector<int> &Marks, i
 }
 
 enum {
-	TOKENIZE_FLAGS_canLabel		= 1<<0,
-	TOKENIZE_FLAGS_canBreak		= 1<<1,
-	TOKENIZE_FLAGS_canContinue	= 1<<2,
-	TOKENIZE_FLAGS_canReturn	= 1<<3,
-	TOKENIZE_FLAGS_asStatement	= 1<<4,
-	TOKENIZE_FLAGS_forFor		= 1<<5,
-	TOKENIZE_FLAGS_isAccessor	= 1<<6,
-	TOKENIZE_FLAGS_callForNew	= 1<<7,
+	TOKENIZE_FLAGS_canLabel			= 1<<0,
+	TOKENIZE_FLAGS_canBreak			= 1<<1,
+	TOKENIZE_FLAGS_canContinue		= 1<<2,
+	TOKENIZE_FLAGS_canReturn		= 1<<3,
+	TOKENIZE_FLAGS_asStatement		= 1<<4,
+	TOKENIZE_FLAGS_forFor			= 1<<5,
+	TOKENIZE_FLAGS_isAccessor		= 1<<6,
+	TOKENIZE_FLAGS_callForNew		= 1<<7,
 };
-
+enum {
+	TOKENIZE_STATE_leftHand			= 1<<0,
+	TOKENIZE_STATE_Destructuring	= 1<<9,
+};
 void CScriptTokenizer::tokenizeCatch(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 	Marks.push_back(pushToken(Tokens, LEX_R_CATCH)); // push Token & push tokenBeginIdx
 	pushToken(Tokens, '(');
@@ -1300,7 +1296,9 @@ void CScriptTokenizer::tokenizeVar(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 	}
 }
 
-void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
+	int dummyState = 0;
+	State &= ~TOKENIZE_STATE_leftHand;
 	switch(l->tk) {
 	case LEX_ID:
 		{
@@ -1316,7 +1314,8 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 					throw new CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine, l->currentColumn()-label.size());
 				if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
 					throw new CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine, l->currentColumn()-label.size());
-			}
+			} else
+				State |= TOKENIZE_STATE_leftHand;
 		}
 		break;
 	case LEX_INT:
@@ -1352,6 +1351,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 		break;
 	case '[':
 		Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
+		Flags |= TOKENIZE_STATE_Destructuring;
 		while (l->tk != ']') {
 			if(l->tk != ',')
 				tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
@@ -1368,7 +1368,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 		break;
 	case LEX_R_NEW: 
 		Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
-		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | TOKENIZE_FLAGS_callForNew);
+		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | TOKENIZE_FLAGS_callForNew, dummyState);
 		setTokenSkip(Tokens, Marks);
 		break;
 	case '(':
@@ -1381,7 +1381,7 @@ void CScriptTokenizer::tokenizeLiteral(TOKEN_VECT &Tokens, vector<int> &BlockSta
 		l->check(LEX_EOF);
 	}
 }
-void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
 	while(l->tk == '.' || l->tk == '[') {
 		if(l->tk == '.') {
 			pushToken(Tokens);
@@ -1391,13 +1391,15 @@ void CScriptTokenizer::tokenizeMember(TOKEN_VECT &Tokens, vector<int> &BlockStar
 			tokenizeExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 			pushToken(Tokens, ']');
 		}
+		State |= TOKENIZE_STATE_leftHand;
 	}
 }
-void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
 	bool for_new = (Flags & TOKENIZE_FLAGS_callForNew)!=0; Flags &= ~TOKENIZE_FLAGS_callForNew;
-	tokenizeLiteral(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
-	tokenizeMember(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+	tokenizeLiteral(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
+	tokenizeMember(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 	while(l->tk == '(') {
+		State &= ~TOKENIZE_STATE_leftHand;
 		Marks.push_back(pushToken(Tokens)); // push Token & push BeginIdx
 		while(l->tk!=')') {
 			tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
@@ -1406,11 +1408,11 @@ void CScriptTokenizer::tokenizeFunctionCall(TOKEN_VECT &Tokens, vector<int> &Blo
 		pushToken(Tokens);
 		setTokenSkip(Tokens, Marks);
 		if(for_new) break;
-		tokenizeMember(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeMember(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 	}
 }
 
-void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
+void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
 	static int Left2Right_begin[] = { 
 		/* Precedence 5 */		'*', '/', '%', 
 		/* Precedence 6 */		'+', '-',
@@ -1436,6 +1438,7 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 			case LEX_R_VOID:
 			case LEX_R_DELETE:
 				Flags &= ~TOKENIZE_FLAGS_canLabel;
+				State &= ~TOKENIZE_STATE_leftHand;
 				pushToken(Tokens); // Precedence 3
 				break;
 			case LEX_PLUSPLUS: // pre-increment		
@@ -1443,6 +1446,7 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 				{
 					int tk = l->tk;
 					Flags &= ~TOKENIZE_FLAGS_canLabel;
+					State &= ~TOKENIZE_STATE_leftHand;
 					pushToken(Tokens); // Precedence 4
 					if(l->tk == LEX_ID && l->tkStr == "this")
 						throw new CScriptException(SyntaxError, tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine, l->currentColumn());
@@ -1451,31 +1455,43 @@ void CScriptTokenizer::tokenizeSubExpression(TOKEN_VECT &Tokens, vector<int> &Bl
 				right2left_end = true;
 			}
 		}
-		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeFunctionCall(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 		
 		if (!l->lineBreakBeforeToken && (l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS)) { // post-in-/de-crement
+			State &= ~TOKENIZE_STATE_leftHand;
 			pushToken(Tokens); // Precedence 4
 		}
 		int *found = lower_bound(Left2Right_begin, Left2Right_end, l->tk);
-		if(found != Left2Right_end && *found == l->tk)
+		if(found != Left2Right_end && *found == l->tk) {
+			State &= ~TOKENIZE_STATE_leftHand;
 			pushToken(Tokens); // Precedence 5-14
+		}
 		else
 			break;
 	}
 }
 
-void CScriptTokenizer::tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
-	tokenizeSubExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+void CScriptTokenizer::tokenizeCondition(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
+	tokenizeSubExpression(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 	if(l->tk == '?') {
 		pushToken(Tokens);
-		tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 		pushToken(Tokens, ':');
-		tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+		tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
+		State &= ~TOKENIZE_STATE_leftHand;
 	}
 }
 void CScriptTokenizer::tokenizeAssignment(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
-	tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
+	int State=0;
+	tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
+}
+void CScriptTokenizer::tokenizeAssignment(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State) {
+	State &= ~TOKENIZE_STATE_leftHand;
+	tokenizeCondition(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags, State);
 	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) ) {
+		if( !(State & TOKENIZE_STATE_leftHand) ) {
+			throw new CScriptException(ReferenceError, "invalid assignment left-hand side", l->currentFile, l->currentLine, l->currentColumn());
+		}
 		pushToken(Tokens);
 		tokenizeAssignment(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags);
 	}
@@ -1820,7 +1836,7 @@ CScriptVarLink *CScriptVar::findChildOrCreateByPath(const string &path) {
 	return (*l)->findChildOrCreateByPath(path.substr(p+1));
 }
 
-void CScriptVar::keys(std::set<std::string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/)
+void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/)
 {
 	setTemporaryID(ID);
 	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
@@ -2049,7 +2065,7 @@ CScriptVarLinkPtr &CScriptVarLinkPtr::operator()(bool &execute, CScriptVarLink *
 	if(link && (*link)->isAccessor()) {
 		CScriptVarLink *getter = (*link)->findChild(TINYJS_ACCESSOR_GET_VAR);
 		if(getter) {
-			std::vector<CScriptVarPtr> Params;
+			vector<CScriptVarPtr> Params;
 			ASSERT(link->owner);
 			set_tmp_link((*getter)->getContext()->callFunction(execute, **getter, Params, link->owner));
 		} else
@@ -2063,7 +2079,7 @@ void CScriptVarLinkPtr::replaceVar(bool &execute, const CScriptVarPtr &Var) {
 	if(link && (*link)->isAccessor()) {
 		CScriptVarLink *setter = (*link)->findChild(TINYJS_ACCESSOR_SET_VAR);
 		if(setter) {
-			std::vector<CScriptVarPtr> Params;
+			vector<CScriptVarPtr> Params;
 			Params.push_back(Var);
 			bool execute;
 			ASSERT(link->owner);
@@ -2078,7 +2094,7 @@ void CScriptVarLinkPtr::swap(CScriptVarLinkPtr &Link){
 	CScriptVarLinkTmpPtr _tmp_link = tmp_link; 	tmp_link = Link.tmp_link; Link.tmp_link = _tmp_link;
 }
 
-void CScriptVarLinkPtr::set_tmp_link(const CScriptVarPtr &Var, const std::string &Name /*= TINYJS_TEMP_NAME*/, int Flags /*= SCRIPTVARLINK_DEFAULT*/) {
+void CScriptVarLinkPtr::set_tmp_link(const CScriptVarPtr &Var, const string &Name /*= TINYJS_TEMP_NAME*/, int Flags /*= SCRIPTVARLINK_DEFAULT*/) {
 	// refs()==1 makes more like a pointer
 	// if refs==1 then only this LinkPtr owns the tmp_link
 	// otherwise we creates a new one
@@ -2114,7 +2130,7 @@ bool CScriptVarObject::isPrimitive() { return false; }
 int CScriptVarObject::getInt() { return getPrimitivVar()->getInt(); }
 bool CScriptVarObject::getBool() { return getPrimitivVar()->getBool(); }
 double CScriptVarObject::getDouble() { return getPrimitivVar()->getDouble(); }
-std::string CScriptVarObject::getString() { return getPrimitivVar()->getString(); }
+string CScriptVarObject::getString() { return getPrimitivVar()->getString(); }
 
 string CScriptVarObject::getParsableString(const string &indentString, const string &indent) {
 	ostringstream destination;
@@ -2159,7 +2175,7 @@ CScriptVarObjectWrap::~CScriptVarObjectWrap(){}
 CScriptVarPtr CScriptVarObjectWrap::clone() { return new CScriptVarObjectWrap(*this); }
 CScriptVarPtr CScriptVarObjectWrap::_valueOf(bool execute) { return value; }
 CScriptVarPtr CScriptVarObjectWrap::_toString(bool execute, int radix/*=0*/) { return value; }
-std::string CScriptVarObjectWrap::getParsableString( const std::string &indentString, const std::string &indent ) {
+string CScriptVarObjectWrap::getParsableString( const string &indentString, const string &indent ) {
 	return value->getParsableString(indentString, indent);
 }
 void CScriptVarObjectWrap::setTemporaryID_recursive(uint32_t ID) {
@@ -2335,7 +2351,7 @@ string CScriptVarNaN::getVarType() { return "number"; }
 
 ////////////////////////////////////////////////////////////////////////// CScriptVarString
 
-CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVar(Context, Context->stringPrototype), data(Data) {
+CScriptVarString::CScriptVarString(CTinyJS *Context, const string &Data) : CScriptVar(Context, Context->stringPrototype), data(Data) {
 	CScriptVarLink *acc = addChild("length", newScriptVar(Accessor), 0);
 	CScriptVarFunctionPtr getter(::newScriptVar(Context, this, &CScriptVarString::native_Length, 0));
 	getter->setFunctionData(new CScriptTokenDataFnc);
@@ -2348,7 +2364,7 @@ int CScriptVarString::getInt() {return strtol(data.c_str(),0,0); }
 bool CScriptVarString::getBool() {return data.length()!=0;}
 double CScriptVarString::getDouble() {return strtod(data.c_str(),0);}
 string CScriptVarString::getString() { return data; }
-string CScriptVarString::getParsableString(const std::string &indentString, const std::string &indent) { return getJSString(data); }
+string CScriptVarString::getParsableString(const string &indentString, const string &indent) { return getJSString(data); }
 string CScriptVarString::getVarType() { return "string"; }
 CScriptVarPtr CScriptVarString::getNumericVar() {
 	string the_string = getString();
@@ -2379,7 +2395,7 @@ void CScriptVarString::native_Length(const CFunctionsScopePtr &c, void *data) {
 
 #ifndef NO_REGEXP
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const string &Regexp, const string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
 	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
 	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
 	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
@@ -2422,7 +2438,7 @@ void CScriptVarRegExp::LastIndex(unsigned int Idx) {
 	addChildNoDup("lastIndex", newScriptVar((int)Idx));
 }
 
-CScriptVarPtr CScriptVarRegExp::exec( const std::string &Input, bool Test /*= false*/ )
+CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/ )
 {
 	string Str=Input;
 	regex::flag_type flags = regex_constants::ECMAScript;
@@ -2863,7 +2879,7 @@ int CScriptVarScopeFnc::getArgumentsLength() {
 	return arguments ? (*arguments)->getInt() : 0;
 }
 
-void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const std::string &message ) {
+void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const string &message ) {
 	throw newScriptVarError(context, ErrorType, message.c_str());
 }
 
@@ -3086,7 +3102,7 @@ CTinyJS::~CTinyJS() {
 /// throws an Error & Exception
 //////////////////////////////////////////////////////////////////////////
 
-void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message ) {
+void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const string &message ) {
 	if(execute && (runtimeFlags & RUNTIME_CAN_THROW)) {
 		exceptionVar = newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), t->currentLine(), t->currentColumn());
 		runtimeFlags |= RUNTIME_THROW;
@@ -3095,11 +3111,11 @@ void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string
 	}
 	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
-void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message ) {
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message ) {
 	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
 
-void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
 	if(execute && (runtimeFlags & RUNTIME_CAN_THROW)) {
 		exceptionVar = newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), Pos.currentLine(), Pos.currentColumn());
 		runtimeFlags |= RUNTIME_THROW;
@@ -3108,7 +3124,7 @@ void CTinyJS::throwError(bool &execute, ERROR_TYPES ErrorType, const std::string
 	}
 	throw new CScriptException(message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
-void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
 	throw new CScriptException(message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
 
@@ -3236,14 +3252,14 @@ CScriptVarLinkPtr CTinyJS::parseFunctionsBodyFromString(const string &ArgumentLi
 	CScriptTokenizer tokenizer(Fnc.c_str());
 	return parseFunctionDefinition(tokenizer.getToken());
 }
-CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 	bool execute=true;
 	CScriptVarPtr retVar = callFunction(execute, Function, Arguments, This, newThis);
 	if(!execute) throw exceptionVar;
 	return retVar;
 }
 
-CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &Function, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 //CScriptVarSmartLink CTinyJS::callFunction(CScriptVarSmartLink &Function, vector<CScriptVarSmartLink> &Arguments, const CScriptVarPtr& This, bool &execute) {
 	ASSERT(Function && Function->isFunction());
 
@@ -4085,7 +4101,7 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(bool &execute) {
 		if (execute) {
 			bool lhs_is_accessor = lhs.getLink() != lhs.getRealLink() && lhs.getRealLink() && (*lhs.getRealLink())->isAccessor();
 			if (!lhs->isOwned() && lhs->getName().empty() && !lhs_is_accessor) {
-				throw new CScriptException("invalid assignment left-hand side", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
+				throw new CScriptException(ReferenceError, "invalid assignment left-hand side", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
 			} else if (op != '=' && !lhs->isOwned() && !lhs_is_accessor) {
 				throwError(execute, ReferenceError, lhs->getName() + " is not defined");
 			}
