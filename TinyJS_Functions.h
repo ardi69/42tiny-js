@@ -36,12 +36,14 @@
  * SOFTWARE.
  */
 
+#pragma message("The include "__FILE__" is deprecated - Functions now registered by default")
+
 #ifndef TINYJS_FUNCTIONS_H
 #define TINYJS_FUNCTIONS_H
 
 #include "TinyJS.h"
 
 /// Register useful functions with the TinyJS interpreter
-extern void registerFunctions(CTinyJS *tinyJS);
+extern void DEPRECATED("is deprecated - Functions now registered by default") registerFunctions(CTinyJS *tinyJS);
 
 #endif

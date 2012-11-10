@@ -43,9 +43,15 @@
 #include <vector>
 #include <map>
 #include <set>
-#include "pool_allocator.h"
 #include <stdint.h>
 #include <cassert>
+
+#ifdef NO_POOL_ALLOCATOR
+	template<typename T, int num_objects=64>
+	class fixed_size_object {};
+#else
+#	include "pool_allocator.h"
+#endif
 
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
@@ -151,6 +157,8 @@ enum LEX_TYPES {
 	LEX_T_SET,
 
 	LEX_T_SKIP,
+
+	LEX_T_ARRAY_DESTRUCTURING,
 
 };
 #define LEX_TOKEN_DATA_STRING(tk) ((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
@@ -457,7 +465,7 @@ class CScriptVar;
 class CScriptVarPtr;
 template<typename C> class CScriptVarPointer;
 class CScriptVarLink;
-class CScriptVarLinkPtr;
+class CScriptVarLinkWorkPtr;
 
 class CScriptVarScopeFnc;
 typedef CScriptVarPointer<CScriptVarScopeFnc> CFunctionsScopePtr;
@@ -470,8 +478,8 @@ class CTinyJS;
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVar
 //////////////////////////////////////////////////////////////////////////
-
-typedef	std::vector<CScriptVarLink*> SCRIPTVAR_CHILDS_t;
+class CScriptVarLinkPtr;
+typedef	std::vector<class CScriptVarLinkPtr> SCRIPTVAR_CHILDS_t;
 typedef	SCRIPTVAR_CHILDS_t::iterator SCRIPTVAR_CHILDS_it;
 typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
 
@@ -482,7 +490,7 @@ protected:
 private:
 	CScriptVar & operator=(const CScriptVar &Copy); ///< private -> no assignment-Copy
 public:
-	virtual ~CScriptVar(void);
+	virtual ~CScriptVar();
 	virtual CScriptVarPtr clone()=0;
 
 	/// Type
@@ -519,31 +527,32 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 	virtual std::string getVarType()=0;
+	CScriptVarPtr getPrimitivStringVar(); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPtr getPrimitivStringVar(bool &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	CScriptVarPtr getPrimitivVar(); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
-	CScriptVarPtr getPrimitivVar(bool execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPtr getPrimitivVar(bool &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-	CScriptVarPtr valueOf(bool execute);
-	virtual CScriptVarPtr _valueOf(bool execute);
-	CScriptVarPtr toString(bool execute, int radix=0);
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	CScriptVarPtr valueOf(bool &execute);
+	virtual CScriptVarPtr _valueOf(bool &execute);
+	CScriptVarPtr toString(bool &execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 
 	/// flags
 	bool isExtensible()			{ return extensible; }
 	void setExtensible(bool On)	{ extensible=On; }
 
 	/// find 
-	CScriptVarLink *findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
-	CScriptVarLink *findChildInPrototypeChain(const std::string &childName);
-	CScriptVarLink *findChildWithPrototypeChain(const std::string &childName);
-	CScriptVarLink *findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
-	CScriptVarLink *findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
-	CScriptVarLink *findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
+	CScriptVarLinkPtr findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
+	CScriptVarLinkPtr findChildInPrototypeChain(const std::string &childName);
+	CScriptVarLinkPtr findChildWithPrototypeChain(const std::string &childName);
+	CScriptVarLinkPtr findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
+	CScriptVarLinkPtr findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
+	CScriptVarLinkPtr findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
 	void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
 	/// add & remove
-	CScriptVarLink *addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
-	CScriptVarLink *addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
+	CScriptVarLinkPtr addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
+	CScriptVarLinkPtr addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
 	bool removeLink(CScriptVarLinkPtr &link); ///< Remove a specific link (this is faster than finding via a child)
-	bool removeLink(CScriptVarLink *&link); ///< Remove a specific link (this is faster than finding via a child)
 	void removeAllChildren();
 
 	/// ARRAY
@@ -591,17 +600,6 @@ public:
 	friend class CScriptVarPtr;
 };
 
-//////////////////////////////////////////////////////////////////////////
-/// CScriptVarPrimitive
-//////////////////////////////////////////////////////////////////////////
-
-class CScriptVarPrimitive : public CScriptVar {
-protected:
-	CScriptVarPrimitive(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) {}
-	CScriptVarPrimitive(const CScriptVarPrimitive &Copy) : CScriptVar(Copy) {}
-public:
-
-};
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarPtr 
 //////////////////////////////////////////////////////////////////////////
@@ -612,22 +610,8 @@ public:
 	CScriptVarPtr() : var(0) {} ///< 0-Pointer 
 	CScriptVarPtr(CScriptVar *Var) : var(Var) { if(var) var->ref(); } // creates a new CScriptVar (from new);
 
-
-	CScriptVarPtr(const CScriptVarLink *Link);
-//	CScriptVarPtr(bool &execute, const CScriptVarLink *Link);
-	CScriptVarPtr(const CScriptVarLinkPtr &Link);
-
-	// from CScriptVarLinkPtr
-//	CScriptVarPtr(bool &execute, const CScriptVarLinkPtr &Link);// : var(0) { *this = Link.get(execute); } 
-//	CScriptVarPtr(const CScriptVarLinkPtr &Link);// : var(0) { *this = Link.get(); } 
-//	CScriptVarPtr & operator =(const CScriptVarLinkPtr &Link); // { *this = 10; } 
-public:
-	//	CScriptVarPtr & operator =(const CScriptVarLinkPtr &Link, bool &execute) : { 
-	//		*this = Link.get(execute)); 
-	//	} 
-
 	// copy
-	CScriptVarPtr(const CScriptVarPtr &Copy) : var(0) { *this = Copy; } 
+	CScriptVarPtr(const CScriptVarPtr &Copy) : var(Copy.var) { if(var) var->ref(); } 
 	CScriptVarPtr& operator=(const CScriptVarPtr &Copy) { 
 		if(var != Copy.var) { 
 			if(var) var->unref(); 
@@ -638,16 +622,15 @@ public:
 	// deconstruct 
 	~CScriptVarPtr() { if(var) var->unref(); } 
 
+	// if
 	operator bool() const { return var!=0; } 
 
 	bool operator ==(const CScriptVarPtr &Other) const { return var == Other.var; } 
 	bool operator !=(const CScriptVarPtr &Other) const { return var != Other.var; } 
 
+	// access
 	CScriptVar * operator ->() const { return var; } 
 	CScriptVar *getVar() const { return var; } 
-
-	/// temporary
-	//	CScriptVarPtr(CScriptVarLink *Var);
 
 	void clear() { if(var) var->unref(); var=0; }
 protected: 
@@ -663,7 +646,6 @@ class CScriptVarPointer : public CScriptVarPtr {
 public:
 	CScriptVarPointer() {}
 	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(Copy) { if(var) { var = dynamic_cast<C*>(var); } }
-//	CScriptVarPointer(const CScriptVarPointer &Copy) : CScriptVarPtr(Copy) { if(var) { var = dynamic_cast<C*>(var); } }
 	C * operator ->() const { C *Var = dynamic_cast<C*>(var); ASSERT(var && Var); return Var; }
 };
 
@@ -671,22 +653,21 @@ public:
 /// CScriptVarLink
 //////////////////////////////////////////////////////////////////////////
 
-
 class CScriptVarLink : public fixed_size_object<CScriptVarLink>
 {
-public:
+private: // prevent gloabal creating
 	CScriptVarLink(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
+private: // prevent Copy
 	CScriptVarLink(const CScriptVarLink &link); ///< Copy constructor
+public:
 	~CScriptVarLink();
 
 	const std::string &getName() const { return name; }
 
 	int getFlags() { return flags; }
-
 	const CScriptVarPtr &getVarPtr() const { return var; }
-	CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; }
+	const CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; } ///< simple Replace the Variable pointed to
 
-	void replaceWith(const CScriptVarPtr &newVar); ///< simple Replace the Variable pointed to
 
 	bool isOwned() const { return (flags & SCRIPTVARLINK_OWNED) != 0; }
 	void setOwned(bool On) { On ? (flags |= SCRIPTVARLINK_OWNED) : (flags &= ~SCRIPTVARLINK_OWNED); }
@@ -702,101 +683,103 @@ public:
 	bool isHidden() const { return (flags & SCRIPTVARLINK_HIDDEN) != 0; }
 	void setHidden(bool On) { On ? (flags |= SCRIPTVARLINK_HIDDEN) : (flags &= ~SCRIPTVARLINK_HIDDEN); }
 
-	const CScriptVarPtr &operator ->() const { return var; }
-	const CScriptVarPtr &operator *() const { return var; }
-
-	// TODO remove this (make's saver)
 	CScriptVar *getOwner() { return owner; };
 	void setOwner(CScriptVar *Owner) { owner = Owner; }
-protected:
+
+private:
 	std::string name;
 	CScriptVar *owner; // pointer to the owner CScriptVar
 	uint32_t flags;
 	CScriptVarPtr var;
+#ifdef _DEBUG
 	char dummy[24];
+#endif
+	CScriptVarLink *ref();
+	void unref();
+private:
+	int refs;
 	friend class CScriptVarLinkPtr;
 };
 
-// to create a CScriptVarPtr always call getValue to call getter if's needed
-inline CScriptVarPtr::CScriptVarPtr(const CScriptVarLink *Link) : var(0) { if(Link) { var = Link->getVarPtr()->ref(); } }
-
 //////////////////////////////////////////////////////////////////////////
-/// CScriptVarSmartLink
+/// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
-class CScriptVarLinkPtr : public fixed_size_object<CScriptVarLinkPtr>
-{
-public:
-	// constructors
-	CScriptVarLinkPtr() : link(0) {}
-	CScriptVarLinkPtr(CScriptVarLink *Link) : link(0) { *this = Link; }
-	CScriptVarLinkPtr (CScriptVarPtr Var, const std::string &Name = TINYJS_TEMP_NAME, int Flags = SCRIPTVARLINK_DEFAULT) : link(0),tmp_link(Var, Name, Flags) { }
+class CScriptVarLinkPtr { 
+public: 
+	// construct
+	CScriptVarLinkPtr() : link(0) {} ///< 0-Pointer 
+	CScriptVarLinkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) { link=(new CScriptVarLink(var, name, flags))->ref(); }
+	CScriptVarLinkPtr(CScriptVarLink *Link) : link(Link) { if(link) link->ref(); } // creates a new CScriptVarLink (from new);
+
+	// reconstruct
+	CScriptVarLinkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
+
+	// deconstruct 
+	~CScriptVarLinkPtr() { if(link) link->unref(); } 
 
 	// copy
-	CScriptVarLinkPtr (const CScriptVarLinkPtr &Link)  : link(0) { *this = Link; }
-	CScriptVarLinkPtr &operator = (const CScriptVarLinkPtr &Link) { link = Link.link; tmp_link = Link.tmp_link; return *this; }
+	CScriptVarLinkPtr(const CScriptVarLinkPtr &Copy) : link(Copy.link) { if(link) link->ref(); } 
+	CScriptVarLinkPtr &operator=(const CScriptVarLinkPtr &Copy) { 
+		if(link != Copy.link) { 
+			if(link) link->unref(); 
+			link = Copy.link; if(link) link->ref(); 
+		} 
+		return *this; 
+	}
 
-	// assign
-	CScriptVarLinkPtr &operator = (CScriptVarLink *Link) { return (*this)(Link); }
-	CScriptVarLinkPtr &operator = (const CScriptVarPtr &Var) { link = 0; set_tmp_link(Var); return *this; }
-	CScriptVarLinkPtr &operator()(CScriptVarLink *Link);
-	CScriptVarLinkPtr &operator()(bool &execute, CScriptVarLink *Link);
-	CScriptVarLinkPtr &operator()(const CScriptVarPtr &Var, const std::string &Name = TINYJS_TEMP_NAME, int Flags = SCRIPTVARLINK_DEFAULT) { link = 0; set_tmp_link(Var, Name, Flags); return *this; }
+	// getter & setter
+	CScriptVarLinkWorkPtr getter();
+	CScriptVarLinkWorkPtr getter(bool &execute);
+	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
+	CScriptVarLinkWorkPtr setter(bool &execute, const CScriptVarPtr &Var);
+
+	// if
+	operator bool() const { return link!=0; } 
+
+	// access to CScriptVarLink
+	CScriptVarLink *operator ->() const { return link; } 
+
+	operator const CScriptVarPtr &() const { static CScriptVarPtr NullPtr; return link?link->getVarPtr():NullPtr; }
+
+	void clear() { if(link) link->unref(); link=0; }
+protected: 
+	CScriptVarLink *link; 
+}; 
+
+//////////////////////////////////////////////////////////////////////////
+/// CScriptVarLinkWorkPtr
+//////////////////////////////////////////////////////////////////////////
+
+class CScriptVarLinkWorkPtr : public CScriptVarLinkPtr {
+public:
+	// construct
+	CScriptVarLinkWorkPtr() {}
+	CScriptVarLinkWorkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLinkPtr(var, name, flags) {}
+	CScriptVarLinkWorkPtr(CScriptVarLink *Link) : CScriptVarLinkPtr(Link) { if(link) referencedOwner = link->getOwner(); } // creates a new CScriptVarLink (from new);
+	CScriptVarLinkWorkPtr(const CScriptVarLinkPtr &Copy) : CScriptVarLinkPtr(Copy) { if(link) referencedOwner = link->getOwner(); } 
+	// reconstruct
+	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.clear(); return *this; }
+
+	// getter & setter
+	CScriptVarLinkWorkPtr getter();
+	CScriptVarLinkWorkPtr getter(bool &execute);
+	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
+	CScriptVarLinkWorkPtr setter(bool &execute, const CScriptVarPtr &Var);
 
 
-//	void setLink(CScriptVarLink *Link);
-//	void setLink(bool &execute, CScriptVarLink *Link);
+	void swap(CScriptVarLinkWorkPtr &Link) { 
+		CScriptVarPtr _referencedOwner = referencedOwner; referencedOwner = Link.referencedOwner; Link.referencedOwner = _referencedOwner;
+		CScriptVarLink *_link=link; link=Link.link; Link.link=_link; 
+	}
 
-//	void setVarPtr(const CScriptVarPtr &Var, const std::string &Name = TINYJS_TEMP_NAME, int Flags = SCRIPTVARLINK_DEFAULT) { link = 0; set_tmp_link(Var, Name, Flags); }
-	// operator
-	CScriptVarLink *operator ->() { return getLink(); }
-	const CScriptVarLink *operator ->() const { return getLink(); }
-	CScriptVarLink &operator *() { return *getLink(); }
-
-	void replaceVar(bool &execute, const CScriptVarPtr &Var);
-
-	operator bool() const { return getLink()!=0; }
-	//	operator CScriptVarLink *() { return link; }
-	CScriptVarLink *getLink() { return (tmp_link && tmp_link->var)?tmp_link:link; }; 
-	CScriptVarLink *getRealLink() { return link; }; 
-	const CScriptVarLink *getLink() const { return (tmp_link && tmp_link->var)?tmp_link:link; }; 
-	void clear() { link=0; clear_tmp_link(); }
-	void swap(CScriptVarLinkPtr &Link);
+	void clear() { CScriptVarLinkPtr::clear(); referencedOwner.clear(); }
+	void setReferencedOwner(const CScriptVarPtr &Owner) { referencedOwner = Owner; }
+	const CScriptVarPtr &getReferencedOwner() { return referencedOwner; }
 private:
-	void set_tmp_link(const CScriptVarPtr &Var, const std::string &Name = TINYJS_TEMP_NAME, int Flags = SCRIPTVARLINK_DEFAULT);
-	void clear_tmp_link();
-
-	CScriptVarLink *link;
-	class CScriptVarLinkTmpPtr{
-		public:
-			CScriptVarLinkTmpPtr() : link(0) {}
-			CScriptVarLinkTmpPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
-				link = new CScriptVarLinkTmp(var, name, flags);
-			}
-			CScriptVarLinkTmpPtr(const CScriptVarLinkTmpPtr &Copy) : link(Copy.link) { if(link) link->ref(); }
-			CScriptVarLinkTmpPtr &operator=(const CScriptVarLinkTmpPtr &Copy) { 
-				if(link!=Copy.link) { if(link) link->unref(); link=Copy.link; if(link) link->ref(); } return *this; }
-			~CScriptVarLinkTmpPtr() { if(link) link->unref(); }
-			operator bool() const { return link != 0; }
-			int refs() { return link ? link->refs : 0; }
-			CScriptVarLink *operator->() const { return link; }
-			operator CScriptVarLink *() const { return link; }
-
-		private:
-			class CScriptVarLinkTmp : public CScriptVarLink{
-			private:
-				CScriptVarLinkTmp(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLink(var, name, flags) {
-					refs=1;
-				}
-				int refs;
-				CScriptVarLinkTmp *ref() { refs++; return this;}
-				void unref() { if(--refs == 0) delete this; }
-				friend class CScriptVarLinkTmpPtr;
-			} *link;
-		} tmp_link;
-
+	CScriptVarPtr referencedOwner;
 };
-inline CScriptVarPtr::CScriptVarPtr(const CScriptVarLinkPtr &Link) : var(0) { if(Link) { var = Link->getVarPtr()->ref(); } }
+
 
 //////////////////////////////////////////////////////////////////////////
 #define define_dummy_t(t1) struct t1##_t{}; extern t1##_t t1
@@ -806,6 +789,8 @@ inline CScriptVarPtr::CScriptVarPtr(const CScriptVarLinkPtr &Link) : var(0) { if
 #define define_ScriptVarPtr_Type(t1) class CScriptVar##t1; typedef CScriptVarPointer<CScriptVar##t1> CScriptVar##t1##Ptr
 
 #define define_DEPRECATED_newScriptVar_Fnc(t1, ...) CScriptVarPtr DEPRECATED("newScriptVar("#__VA_ARGS__") is deprecated use constScriptVar("#__VA_ARGS__") instead") newScriptVar(__VA_ARGS__)
+
+
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarObject
 //////////////////////////////////////////////////////////////////////////
@@ -832,13 +817,28 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent);
 	virtual std::string getVarType(); // { return "object"; }
 
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 private:
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t);
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &);
 };
 inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t) { return new CScriptVarObject(Context); }
 inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Prototype); }
+
+
+//////////////////////////////////////////////////////////////////////////
+/// CScriptVarPrimitive
+//////////////////////////////////////////////////////////////////////////
+
+define_ScriptVarPtr_Type(Primitive);
+
+class CScriptVarPrimitive : public CScriptVar {
+protected:
+	CScriptVarPrimitive(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) {}
+	CScriptVarPrimitive(const CScriptVarObject &Copy) : CScriptVar(Copy) {} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarPrimitive();
+};
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -858,8 +858,8 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
-	virtual CScriptVarPtr _valueOf(bool execute);
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _valueOf(bool &execute);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 	virtual void setTemporaryID_recursive(uint32_t ID);
 private:
 	CScriptVarPtr value;
@@ -884,7 +884,7 @@ public:
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 private:
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
 };
@@ -942,7 +942,7 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent);
 
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 
 	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 private:
@@ -1080,7 +1080,7 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); // { return getJSString(regexp); }
 //	virtual std::string getVarType(); // { return "string"; }
 //	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 
 	CScriptVarPtr exec(const std::string &Input, bool Test=false);
 
@@ -1148,7 +1148,7 @@ public:
 	virtual CScriptVarPtr clone();
 	virtual bool isNumber(); // { return true; }
 	virtual bool isInt(); // { return true; }
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 	friend define_newScriptVar_Fnc(Integer, CTinyJS *Context, int);
 	friend define_newScriptVar_Fnc(Integer, CTinyJS *Context, char);
 };
@@ -1224,7 +1224,7 @@ public:
 	virtual std::string getString(); // {return float2string(data);}
 	virtual std::string getVarType(); // { return "number"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 private:
 	double data;
 	friend define_newScriptVar_Fnc(Double, CTinyJS *Context, double);
@@ -1251,7 +1251,7 @@ public:
 //	virtual std::string getString(); // {return "[ Function ]";}
 	virtual std::string getVarType(); // { return "function"; }
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent);
-	virtual CScriptVarPtr _toString(bool execute, int radix=0);
+	virtual CScriptVarPtr _toString(bool &execute, int radix=0);
 	virtual CScriptTokenDataFnc *getFunctionData();
 	void setFunctionData(CScriptTokenDataFnc *Data);
 private:
@@ -1344,7 +1344,7 @@ public:
 	virtual ~CScriptVarScope();
 	virtual CScriptVarPtr scopeVar(); ///< to create var like: var a = ...
 	virtual CScriptVarPtr scopeLet(); ///< to create var like: let a = ...
-	virtual CScriptVarLink *findInScopes(const std::string &childName);
+	virtual CScriptVarLinkPtr findInScopes(const std::string &childName);
 	virtual CScriptVarScopePtr getParent();
 	friend define_newScriptVar_Fnc(Scope, CTinyJS *Context, Scope_t);
 };
@@ -1360,10 +1360,10 @@ define_ScriptVarPtr_Type(ScopeFnc);
 class CScriptVarScopeFnc : public CScriptVarScope {
 protected: // only derived classes or friends can be created
 	CScriptVarScopeFnc(CTinyJS *Context, const CScriptVarScopePtr &Closure) // constructor for FncScope
-		: CScriptVarScope(Context), closure(Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : 0) {}
+		: CScriptVarScope(Context), closure(Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : CScriptVarLinkPtr()) {}
 public:
 	virtual ~CScriptVarScopeFnc();
-	virtual CScriptVarLink *findInScopes(const std::string &childName);
+	virtual CScriptVarLinkPtr findInScopes(const std::string &childName);
 	
 	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
 	
@@ -1378,7 +1378,7 @@ public:
 	void throwError(ERROR_TYPES ErrorType, const std::string &message);
 
 protected:
-	CScriptVarLink *closure;
+	CScriptVarLinkPtr closure;
 	friend define_newScriptVar_Fnc(ScopeFnc, CTinyJS *Context, ScopeFnc_t, const CScriptVarScopePtr &Closure);
 };
 inline define_newScriptVar_Fnc(ScopeFnc, CTinyJS *Context, ScopeFnc_t, const CScriptVarScopePtr &Closure) { return new CScriptVarScopeFnc(Context, Closure); }
@@ -1396,11 +1396,11 @@ protected: // only derived classes or friends can be created
 //		: CScriptVarScope(Parent->getContext()), parent( context->getRoot() != Parent ? addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0) : 0) {}
 public:
 	virtual ~CScriptVarScopeLet();
-	virtual CScriptVarLink *findInScopes(const std::string &childName);
+	virtual CScriptVarLinkPtr findInScopes(const std::string &childName);
 	virtual CScriptVarPtr scopeVar(); ///< to create var like: var a = ...
 	virtual CScriptVarScopePtr getParent();
 protected:
-	CScriptVarLink *parent;
+	CScriptVarLinkPtr parent;
 	friend define_newScriptVar_Fnc(ScopeLet, CTinyJS *Context, ScopeLet_t, const CScriptVarScopePtr &Parent);
 };
 inline define_newScriptVar_Fnc(ScopeLet, CTinyJS *, ScopeLet_t, const CScriptVarScopePtr &Parent) { return new CScriptVarScopeLet(Parent); }
@@ -1420,9 +1420,9 @@ protected:
 public:
 	virtual ~CScriptVarScopeWith();
 	virtual CScriptVarPtr scopeLet(); ///< to create var like: let a = ...
-	virtual CScriptVarLink *findInScopes(const std::string &childName);
+	virtual CScriptVarLinkPtr findInScopes(const std::string &childName);
 private:
-	CScriptVarLink *with;
+	CScriptVarLinkPtr with;
 	friend define_newScriptVar_Fnc(ScopeWith, CTinyJS *Context, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With);
 };
 inline define_newScriptVar_Fnc(ScopeWith, CTinyJS *, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With) { return new CScriptVarScopeWith(Parent, With); }
@@ -1449,19 +1449,19 @@ public:
 	 * 'undefined' variable type. CScriptVarLink is returned as this will
 	 * automatically unref the result as it goes out of scope. If you want to
 	 * keep it, you must use ref() and unref() */
-	CScriptVarLink evaluateComplex(CScriptTokenizer &Tokenizer);
+	CScriptVarLinkPtr evaluateComplex(CScriptTokenizer &Tokenizer);
 	/** Evaluate the given code and return a link to a javascript object,
 	 * useful for (dangerous) JSON parsing. If nothing to return, will return
 	 * 'undefined' variable type. CScriptVarLink is returned as this will
 	 * automatically unref the result as it goes out of scope. If you want to
 	 * keep it, you must use ref() and unref() */
-	CScriptVarLink evaluateComplex(const char *code, const std::string &File="", int Line=0, int Column=0);
+	CScriptVarLinkPtr evaluateComplex(const char *code, const std::string &File="", int Line=0, int Column=0);
 	/** Evaluate the given code and return a link to a javascript object,
 	 * useful for (dangerous) JSON parsing. If nothing to return, will return
 	 * 'undefined' variable type. CScriptVarLink is returned as this will
 	 * automatically unref the result as it goes out of scope. If you want to
 	 * keep it, you must use ref() and unref() */
-	CScriptVarLink evaluateComplex(const std::string &code, const std::string &File="", int Line=0, int Column=0);
+	CScriptVarLinkPtr evaluateComplex(const std::string &code, const std::string &File="", int Line=0, int Column=0);
 	/** Evaluate the given code and return a string. If nothing to return, will return
 	 * 'undefined' */
 	std::string evaluate(CScriptTokenizer &Tokenizer);
@@ -1572,13 +1572,13 @@ private:
 	std::vector<CScriptVarPtr *> pseudo_refered;
 	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
-	void CheckRightHandVar(bool &execute, CScriptVarLinkPtr &link)
+	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link)
 	{
 		if(execute && link && !link->isOwned() && !link->isOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", t->getPrevPos());
 	}
 
-	void CheckRightHandVar(bool &execute, CScriptVarLinkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
+	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
 	{
 		if(execute && link && !link->isOwned() && !link->isOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", Pos);
@@ -1595,26 +1595,26 @@ public:
 	CScriptVarPtr mathsOp(bool &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
 private:
 
-	CScriptVarLinkPtr execute_literals(bool &execute);
-	CScriptVarLinkPtr execute_member(CScriptVarLinkPtr &parent, bool &execute);
-	CScriptVarLinkPtr execute_function_call(bool &execute);
-	CScriptVarLinkPtr execute_unary(bool &execute);
-	CScriptVarLinkPtr execute_term(bool &execute);
-	CScriptVarLinkPtr execute_expression(bool &execute);
-	CScriptVarLinkPtr execute_binary_shift(bool &execute);
-	CScriptVarLinkPtr execute_relation(bool &execute, int set=LEX_EQUAL, int set_n='<');
-	CScriptVarLinkPtr execute_binary_logic(bool &execute, int op='|', int op_n1='^', int op_n2='&');
-	CScriptVarLinkPtr execute_logic(bool &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
-	CScriptVarLinkPtr execute_condition(bool &execute);
+	CScriptVarLinkWorkPtr execute_literals(bool &execute);
+	CScriptVarLinkWorkPtr execute_member(CScriptVarLinkWorkPtr &parent, bool &execute);
+	CScriptVarLinkWorkPtr execute_function_call(bool &execute);
+	CScriptVarLinkWorkPtr execute_unary(bool &execute);
+	CScriptVarLinkWorkPtr execute_term(bool &execute);
+	CScriptVarLinkWorkPtr execute_expression(bool &execute);
+	CScriptVarLinkWorkPtr execute_binary_shift(bool &execute);
+	CScriptVarLinkWorkPtr execute_relation(bool &execute, int set=LEX_EQUAL, int set_n='<');
+	CScriptVarLinkWorkPtr execute_binary_logic(bool &execute, int op='|', int op_n1='^', int op_n2='&');
+	CScriptVarLinkWorkPtr execute_logic(bool &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
+	CScriptVarLinkWorkPtr execute_condition(bool &execute);
 	CScriptVarLinkPtr execute_assignment(bool &execute);
 	CScriptVarLinkPtr execute_base(bool &execute);
 	void execute_block(bool &execute);
 	CScriptVarLinkPtr execute_statement(bool &execute);
 	// parsing utility functions
-	CScriptVarLinkPtr parseFunctionDefinition(CScriptToken &FncToken);
-	CScriptVarLinkPtr parseFunctionsBodyFromString(const std::string &ArgumentList, const std::string &FncBody);
+	CScriptVarLinkWorkPtr parseFunctionDefinition(CScriptToken &FncToken);
+	CScriptVarLinkWorkPtr parseFunctionsBodyFromString(const std::string &ArgumentList, const std::string &FncBody);
 public:
-	CScriptVarLink *findInScopes(const std::string &childName); ///< Finds a child, looking recursively up the scopes
+	CScriptVarLinkPtr findInScopes(const std::string &childName); ///< Finds a child, looking recursively up the scopes
 private:
 	//////////////////////////////////////////////////////////////////////////
 	/// addNative-helper
@@ -1622,11 +1622,12 @@ private:
 
 	//////////////////////////////////////////////////////////////////////////
 	/// throws an Error & Exception
+public:
 	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message);
 	void throwException(ERROR_TYPES ErrorType, const std::string &message);
 	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
 	void throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
-
+private:
 	//////////////////////////////////////////////////////////////////////////
 	/// native Object-Constructors & prototype-functions
 
@@ -1680,6 +1681,7 @@ public:
 	CScriptVar *first;
 	void setTemporaryID_recursive(uint32_t ID);
 	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
+std::vector<CScriptVarLinkWorkPtr> myArray;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1693,4 +1695,20 @@ template<class C>	CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context, C *cl
 		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
 }
 
+class test0 {
+private:
+	virtual void fnc();
+};
+
+class test1 : public test0 {
+public:
+	void fnc();
+};
+
+class test2 : public test1 {
+private:
+	void fnc();
+};
 #endif
+
+

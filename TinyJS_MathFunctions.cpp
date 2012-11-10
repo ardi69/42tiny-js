@@ -42,7 +42,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <ctime>
-#include "TinyJS_MathFunctions.h"
+#include "TinyJS.h"
 
 using namespace std;
 
@@ -137,7 +137,7 @@ static void scMathFloor(const CFunctionsScopePtr &c, void *userdata) {
 //Math.min(a,b) - returns minimum of two given values 
 static void scMathMin(const CFunctionsScopePtr &c, void *userdata) {
 	int length = c->getArgumentsLength();
-	CScriptVarLinkPtr ret(c->constScriptVar(InfinityPositive));
+	CScriptVarPtr ret(c->constScriptVar(InfinityPositive));
 	for(int i=0; i<length; i++)
 	{
 		GET_PARAMETER_AS_NUMERIC_VAR(a,i);RETURN_NAN_IS_NAN(a);
@@ -152,7 +152,7 @@ static void scMathMin(const CFunctionsScopePtr &c, void *userdata) {
 //Math.max(a,b) - returns maximum of two given values  
 static void scMathMax(const CFunctionsScopePtr &c, void *userdata) {
 	int length = c->getArgumentsLength();
-	CScriptVarLinkPtr ret(c->constScriptVar(InfinityNegative));
+	CScriptVarPtr ret(c->constScriptVar(InfinityNegative));
 	for(int i=0; i<length; i++)
 	{
 		GET_PARAMETER_AS_NUMERIC_VAR(a,i);RETURN_NAN_IS_NAN(a);
@@ -349,7 +349,8 @@ static void scMathSqrt(const CFunctionsScopePtr &c, void *userdata) {
 }
 
 // ----------------------------------------------- Register Functions
-void registerMathFunctions(CTinyJS *tinyJS) {
+void registerMathFunctions(CTinyJS *tinyJS) {}
+extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 
 	 CScriptVarPtr Math = tinyJS->getRoot()->addChild("Math", tinyJS->newScriptVar(Object));
 
