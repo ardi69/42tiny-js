@@ -1681,7 +1681,6 @@ public:
 	CScriptVar *first;
 	void setTemporaryID_recursive(uint32_t ID);
 	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
-std::vector<CScriptVarLinkWorkPtr> myArray;
 };
 
 //////////////////////////////////////////////////////////////////////////
