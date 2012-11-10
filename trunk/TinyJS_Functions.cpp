@@ -41,7 +41,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <time.h>
-#include "TinyJS_Functions.h"
+#include "TinyJS.h"
 
 using namespace std;
 // ----------------------------------------------- Actual Functions
@@ -113,7 +113,7 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 		int next_insert = *remove_it++;
 		for (i=next_remove;i<l;i++) {
 
-			CScriptVarLink *link = arr->findChild(int2string(i));
+			CScriptVarLinkPtr link = arr->findChild(int2string(i));
 			if(i == next_remove) {
 				if(link) arr->removeLink(link);
 				if(remove_it != removedIndices.end())
@@ -144,6 +144,8 @@ static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
 
 // ----------------------------------------------- Register Functions
 void registerFunctions(CTinyJS *tinyJS) {
+}
+extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function trace()", scTrace, tinyJS);
 	tinyJS->addNative("function Object.prototype.dump()", scObjectDump, 0);
 	tinyJS->addNative("function Object.prototype.clone()", scObjectClone, 0);

@@ -42,9 +42,9 @@
  */
 
 #include "TinyJS.h"
-#include "TinyJS_Functions.h"
-#include "TinyJS_StringFunctions.h"
-#include "TinyJS_MathFunctions.h"
+//#include "TinyJS_Functions.h"
+//#include "TinyJS_StringFunctions.h"
+//#include "TinyJS_MathFunctions.h"
 #include <assert.h>
 #include <stdio.h>
 	
@@ -75,9 +75,9 @@ int main(int , char **)
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 	CTinyJS *js = new CTinyJS();
 	/* add the functions from TinyJS_Functions.cpp */
-	registerFunctions(js);
-	registerStringFunctions(js);
-	registerMathFunctions(js);
+//	registerFunctions(js);
+//	registerStringFunctions(js);
+//	registerMathFunctions(js);
 	/* Add a native function */
 	js->addNative("function print(text)", &js_print, 0);
 //  js->addNative("function dump()", &js_dump, js);

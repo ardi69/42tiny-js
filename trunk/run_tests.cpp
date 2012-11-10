@@ -55,9 +55,9 @@
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "TinyJS.h"
-#include "TinyJS_Functions.h"
-#include "TinyJS_MathFunctions.h"
-#include "TinyJS_StringFunctions.h"
+//#include "TinyJS_Functions.h"
+//#include "TinyJS_MathFunctions.h"
+//#include "TinyJS_StringFunctions.h"
 #include <assert.h>
 #include <sys/stat.h>
 #include <string>
@@ -250,9 +250,9 @@ bool run_test(const char *filename) {
   fclose(file);
 
   CTinyJS s;
-  registerFunctions(&s);
-  registerMathFunctions(&s);
-  registerStringFunctions(&s);
+//  registerFunctions(&s);
+//  registerMathFunctions(&s);
+//  registerStringFunctions(&s);
   s.getRoot()->addChild("result", s.newScriptVar(0));
 #ifdef WITH_TIME_LOGGER
   TimeLoggerCreate(Test, true, filename);
@@ -263,7 +263,7 @@ bool run_test(const char *filename) {
     printf("%s\n", e->toString().c_str());
 	delete e;
   }
-  bool pass = (*s.getRoot()->findChild("result"))->getBool();
+  bool pass = s.getRoot()->findChild("result")->getVarPtr()->getBool();
 #ifdef WITH_TIME_LOGGER
   TimeLoggerLogprint(Test);
 #endif

@@ -408,7 +408,8 @@ static void scRegExpExec(const CFunctionsScopePtr &c, void *) {
 #endif /* NO_REGEXP */
 
 // ----------------------------------------------- Register Functions
-void registerStringFunctions(CTinyJS *tinyJS) {
+void registerStringFunctions(CTinyJS *tinyJS) {}
+extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 	CScriptVarPtr fnc;
 	// charAt
 	tinyJS->addNative("function String.prototype.charAt(pos)", scStringCharAt, 0);
