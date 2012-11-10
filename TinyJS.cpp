@@ -1628,7 +1628,7 @@ void CScriptVarLink::unref() {
 }
 // ----------------------------------------------------------------------------------- CSCRIPTVAR
 
-CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) : Childs() {
+CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 	extensible = true;
 	context = Context;
 	temporaryID = 0;
@@ -3674,19 +3674,36 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(bool &execute) {
 		if(execute) {
 			t->match(LEX_T_ARRAY_DESTRUCTURING);
 			int idx = 0;
-//			vector<CScriptVarLinkWorkPtr> myArray;
+			vector<pair<CScriptVarLinkWorkPtr,int>> myArray;
 			myArray.clear();
 			while (t->tk != ']') {
-				CScriptVarLinkWorkPtr a; if(t->tk==',') a=constScriptVar(Undefined); else a=execute_condition(execute);
-				if (execute) {
-					myArray.push_back(a);
-				}
-				// no need to clean here, as it will definitely be used
+				if(t->tk!=',')
+					myArray.push_back(pair<CScriptVarLinkWorkPtr,int>(execute_condition(execute), idx));
 				if (t->tk != ']') t->match(',');
 				idx++;
 			}
 			t->match(']');
 			t->match('=');
+			CScriptVarPtr ret = execute_assignment(execute).getter(execute);
+			if(execute) {
+				for(vector<pair<CScriptVarLinkWorkPtr,int>>::iterator it=myArray.begin(); execute && it != myArray.end(); ++it) {
+					CScriptVarPtr rhs = ret->findChild(int2string(it->second)).getter(execute);
+					if(!rhs) rhs = constScriptVar(Undefined);
+					CScriptVarLinkWorkPtr lhs = it->first;
+					if (!lhs->isOwned()) {
+						if(lhs->isOwner() && !lhs->getOwner()->isExtensible())
+							continue;
+						CScriptVarLinkWorkPtr realLhs;
+						if(lhs->isOwner())
+							realLhs = lhs->getOwner()->addChildNoDup(lhs->getName(), lhs);
+						else
+							realLhs = root->addChildNoDup(lhs->getName(), lhs);
+						lhs = realLhs;
+					}
+					lhs.setter(execute, rhs);
+				}
+			}
+			return ret;
 		} else
 			t->skip(t->getToken().Int());
 		break;
