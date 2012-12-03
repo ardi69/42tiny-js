@@ -75,6 +75,7 @@
     <ClCompile Include="TinyJS_StringFunctions.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="config.h" />
     <ClInclude Include="pool_allocator.h" />
     <ClInclude Include="time_logger.h" />
     <ClInclude Include="TinyJS.h" />

@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010 ardisoft
+ * Copyright (C) 2010-2012 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -258,7 +258,7 @@ bool run_test(const char *filename) {
   TimeLoggerCreate(Test, true, filename);
 #endif
   try {
-    s.execute(buffer);
+    s.execute(buffer, filename);
   } catch (CScriptException *e) {
     printf("%s\n", e->toString().c_str());
 	delete e;
@@ -297,8 +297,9 @@ int main(int argc, char **argv)
 #endif
   printf("TinyJS test runner\n");
   printf("USAGE:\n");
-  printf("   ./run_tests [-k] test.js [test2.js]   : run tests\n");
+  printf("   ./run_tests [-k] tests/test001.js [tests/42tests/test002.js]   : run tests\n");
   printf("   ./run_tests [-k]                      : run all tests\n");
+  printf("   -k needs press enter at the end of runs\n");
   int arg_num = 1;
   bool runs = false;
   for(; arg_num<argc; arg_num++) {
