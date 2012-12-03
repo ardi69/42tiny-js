@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010 ardisoft
+ * Copyright (C) 2010-2012 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -73,8 +73,10 @@ static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
 }
 
 static void scJSONStringify(const CFunctionsScopePtr &c, void *) {
-	string indent = "   ", indentString;
-	c->setReturnVar(c->newScriptVar(c->getArgument("obj")->getParsableString(indentString, indent)));
+	uint32_t UniqueID = c->getContext()->getUniqueID();
+	bool hasRecursion=false;
+	c->setReturnVar(c->newScriptVar(c->getArgument("obj")->getParsableString("", "   ", UniqueID, hasRecursion)));
+	if(hasRecursion) c->throwError(TypeError, "cyclic object value");
 }
 
 static void scArrayContains(const CFunctionsScopePtr &c, void *data) {

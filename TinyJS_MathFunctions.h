@@ -16,7 +16,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010 ardisoft
+ * Copyright (C) 2010-2012 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of

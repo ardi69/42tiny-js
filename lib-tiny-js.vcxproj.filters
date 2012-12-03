@@ -50,5 +50,8 @@
     <ClInclude Include="TinyJS_StringFunctions.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="config.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
