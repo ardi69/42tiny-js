@@ -45,6 +45,7 @@
 #include <set>
 #include <stdint.h>
 #include <cassert>
+#include "config.h"
 
 #ifdef NO_POOL_ALLOCATOR
 	template<typename T, int num_objects=64>
@@ -798,6 +799,9 @@ public:
 
 	// if
 	operator bool() const { return link!=0; } 
+
+	// for sorting in child-list
+	bool operator <(const std::string &rhs) const;
 
 	// access to CScriptVarLink
 	CScriptVarLink *operator ->() const { return link; } 
