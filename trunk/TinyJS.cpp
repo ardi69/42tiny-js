@@ -2346,7 +2346,6 @@ void CScriptVar::setArrayIndex(int idx, const CScriptVarPtr &value) {
 }
 
 int CScriptVar::getArrayLength() {
-	int highest = -1;
 	if (!isArray() || Childs.size()==0) return 0;
 	return isDecimalNumber(Childs.back()->getName())+1; 
 }

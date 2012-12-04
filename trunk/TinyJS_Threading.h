@@ -1,6 +1,7 @@
 #ifndef TinyJS_Threading_h__
 #define TinyJS_Threading_h__
-
+#include "config.h"
+#ifndef NO_THREADING
 /*
  * 42TinyJS
  *
@@ -29,17 +30,18 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
+
 class CScriptMutex {
 public:
 	CScriptMutex();
 	~CScriptMutex();
-	void Lock() { mutex->Lock(); }
-	void UnLock() { mutex->UnLock(); }
+	void lock() { mutex->lock(); }
+	void unlock() { mutex->unlock(); }
 	class CScriptMutex_t{
 	public:
 //		virtual ~CScriptMutex_t()=0;
-		virtual void Lock()=0;
-		virtual void UnLock()=0;
+		virtual void lock()=0;
+		virtual void unlock()=0;
 	};
 private:
 	CScriptMutex_t *mutex;
@@ -61,5 +63,5 @@ private:
 	CScriptThread_t *thread;
 };
 
-
+#endif // NO_THREADING
 #endif // TinyJS_Threading_h__
