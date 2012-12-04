@@ -1,15 +1,16 @@
-
 #include "TinyJS_Threading.h"
 
-#define HAVE_PTHREAD
-
-#ifdef HAVE_PTHREAD
-#include <pthread.h>
-#elif defined(WIN32) /* !Pthread but Windows */
-#include <windows.h>
+#undef HAVE_THREADING
+#if !defined(NO_THREADING) && !defined(HAVE_CUSTOUM_THREADING_IMPL)
+#	define HAVE_THREADING
+#	if defined(WIN32) && !defined(HAVE_PTHREAD)
+#		include <windows.h>
+#	else
+#		include <pthread.h>
+#	endif
 #endif
 
-
+#ifdef HAVE_THREADING 
 
 class CScriptMutex_impl : public CScriptMutex::CScriptMutex_t {
 public:
@@ -27,14 +28,14 @@ public:
 		CloseHandle(mutex);
 #endif
 	}
-	void Lock() {
+	void lock() {
 #ifdef HAVE_PTHREAD
 		pthread_mutex_lock(&mutex);
 #else
 		WaitForSingleObject(mutex, INFINITE);
 #endif
 	}
-	void UnLock() {
+	void unlock() {
 #ifdef HAVE_PTHREAD
 		pthread_mutex_unlock(&mutex);
 #else
@@ -89,3 +90,4 @@ CScriptThread::CScriptThread() {
 CScriptThread::~CScriptThread() {
 	delete thread;
 }
+#endif // HAVE_THREADING
