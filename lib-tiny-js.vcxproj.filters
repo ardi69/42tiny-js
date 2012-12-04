@@ -30,6 +30,9 @@
     <ClCompile Include="TinyJS_StringFunctions.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="TinyJS_Threading.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="TinyJS.h">
@@ -51,6 +54,9 @@
       <Filter>Headerdateien</Filter>
     </ClInclude>
     <ClInclude Include="config.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="TinyJS_Threading.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>

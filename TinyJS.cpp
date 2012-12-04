@@ -120,10 +120,12 @@ bool isWhitespace(char ch) {
 bool isNumeric(char ch) {
 	return (ch>='0') && (ch<='9');
 }
-bool isNumber(const string &str) {
+int isDecimalNumber(const string &str) {
+	if(str.size()==0 || (str.size()>1 && str[0]=='0')) return -1; // empty or (more as 1 digit and beginning with '0')
+	int ret=0;
 	for (size_t i=0;i<str.size();i++)
-		if (!isNumeric(str[i])) return false;
-	return true;
+		if (!isNumeric(str[i])) return -1; else ret = ret*10+str[i]-'0';
+	return ret;
 }
 bool isHexadecimal(char ch) {
 	return ((ch>='0') && (ch<='9')) || ((ch>='a') && (ch<='f')) || ((ch>='A') && (ch<='F'));
@@ -2205,10 +2207,6 @@ CScriptVarPtr CScriptVar::_toString(bool &execute, int radix/*=0*/) {
 
 ////// Childs
 
-/// find
-bool operator<(const CScriptVarLinkPtr &Link, const string &Name) {
-	return Link->getName() < Name;
-}
 
 CScriptVarLinkPtr CScriptVar::findChild(const string &childName) {
 	if(Childs.empty()) return 0;
@@ -2341,27 +2339,16 @@ void CScriptVar::setArrayIndex(int idx, const CScriptVarPtr &value) {
 	CScriptVarLinkPtr link = findChild(sIdx);
 
 	if (link) {
-		if (value->isUndefined())
-			removeLink(link);
-		else
-			link->setVarPtr(value);
+		link->setVarPtr(value);
 	} else {
-		if (!value->isUndefined())
-			addChild(sIdx, value);
+		addChild(sIdx, value);
 	}
 }
 
 int CScriptVar::getArrayLength() {
 	int highest = -1;
-	if (!isArray()) return 0;
-
-	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
-		if (::isNumber((*it)->getName())) {
-			int val = atoi((*it)->getName().c_str());
-			if (val > highest) highest = val;
-		}
-	}
-	return highest+1;
+	if (!isArray() || Childs.size()==0) return 0;
+	return isDecimalNumber(Childs.back()->getName())+1; 
 }
 
 CScriptVarPtr CScriptVar::mathsOp(const CScriptVarPtr &b, int op) {
@@ -2411,44 +2398,6 @@ string CScriptVar::getFlagsAsString() {
 	if (isInfinity()) flagstr = flagstr + "INFINITY ";
 	return flagstr;
 }
-
-#ifdef TODO
-void CScriptVar::getJSON(ostringstream &destination, const string linePrefix) {
-	if (isObject()) {
-		string indentedLinePrefix = linePrefix+"  ";
-		// children - handle with bracketed list
-		destination << "{ \n";
-		int count = Childs.size();
-		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
-			destination << indentedLinePrefix;
-			if (isAlphaNum((*it)->getName()))
-				destination  << (*it)->getName();
-			else
-				destination  << getJSString((*it)->getName());
-			destination  << " : ";
-			(*(*it))->getJSON(destination, indentedLinePrefix);
-			if (--count) destination  << ",\n";
-		}
-		destination << "\n" << linePrefix << "}";
-	} else if (isArray()) {
-		string indentedLinePrefix = linePrefix+"  ";
-		destination << "[\n";
-		int len = getArrayLength();
-		if (len>10000) len=10000; // we don't want to get stuck here!
-
-		for (int i=0;i<len;i++) {
-			getArrayIndex(i)->getJSON(destination, indentedLinePrefix);
-			if (i<len-1) destination  << ",\n";
-		}
-
-		destination << "\n" << linePrefix << "]";
-	} else {
-		// no children or a function... just write value directly
-		destination << getParsableString();
-	}
-}
-#endif
-
 
 CScriptVar *CScriptVar::ref() {
 	refs++;
@@ -2507,6 +2456,13 @@ CScriptVarLinkWorkPtr CScriptVarLinkPtr::setter( const CScriptVarPtr &Var ) {
 
 CScriptVarLinkWorkPtr CScriptVarLinkPtr::setter( bool &execute, const CScriptVarPtr &Var ) {
 	return CScriptVarLinkWorkPtr(*this).setter(execute, Var);
+}
+
+bool CScriptVarLinkPtr::operator <(const string &rhs) const {
+	int lhs_int = isDecimalNumber(link->getName());
+	int rhs_int = isDecimalNumber(rhs);
+	if(lhs_int<0 && rhs_int<0) return link->getName() < rhs;
+	return lhs_int < rhs_int;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5371,9 +5327,15 @@ void CTinyJS::native_Array(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr returnVar = c->newScriptVar(Array);
 	c->setReturnVar(returnVar);
 	int length = c->getArgumentsLength();
-	if(length == 1 && c->getArgument(0)->isNumber())
-		returnVar->setArrayIndex(c->getArgument(0)->getInt(), constScriptVar(Undefined));
-	else for(int i=0; i<length; i++)
+	if(length == 1 && c->getArgument(0)->isNumber()) {
+		CScriptVarPtr Argument_0 = c->getArgument(0);
+		double new_size_d = Argument_0->getDouble();
+		int new_size_i = Argument_0->getInt();
+		if(new_size_i<0 || new_size_d!=(double)new_size_i)
+			c->throwError(RangeError, "invalid array length");
+		else if(new_size_i>0)
+			returnVar->setArrayIndex(new_size_i-1, constScriptVar(Undefined));
+	} else for(int i=0; i<length; i++)
 		returnVar->setArrayIndex(i, c->getArgument(i));
 }
 
