@@ -67,9 +67,24 @@ void js_dump(const CFunctionsScopePtr &v, void *) {
 	v->getContext()->getRoot()->trace(">  ");
 }
 
-
+class myThread : public CScriptThread {
+public:
+	int ThreadFnc() {
+		printf("Thread started\n");
+		while(isActiv()) {
+			printf("Thread fnc\n");
+		}
+		printf("Thread finish\n");
+		return 55;
+	}
+};
+#include <windows.h>
 int main(int , char **)
 {
+	myThread mT;
+	mT.Run();
+	Sleep(3000);
+	printf("retvar %d\n", mT.Stop());
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 //	setlocale( LC_ALL, ".858" );
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
