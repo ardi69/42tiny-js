@@ -1,7 +1,7 @@
 #include "TinyJS_Threading.h"
 
 #undef HAVE_THREADING
-#if !defined(NO_THREADING) && !defined(HAVE_CUSTOUM_THREADING_IMPL)
+#if !defined(NO_THREADING) && !defined(HAVE_CUSTOM_THREADING_IMPL)
 #	define HAVE_THREADING
 #	if defined(WIN32) && !defined(HAVE_PTHREAD)
 #		include <windows.h>
@@ -12,41 +12,34 @@
 
 #ifdef HAVE_THREADING 
 
+#ifndef HAVE_PTHREAD
+// simple pthreads 4 windows
+#	define pthread_t HANDLE
+#	define pthread_create(t, stack, fnc, a) *(t) = CreateThread(NULL, stack, (LPTHREAD_START_ROUTINE)fnc, a, 0, NULL);
+#	define pthread_join(t, v) WaitForSingleObject(t, INFINITE), GetExitCodeThread(t,(LPDWORD)v), CloseHandle(t)
+
+#	define pthread_mutex_t HANDLE
+#	define pthread_mutex_init(m, a)	*(m) = CreateMutex(NULL, false, NULL)
+#	define pthread_mutex_destroy(m)	CloseHandle(*(m));
+#	define pthread_mutex_lock(m)		WaitForSingleObject(*(m), INFINITE);
+#	define pthread_mutex_unlock(m)	ReleaseMutex(*(m));
+#endif
+
 class CScriptMutex_impl : public CScriptMutex::CScriptMutex_t {
 public:
 	CScriptMutex_impl() {
-#ifdef HAVE_PTHREAD
 		pthread_mutex_init(&mutex, NULL);
-#else
-		mutex = CreateMutex(NULL, false, NULL);
-#endif
 	}
 	~CScriptMutex_impl() {
-#ifdef HAVE_PTHREAD
 		pthread_mutex_destroy(&mutex);
-#else
-		CloseHandle(mutex);
-#endif
 	}
 	void lock() {
-#ifdef HAVE_PTHREAD
 		pthread_mutex_lock(&mutex);
-#else
-		WaitForSingleObject(mutex, INFINITE);
-#endif
 	}
 	void unlock() {
-#ifdef HAVE_PTHREAD
 		pthread_mutex_unlock(&mutex);
-#else
-		ReleaseMutex(mutex);
-#endif
 	}
-#ifdef HAVE_PTHREAD
 	pthread_mutex_t mutex;
-#else
-	HANDLE mutex;
-#endif
 };
 
 CScriptMutex::CScriptMutex() {
@@ -59,30 +52,30 @@ CScriptMutex::~CScriptMutex() {
 
 class CScriptThread_impl : public CScriptThread::CScriptThread_t {
 public:
-	CScriptThread_impl(CScriptThread *_this) : running(false), This(_this) {}
+	CScriptThread_impl(CScriptThread *_this) : activ(false), running(false), This(_this) {}
 	~CScriptThread_impl() {}
 	void Run() {
-#ifdef HAVE_PTHREAD
-		typedef void *(__cdecl *ThreadFnc_t) (void *);
-		pthread_create(&thread, NULL, (ThreadFnc_t)ThreadFnc, This);
-#else
-		HANDLE thread;
-#endif
-
+		if(running) return;
+		activ = true;
+		pthread_create(&thread, NULL, (void*(*)(void*))ThreadFnc, this);
 	}
-	static int ThreadFnc(CScriptThread *This) {
-		return This->ThreadFnc(This);
+	int Stop() {
+		void *retvar;
+		activ = false;
+		pthread_join(thread, &retvar);
+		running = false;
+		return (int)retvar;
 	}
+	bool isActiv() { return activ; }
+	static void *ThreadFnc(CScriptThread_impl *This) {
+		This->running = true;
+		return (void*) This->This->ThreadFnc();
+	}
+	bool activ;
 	bool running;
 	CScriptThread *This;
-#ifdef HAVE_PTHREAD
 	pthread_t thread;
-#else
-	HANDLE thread;
-#endif
 };
-
-
 
 CScriptThread::CScriptThread() {
 	thread = new CScriptThread_impl(this);

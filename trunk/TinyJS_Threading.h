@@ -53,11 +53,14 @@ public:
 	CScriptThread();
 	virtual ~CScriptThread();
 	void Run() { thread->Run(); }
-	virtual int ThreadFnc(CScriptThread *This)=0;
-
+	int Stop() { return thread->Stop(); }
+	virtual int ThreadFnc()=0;
+	bool isActiv() { return thread->isActiv(); }
 	class CScriptThread_t{
 	public:
 		virtual void Run()=0;
+		virtual int Stop()=0;
+		virtual bool isActiv()=0;
 	};
 private:
 	CScriptThread_t *thread;

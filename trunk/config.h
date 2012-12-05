@@ -66,6 +66,7 @@
  * you can define HAVE_BOOST_REGEX and <boost/regex.hpp> is included and boost::regex is used
  */
 //#define HAVE_BOOST_REGEX
+
 /* or you can define HAVE_TR1_REGEX and <tr1/regex> is included and std::tr1::regex is used
  */
 //#define HAVE_TR1_REGEX
@@ -104,9 +105,9 @@
 //#define HAVE_PTHREAD
 
 /* you can implement your own custom thread-implementation.
- * to prevent the using of the win- or pthread-API define HAVE_CUSTOUM_THREADING_IMPL
+ * to prevent the using of the win- or pthread-API define HAVE_CUSTOM_THREADING_IMPL
  */
-//#define HAVE_CUSTOUM_THREADING_IMPL
+//#define HAVE_CUSTOM_THREADING_IMPL
 
 ////////////////////////////////////////////////
 // DO NOT MAKE CHANGES OF THE FOLLOWING STUFF //
