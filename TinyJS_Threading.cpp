@@ -15,7 +15,7 @@
 #ifndef HAVE_PTHREAD
 // simple pthreads 4 windows
 #	define pthread_t HANDLE
-#	define pthread_create(t, stack, fnc, a) *(t) = CreateThread(NULL, stack, (LPTHREAD_START_ROUTINE)fnc, a, 0, NULL);
+#	define pthread_create(t, stack, fnc, a) *(t) = CreateThread(NULL, stack, (LPTHREAD_START_ROUTINE)fnc, a, 0, NULL)
 #	define pthread_join(t, v) WaitForSingleObject(t, INFINITE), GetExitCodeThread(t,(LPDWORD)v), CloseHandle(t)
 
 #	define pthread_mutex_t HANDLE
@@ -58,8 +58,10 @@ public:
 		if(running) return;
 		activ = true;
 		pthread_create(&thread, NULL, (void*(*)(void*))ThreadFnc, this);
+		while(!running);
 	}
 	int Stop() {
+		if(!running) return -1;
 		void *retvar;
 		activ = false;
 		pthread_join(thread, &retvar);
