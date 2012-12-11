@@ -2600,32 +2600,6 @@ CScriptVarPrimitivePtr CScriptVarPrimitive::_toObject() {
 	return CScriptVarPrimitivePtr(this);
 }
 
-
-
-////////////////////////////////////////////////////////////////////////// 
-/// CScriptVarObjectWrap
-//////////////////////////////////////////////////////////////////////////
-#if 0
-declare_dummy_t(ObjectWrap);
-
-CScriptVarObjectWrap::CScriptVarObjectWrap(CTinyJS *Context, const CScriptVarPtr &Value) : CScriptVarObject(Context), value(Value) {
-	ASSERT(value);
-	CScriptVarLinkPtr proto = Value->findChild(TINYJS___PROTO___VAR);
-	this->addChildOrReplace(TINYJS___PROTO___VAR, proto, SCRIPTVARLINK_WRITABLE);
-}
-CScriptVarObjectWrap::~CScriptVarObjectWrap(){}
-CScriptVarPtr CScriptVarObjectWrap::clone() { return new CScriptVarObjectWrap(*this); }
-CScriptVarPtr CScriptVarObjectWrap::_valueOf(bool &execute) { return value; }
-CScriptVarPtr CScriptVarObjectWrap::_toString(bool &execute, int radix/*=0*/) { return value; }
-string CScriptVarObjectWrap::getParsableString( const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion ) {
-	getParsableStringRecursionsCheck();
-	return value->getParsableString(indentString, indent, uniqueID, hasRecursion);
-}
-void CScriptVarObjectWrap::setTemporaryID_recursive(uint32_t ID) {
-	CScriptVar::setTemporaryID_recursive(ID);
-	value->setTemporaryID_recursive(ID);
-}
-#endif
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarError
 //////////////////////////////////////////////////////////////////////////
@@ -3858,14 +3832,13 @@ CScriptVarPtr DoMaths(CScriptVarPtr &a, CScriptVarPtr &b, int op)
 CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScriptVarPtr &B, int op) {
 	if(!execute) return constUndefined;
 	if (op == LEX_TYPEEQUAL || op == LEX_NTYPEEQUAL) {
-		// check type first, then call again to check data
-		if(A->isNaN() || B->isNaN()) return constFalse;
-		if( (typeid(*A.getVar()) == typeid(*B.getVar())) ^ (op != LEX_TYPEEQUAL) )
-			return mathsOp(execute, A, B, op == LEX_TYPEEQUAL ? LEX_EQUAL : LEX_NEQUAL);
-		return constFalse;
+		// check type first
+		if( (A->getVarType() == B->getVarType()) ^ (op == LEX_TYPEEQUAL)) return constFalse;
+		// check value second
+		return mathsOp(execute, A, B, op == LEX_TYPEEQUAL ? LEX_EQUAL : LEX_NEQUAL);
 	}
-	if (!A->isPrimitive() && !B->isPrimitive()) { // Objects
-		/* Just check pointers */
+	if (!A->isPrimitive() && !B->isPrimitive()) { // Objects both
+		// check pointers
 		switch (op) {
 		case LEX_EQUAL:	return constScriptVar(A==B);
 		case LEX_NEQUAL:	return constScriptVar(A!=B);
@@ -3878,7 +3851,6 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 	// do maths...
 	bool a_isString = a->isString();
 	bool b_isString = b->isString();
-	// special for strings and string '+'
 	// both a String or one a String and op='+'
 	if( (a_isString && b_isString) || ((a_isString || b_isString) && op == '+')) {
 		string da = a->isNull() ? "" : a->getString();
@@ -3894,7 +3866,7 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 		default:				RETURN_NAN;
 		}
 	}
-	// special for undefined and null
+	// special for undefined and null --> every true: undefined==undefined, undefined==null, null==undefined and null=null
 	else if( (a->isUndefined() || a->isNull()) && (b->isUndefined() || b->isNull()) ) {
 		switch (op) {
 		case LEX_NEQUAL:	return constScriptVar( !( ( a->isUndefined() || a->isNull() ) && ( b->isUndefined() || b->isNull() ) ) );
@@ -3907,14 +3879,14 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 		}
 	}
 
-	// gets only an Integer, a Double, in Infinity or a NaN
+	// gets only Integer, Double, Infinity or NaN
 	CScriptVarPtr a_l = a->getNumericVar();
 	CScriptVarPtr b_l = b->getNumericVar();
 	{
 		CScriptVarPtr a = a_l;
 		CScriptVarPtr b = b_l;
 
-		if( a->isNaN() || b->isNaN() ) {
+		if( a->isNaN() || b->isNaN() ) { // one is NaN
 			switch (op) {
 			case LEX_NEQUAL:	return constScriptVar(true);
 			case LEX_EQUAL:
@@ -3925,7 +3897,7 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 			default:				RETURN_NAN;
 			}
 		}
-		else if((a->isInfinity() || b->isInfinity())) {
+		else if((a->isInfinity() || b->isInfinity())) { // one is Infinity
 			int tmp = 0;
 			int a_i=a->isInfinity(), a_sig=a->getInt()>0?1:-1;
 			int b_i=b->isInfinity(), b_sig=a->getInt()>0?1:-1;
@@ -3937,25 +3909,25 @@ CScriptVarPtr CTinyJS::mathsOp(bool &execute, const CScriptVarPtr &A, const CScr
 			case '<':			return constScriptVar(a_i <= b_i);
 			case LEX_NEQUAL:	return constScriptVar(a_i != b_i);
 			case '+':			if(a_i && b_i && a_i != b_i) RETURN_NAN;
-				return constScriptVar(Infinity(b_i?b_i:a_i));
+									else return constScriptVar(Infinity(b_i?b_i:a_i));
 			case '-':			if(a_i && a_i == b_i) RETURN_NAN;
-				return constScriptVar(Infinity(b_i?-b_i:a_i));
+									else return constScriptVar(Infinity(b_i?-b_i:a_i));
 			case '*':			tmp = a->getInt() * b->getInt();
-				if(tmp == 0)	RETURN_NAN;
-				return constScriptVar(Infinity(tmp));
+									if(tmp == 0)	RETURN_NAN;
+									else return constScriptVar(Infinity(tmp));
 			case '/':			if(a_i && b_i) RETURN_NAN;
-				if(b_i)			return newScriptVar(0);
-				return constScriptVar(Infinity(a_sig*b_sig));
+									else if(b_i) return newScriptVar(0);
+									else return constScriptVar(Infinity(a_sig*b_sig));
 			case '%':			if(a_i) RETURN_NAN;
-				return constScriptVar(Infinity(a_sig));
+									else return constScriptVar(Infinity(a_sig));
 			case '&':			return newScriptVar( 0);
 			case '|':
 			case '^':			if(a_i && b_i) return newScriptVar( 0);
-				return newScriptVar(a_i?b->getInt():a->getInt());
+									else return newScriptVar(a_i?b->getInt():a->getInt());
 			case LEX_LSHIFT:
 			case LEX_RSHIFT:	
 			case LEX_RSHIFTU:	if(a_i) return newScriptVar(0);
-				return newScriptVar(a->getInt());
+									else return newScriptVar(a->getInt());
 			default:				throw new CScriptException("This operation not supported on the int datatype");
 			}
 		} else {
@@ -5181,93 +5153,6 @@ end_while:
 		} else
 			t->skip(t->getToken().Int());
 		break;
-#if 0
-	case LEX_R_SWITCH:
-		if(execute) {
-			t->match(LEX_R_SWITCH);
-			t->match('(');
-			CScriptVarPtr SwitchValue = execute_base(execute);
-			t->match(')');
-			if(execute) {
-				CScopeControl ScopeControl(this);
-				t->match('{');
-				if(t->tk == LEX_T_FORWARD) { // add a LetScope only if needed
-					ScopeControl.addLetScope();
-					execute_statement(execute);  // Forwarder
-				}
-				if(execute) {
-					t->match(LEX_T_SKIP);
-					if(t->tk == LEX_R_CASE || t->tk == LEX_R_DEFAULT || t->tk == '}') {
-						CScriptTokenizer::ScriptTokenPosition defaultStart = t->getPos();
-						bool found = false, hasDefault = false;
-						execute = false;
-						while (t->tk) {
-							switch(t->tk) {
-							case LEX_R_CASE:
-								if(found) {
-									t->skip(t->getToken().Int());
-									t->match(LEX_T_SKIP);
-									if(execute)  t->match(':');			// found but not break; --> ignore case ...:
-									else t->skip(t->getToken().Int());	// found and break; --> ignore case ...: --> up to next case
-								} else {
-									t->match(LEX_R_CASE);
-									t->match(LEX_T_SKIP);
-									execute = true;
-									CScriptVarLinkPtr CaseValue = execute_base(execute);
-									if(execute) {
-										CaseValue = mathsOp(execute, CaseValue, SwitchValue, LEX_EQUAL);
-										found = execute = CaseValue->getVarPtr()->getBool();
-										if(found) t->match(':');
-										else t->skip(t->getToken().Int());
-									} else {
-										found = true;
-										t->skip(t->getToken().Int());
-									}
-								}
-								break;
-							case LEX_R_DEFAULT:
-								t->match(LEX_R_DEFAULT);
-								if(found) {
-									t->match(LEX_T_SKIP);
-									if(execute)  t->match(':');			// found but not break; --> ignore default:
-									else t->skip(t->getToken().Int());
-								} else {
-									hasDefault = true;
-									defaultStart = t->getPos();
-									t->skip(t->getToken().Int());
-								}
-								break;
-							case '}':
-								if(!found && hasDefault) {
-									found = execute = true;
-									t->setPos(defaultStart);
-									t->match(':');
-								} else
-									goto end_while; // goto isn't fine but C supports no "break lable;"
-								break;
-							default:
-								execute_statement(execute);
-								break;
-							}
-						}
-	end_while:
-						t->match('}');
-						if(!found || (runtimeFlags & RUNTIME_BREAK) )
-							execute = true;
-					} else
-						throw new CScriptException("invalid switch statement");
-				} else
-					t->skip(t->getToken().Int());
-			} else
-				t->skip(t->getToken().Int());
-		} else
-			t->skip(t->getToken().Int());
-		break;
-	case LEX_T_DUMMY_LABEL:
-		t->match(LEX_T_DUMMY_LABEL); // ignore dummy Label
-		t->match(':');
-		break;
-#endif
 	case LEX_T_LABEL:
 		{
 			string Label = t->tkStr();
