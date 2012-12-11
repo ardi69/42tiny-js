@@ -955,47 +955,6 @@ private:
 };
 inline define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message=0, const char *file=0, int line=-1, int column=-1) { return new CScriptVarError(Context, type, message, file, line, column); }
 
-#if 0
-////////////////////////////////////////////////////////////////////////// 
-/// CScriptVarAccessor
-//////////////////////////////////////////////////////////////////////////
-
-define_dummy_t(Accessor);
-define_ScriptVarPtr_Type(Accessor);
-
-class CScriptVarAccessor : public CScriptVarObject {
-protected:
-	CScriptVarAccessor(CTinyJS *Context);
-	CScriptVarAccessor(CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
-	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData) : CScriptVarObject(Context) {
-		if(getterFnc)
-			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, class_ptr, getterFnc, getterData), 0);
-		if(setterFnc)
-			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
-	}
-
-	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
-public:
-	virtual ~CScriptVarAccessor();
-	virtual CScriptVarPtr clone();
-	virtual bool isAccessor(); // { return true; }
-	virtual bool isPrimitive(); // { return false; } 
-
-	virtual std::string getString(); // { return "[ Object ]"; };
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
-	virtual std::string getVarType(); // { return "object"; }
-
-	CScriptVarPtr getValue();
-
-	friend define_newScriptVar_Fnc(Accessor, CTinyJS *Context, Accessor_t);
-	friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
-	template<class C> friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData);
-};
-inline define_newScriptVar_Fnc(Accessor, CTinyJS *Context, Accessor_t) { return new CScriptVarAccessor(Context); }
-inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata) { return new CScriptVarAccessor(Context, getter, getterdata, setter, setterdata); }
-template<class C> define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData)  { return new CScriptVarAccessor(Context, class_ptr, getterFnc, getterData, setterFnc, setterData); }
-
-#endif
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarArray
 //////////////////////////////////////////////////////////////////////////
