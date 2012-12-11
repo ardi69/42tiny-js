@@ -2109,7 +2109,7 @@ bool CScriptVar::isInt()			{return false;}
 bool CScriptVar::isBool()			{return false;}
 int CScriptVar::isInfinity()		{ return 0; } ///< +1==POSITIVE_INFINITY, -1==NEGATIVE_INFINITY, 0==is not an InfinityVar
 bool CScriptVar::isDouble()		{return false;}
-bool CScriptVar::isRealNumber()		{return false;}
+bool CScriptVar::isRealNumber()	{return false;}
 bool CScriptVar::isNumber()		{return false;}
 bool CScriptVar::isPrimitive()	{return false;}
 bool CScriptVar::isFunction()		{return false;}
@@ -2118,9 +2118,13 @@ bool CScriptVar::isNative()		{return false;}
 
 /// Value
 int CScriptVar::getInt() {return getPrimitivVar()->getInt(); }
+int CScriptVar::getInt(bool &execute) {return getPrimitivVar(execute)->getInt(); }
 bool CScriptVar::getBool() {return getPrimitivVar()->getBool(); }
+bool CScriptVar::getBool(bool &execute) {return getPrimitivVar(execute)->getBool(); }
 double CScriptVar::getDouble() {return getPrimitivVar()->getDouble(); } 
+double CScriptVar::getDouble(bool &execute) {return getPrimitivVar(execute)->getDouble(); } 
 string CScriptVar::getString() { return getPrimitivStringVar()->getString(); }
+string CScriptVar::getString(bool &execute) { return getPrimitivStringVar(execute)->getString(); }
 
 CScriptTokenDataFnc *CScriptVar::getFunctionData() { return 0; }
 
@@ -2149,7 +2153,7 @@ CScriptVarPrimitivePtr CScriptVar::getPrimitivStringVar(bool &execute) {
 			}
 			return ret;
 		}
-		return this;
+		return CScriptVarPrimitivePtr(this);
 	}
 	return constScriptVar(Undefined);
 }
@@ -2170,7 +2174,7 @@ CScriptVarPrimitivePtr CScriptVar::getPrimitivVar(bool &execute) {
 			}
 			return ret;
 		}
-		return this;
+		return CScriptVarPrimitivePtr(this);
 	}
 	return constScriptVar(Undefined);
 }
@@ -2540,11 +2544,6 @@ CScriptVarObject::~CScriptVarObject() {}
 CScriptVarPtr CScriptVarObject::clone() { return new CScriptVarObject(*this); }
 bool CScriptVarObject::isObject() { return true; }
 
-//int CScriptVarObject::getInt() { return getPrimitivVar()->getInt(); }
-//bool CScriptVarObject::getBool() { return getPrimitivVar()->getBool(); }
-//double CScriptVarObject::getDouble() { return getPrimitivVar()->getDouble(); }
-//string CScriptVarObject::getString() { return getPrimitivVar()->getString(); }
-
 string CScriptVarObject::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheck();
 	string destination;
@@ -2577,12 +2576,16 @@ CScriptVarPtr CScriptVarObject::_toString(bool &execute, int radix) { return new
 CScriptVarPrimitive::~CScriptVarPrimitive(){}
 
 bool CScriptVarPrimitive::isObject() { return fakeObject; }
-bool CScriptVarPrimitive::isPrimitive() { return true; }
+bool CScriptVarPrimitive::isPrimitive() { return !fakeObject; }
 
-int CScriptVarPrimitive::getInt() { return 0; }
-bool CScriptVarPrimitive::getBool() { return false; }
-double CScriptVarPrimitive::getDouble() { return 0.0; }
-std::string CScriptVarPrimitive::getString() { return ""; }
+int CScriptVarPrimitive::getInt() { return fakeObject ? CScriptVar::getInt() : _getInt(); }
+int CScriptVarPrimitive::_getInt() { return 0; }
+bool CScriptVarPrimitive::getBool() { return fakeObject ? CScriptVar::getBool() : _getBool(); }
+bool CScriptVarPrimitive::_getBool() { return false; }
+double CScriptVarPrimitive::getDouble() { return fakeObject ? CScriptVar::getDouble() : _getDouble(); }
+double CScriptVarPrimitive::_getDouble() { return 0.0; }
+std::string CScriptVarPrimitive::getString() { return fakeObject ? CScriptVar::getString() : _getString(); }
+std::string CScriptVarPrimitive::_getString() { return ""; }
 
 string CScriptVarPrimitive::getVarType( const char *typeStr ) { return fakeObject ? "object" : typeStr; }
 
@@ -2763,8 +2766,11 @@ CScriptVarNull::CScriptVarNull(CTinyJS *Context) : CScriptVarPrimitive(Context, 
 CScriptVarNull::~CScriptVarNull() {}
 CScriptVarPtr CScriptVarNull::clone() { return new CScriptVarNull(*this); }
 bool CScriptVarNull::isNull() { return true; }
-string CScriptVarNull::getString() { return "null"; };
+
+string CScriptVarNull::_getString() { return "null"; };
+
 string CScriptVarNull::getVarType() { return "null"; }
+
 CScriptVarPtr CScriptVarNull::getNumericVar() { return newScriptVar(0); }
 
 
@@ -2777,7 +2783,7 @@ CScriptVarUndefined::CScriptVarUndefined(CTinyJS *Context) : CScriptVarPrimitive
 CScriptVarUndefined::~CScriptVarUndefined() {}
 CScriptVarPtr CScriptVarUndefined::clone() { return new CScriptVarUndefined(*this); }
 bool CScriptVarUndefined::isUndefined() { return true; }
-string CScriptVarUndefined::getString() { return "undefined"; };
+string CScriptVarUndefined::_getString() { return "undefined"; };
 string CScriptVarUndefined::getVarType() { return "undefined"; }
 
 
@@ -2791,7 +2797,8 @@ CScriptVarNaN::~CScriptVarNaN() {}
 CScriptVarPtr CScriptVarNaN::clone() { return new CScriptVarNaN(*this); }
 bool CScriptVarNaN::isNaN() { return true; }
 bool CScriptVarNaN::isNumber() {return true; }
-string CScriptVarNaN::getString() { return "NaN"; };
+
+string CScriptVarNaN::_getString() { return "NaN"; };
 string CScriptVarNaN::getVarType() { return CScriptVarPrimitive::getVarType("number"); }
 
 CScriptVarPrimitivePtr CScriptVarNaN::_toObject() {
@@ -2814,10 +2821,10 @@ CScriptVarString::CScriptVarString(CTinyJS *Context, const string &Data) : CScri
 CScriptVarString::~CScriptVarString() {}
 CScriptVarPtr CScriptVarString::clone() { return new CScriptVarString(*this); }
 bool CScriptVarString::isString() { return true; }
-int CScriptVarString::getInt() {return strtol(data.c_str(),0,0); }
-bool CScriptVarString::getBool() {return data.length()!=0;}
-double CScriptVarString::getDouble() {return strtod(data.c_str(),0);}
-string CScriptVarString::getString() { return data; }
+int CScriptVarString::_getInt() {return strtol(data.c_str(),0,0); }
+bool CScriptVarString::_getBool() {return data.length()!=0;}
+double CScriptVarString::_getDouble() {return strtod(data.c_str(),0);}
+string CScriptVarString::_getString() { return data; }
 string CScriptVarString::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) { return getJSString(data); }
 string CScriptVarString::getVarType() { return CScriptVarPrimitive::getVarType("string"); }
 CScriptVarPrimitivePtr CScriptVarString::_toObject() { return newScriptVar(data); }
@@ -2957,10 +2964,10 @@ const char * CScriptVarRegExp::ErrorStr( int Error )
 CScriptVarIntegerBase::CScriptVarIntegerBase(CTinyJS *Context, const CScriptVarPtr &Prototype, int Data) : CScriptVarPrimitive(Context, Prototype), data(Data) {}
 CScriptVarIntegerBase::~CScriptVarIntegerBase() {}
 bool CScriptVarIntegerBase::isNumber() {return true; }
-int CScriptVarIntegerBase::getInt() {return data; }
-bool CScriptVarIntegerBase::getBool() {return data!=0;}
-double CScriptVarIntegerBase::getDouble() {return data;}
-string CScriptVarIntegerBase::getString() {return int2string(data);}
+int CScriptVarIntegerBase::_getInt() {return data; }
+bool CScriptVarIntegerBase::_getBool() {return data!=0;}
+double CScriptVarIntegerBase::_getDouble() {return data;}
+string CScriptVarIntegerBase::_getString() {return int2string(data);}
 string CScriptVarIntegerBase::getVarType() { return CScriptVarPrimitive::getVarType("number"); }
 /*
 CScriptVarPrimitivePtr CScriptVarIntegerBase::_toObject() {
@@ -2970,7 +2977,7 @@ CScriptVarPrimitivePtr CScriptVarIntegerBase::_toObject() {
 	ASSERT(0);
 	return CScriptVarPrimitivePtr(this);
 }
-/*
+
 CScriptVarPtr CScriptVarIntegerBase::_valueOf( bool &execute )
 {
 	if(fakeObject==false) return this; 
@@ -3062,7 +3069,7 @@ CScriptVarBool::~CScriptVarBool() {}
 CScriptVarPtr CScriptVarBool::clone() { return new CScriptVarBool(*this); }
 bool CScriptVarBool::isBool() { return true; }
 bool CScriptVarBool::isNumber() {return false; }
-string CScriptVarBool::getString() {return data!=0?"true":"false";}
+string CScriptVarBool::_getString() {return data!=0?"true":"false";}
 string CScriptVarBool::getVarType() { return CScriptVarPrimitive::getVarType("boolean"); }
 CScriptVarPtr CScriptVarBool::getNumericVar() { return newScriptVar(data); }
 
@@ -3081,7 +3088,7 @@ CScriptVarInfinity::CScriptVarInfinity(CTinyJS *Context, int Data) : CScriptVarI
 CScriptVarInfinity::~CScriptVarInfinity() {}
 CScriptVarPtr CScriptVarInfinity::clone() { return new CScriptVarInfinity(*this); }
 int CScriptVarInfinity::isInfinity() { return data; }
-string CScriptVarInfinity::getString() {return data<0?"-Infinity":"Infinity";}
+string CScriptVarInfinity::_getString() {return data<0?"-Infinity":"Infinity";}
 
 CScriptVarPrimitivePtr CScriptVarInfinity::_toObject() { return newScriptVarInfinity(context, data); }
 CScriptVarPtr CScriptVarInfinity::_valueOf( bool &execute ) { return fakeObject==false ? this : constScriptVar(Infinity(data)); }
@@ -3099,10 +3106,10 @@ bool CScriptVarDouble::isDouble() { return true; }
 bool CScriptVarDouble::isRealNumber() { return true; }
 bool CScriptVarDouble::isNumber() {return true; }
 
-int CScriptVarDouble::getInt() {return (int)data; }
-bool CScriptVarDouble::getBool() {return data!=0.0;}
-double CScriptVarDouble::getDouble() {return data;}
-string CScriptVarDouble::getString() {return float2string(data);}
+int CScriptVarDouble::_getInt() {return (int)data; }
+bool CScriptVarDouble::_getBool() {return data!=0.0;}
+double CScriptVarDouble::_getDouble() {return data;}
+string CScriptVarDouble::_getString() {return float2string(data);}
 string CScriptVarDouble::getVarType() { return CScriptVarPrimitive::getVarType("number"); }
 CScriptVarPrimitivePtr CScriptVarDouble::_toObject() { return newScriptVar(data); }
 CScriptVarPtr CScriptVarDouble::_valueOf( bool &execute ) { return fakeObject==false ? this : newScriptVar(data); }

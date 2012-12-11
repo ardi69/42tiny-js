@@ -579,10 +579,14 @@ public:
 
 
 	/// Value
-	int getInt(); ///< return 0
-	bool getBool(); ///< return false
-	double getDouble(); ///< return 0.0
-	std::string getString(); ///< return ""
+	int getInt(); ///< shortcut for this->getPrimitivVar()->getInt()
+	int getInt(bool &execute); ///< shortcut for this->getPrimitivVar(execute)->getInt()
+	bool getBool(); ///< shortcut for this->getPrimitivVar()->getBool()
+	bool getBool(bool &execute); ///< shortcut for this->getPrimitivVar(execute)->getBool()
+	double getDouble(); ///< shortcut for this->getPrimitivVar()->getDouble()
+	double getDouble(bool &execute); ///< shortcut for this->getPrimitivVar(execute)->getDouble()
+	std::string getString(); ///< shortcut for this->getPrimitivVarString()->getString()
+	std::string getString(bool &execute); ///< shortcut for this->getPrimitivVarString(execute)->getString()
 
 	virtual CScriptTokenDataFnc *getFunctionData(); ///< { return 0; }
 
@@ -881,10 +885,6 @@ public:
 
 	virtual bool isObject(); // { return true; }
 
-//	virtual int getInt();
-//	virtual bool getBool();
-//	virtual double getDouble();
-//	virtual std::string getString(); // { return "[ Object ]"; };
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
 	virtual std::string getVarType(); ///< always "object"
 	virtual CScriptVarPtr toObject();
@@ -913,11 +913,15 @@ public:
 	virtual bool isObject();		///< false by default / true by a faked Object
 	virtual bool isPrimitive();	///< always true 
 
-	virtual int getInt();
-	virtual bool getBool();
-	virtual double getDouble();
-	virtual std::string getString(); // { return "[ Object ]"; };
-
+	int getInt();
+	virtual int _getInt();
+	bool getBool();
+	virtual bool _getBool();
+	double getDouble();
+	virtual double _getDouble();
+	std::string getString();
+	virtual std::string _getString(); 
+	
 
 	virtual CScriptVarPtr toObject();
 	virtual CScriptVarPrimitivePtr _toObject();
@@ -1034,7 +1038,7 @@ public:
 
 	virtual bool isNull(); // { return true; }
 
-	virtual std::string getString(); // { return "null"; };
+	virtual std::string _getString(); // { return "null"; };
 
 	virtual std::string getVarType(); // { return "null"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
@@ -1062,7 +1066,7 @@ public:
 
 	virtual bool isUndefined(); // { return true; }
 
-	virtual std::string getString(); // { return "undefined"; };
+	virtual std::string _getString(); // { return "undefined"; };
 	virtual std::string getVarType(); // { return "undefined"; }
 	friend define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS *, Undefined_t);
 	friend define_newScriptVar_NamedFnc(Undefined, CTinyJS *Context);
@@ -1086,7 +1090,7 @@ public:
 	virtual CScriptVarPtr clone();
 	virtual bool isNaN();// { return true; }
 	virtual bool isNumber(); // { return true; }
-	virtual std::string getString(); // { return "NaN"; };
+	virtual std::string _getString(); // { return "NaN"; };
 	virtual std::string getVarType(); // { return "number"; }
 	virtual CScriptVarPrimitivePtr _toObject();
 	virtual CScriptVarPtr _valueOf(bool &execute);
@@ -1111,10 +1115,11 @@ public:
 	virtual ~CScriptVarString();
 	virtual CScriptVarPtr clone();
 	virtual bool isString(); // { return true; }
-	virtual int getInt(); // {return strtol(data.c_str(),0,0); }
-	virtual bool getBool(); // {return data.length()!=0;}
-	virtual double getDouble(); // {return strtod(data.c_str(),0);}
-	virtual std::string getString(); // { return data; }
+
+	virtual int _getInt(); // {return strtol(data.c_str(),0,0); }
+	virtual bool _getBool(); // {return data.length()!=0;}
+	virtual double _getDouble(); // {return strtod(data.c_str(),0);}
+	virtual std::string _getString(); // { return data; }
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); // { return getJSString(data); }
 	virtual std::string getVarType(); // { return "string"; }
 	virtual CScriptVarPrimitivePtr _toObject();
@@ -1192,10 +1197,10 @@ protected:
 public:
 	virtual ~CScriptVarIntegerBase();
 	virtual bool isNumber(); // { return true; }
-	virtual int getInt(); // {return data; }
-	virtual bool getBool(); // {return data!=0;}
-	virtual double getDouble(); // {return data;}
-	virtual std::string getString(); // {return int2string(data);}
+	virtual int _getInt(); // {return data; }
+	virtual bool _getBool(); // {return data!=0;}
+	virtual double _getDouble(); // {return data;}
+	virtual std::string _getString(); // {return int2string(data);}
 	virtual std::string getVarType(); // { return "number"; }
 //	virtual CScriptVarPrimitivePtr _toObject();
 //	virtual CScriptVarPtr _valueOf(bool &execute);
@@ -1246,7 +1251,7 @@ public:
 	virtual CScriptVarPtr clone();
 	virtual bool isBool(); // { return true; }
 	bool isNumber(); // { return false }
-	virtual std::string getString(); // {return data!=0?"true":"false";}
+	virtual std::string _getString(); // {return data!=0?"true":"false";}
 	virtual std::string getVarType(); // { return "boolean"; }
 	virtual CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 
@@ -1276,7 +1281,7 @@ public:
 	virtual ~CScriptVarInfinity();
 	virtual CScriptVarPtr clone();
 	virtual int isInfinity(); // { return data; }
-	virtual std::string getString(); // {return data<0?"-Infinity":"Infinity";}
+	virtual std::string _getString(); // {return data<0?"-Infinity":"Infinity";}
 
 	virtual CScriptVarPrimitivePtr _toObject();
 	virtual CScriptVarPtr _valueOf(bool &execute);
@@ -1303,10 +1308,10 @@ public:
 	virtual bool isDouble(); // { return true; }
 	virtual bool isRealNumber(); // { return true; }
 	virtual bool isNumber(); // { return true; }
-	virtual int getInt(); // {return (int)data; }
-	virtual bool getBool(); // {return data!=0.0;}
-	virtual double getDouble(); // {return data;}
-	virtual std::string getString(); // {return float2string(data);}
+	virtual int _getInt(); // {return (int)data; }
+	virtual bool _getBool(); // {return data!=0.0;}
+	virtual double _getDouble(); // {return data;}
+	virtual std::string _getString(); // {return float2string(data);}
 	virtual std::string getVarType(); // { return "number"; }
 	virtual CScriptVarPrimitivePtr _toObject();
 	virtual CScriptVarPtr _valueOf(bool &execute);
