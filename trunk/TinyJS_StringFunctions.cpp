@@ -412,75 +412,75 @@ void registerStringFunctions(CTinyJS *tinyJS) {}
 extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 	CScriptVarPtr fnc;
 	// charAt
-	tinyJS->addNative("function String.prototype.charAt(pos)", scStringCharAt, 0);
-	tinyJS->addNative("function String.charAt(this,pos)", scStringCharAt, 0);
+	tinyJS->addNative("function String.prototype.charAt(pos)", scStringCharAt, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.charAt(this,pos)", scStringCharAt, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// charCodeAt
-	tinyJS->addNative("function String.prototype.charCodeAt(pos)", scStringCharCodeAt, 0);
-	tinyJS->addNative("function String.charCodeAt(this,pos)", scStringCharCodeAt, 0);
+	tinyJS->addNative("function String.prototype.charCodeAt(pos)", scStringCharCodeAt, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.charCodeAt(this,pos)", scStringCharCodeAt, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// concat
-	tinyJS->addNative("function String.prototype.concat()", scStringConcat, 0);
-	tinyJS->addNative("function String.concat(this)", scStringConcat, (void*)1);
+	tinyJS->addNative("function String.prototype.concat()", scStringConcat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.concat(this)", scStringConcat, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT);
 	// indexOf
-	tinyJS->addNative("function String.prototype.indexOf(search)", scStringIndexOf, 0); // find the position of a string in a string, -1 if not
-	tinyJS->addNative("function String.indexOf(this,search)", scStringIndexOf, 0); // find the position of a string in a string, -1 if not
+	tinyJS->addNative("function String.prototype.indexOf(search)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
+	tinyJS->addNative("function String.indexOf(this,search)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
 	// lastIndexOf
-	tinyJS->addNative("function String.prototype.lastIndexOf(search)", scStringIndexOf, (void*)-1); // find the last position of a string in a string, -1 if not
-	tinyJS->addNative("function String.lastIndexOf(this,search)", scStringIndexOf, (void*)-1); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.prototype.lastIndexOf(search)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.lastIndexOf(this,search)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
 	// localeCompare
-	tinyJS->addNative("function String.prototype.localeCompare(compareString)", scStringLocaleCompare, 0);
-	tinyJS->addNative("function String.localeCompare(this,compareString)", scStringLocaleCompare, 0);
+	tinyJS->addNative("function String.prototype.localeCompare(compareString)", scStringLocaleCompare, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.localeCompare(this,compareString)", scStringLocaleCompare, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// quote
-	tinyJS->addNative("function String.prototype.quote()", scStringQuote, 0);
-	tinyJS->addNative("function String.quote(this)", scStringQuote, 0);
+	tinyJS->addNative("function String.prototype.quote()", scStringQuote, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.quote(this)", scStringQuote, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #ifndef NO_REGEXP
 	// match
-	tinyJS->addNative("function String.prototype.match(regexp, flags)", scStringMatch, 0);
-	tinyJS->addNative("function String.match(this, regexp, flags)", scStringMatch, 0);
+	tinyJS->addNative("function String.prototype.match(regexp, flags)", scStringMatch, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.match(this, regexp, flags)", scStringMatch, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #endif /* !REGEXP */
 	// replace
-	tinyJS->addNative("function String.prototype.replace(substr, newsubstr, flags)", scStringReplace, 0);
-	tinyJS->addNative("function String.replace(this, substr, newsubstr, flags)", scStringReplace, 0);
+	tinyJS->addNative("function String.prototype.replace(substr, newsubstr, flags)", scStringReplace, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.replace(this, substr, newsubstr, flags)", scStringReplace, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// search
-	tinyJS->addNative("function String.prototype.search(regexp, flags)", scStringSearch, 0);
-	tinyJS->addNative("function String.search(this, regexp, flags)", scStringSearch, 0);
+	tinyJS->addNative("function String.prototype.search(regexp, flags)", scStringSearch, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.search(this, regexp, flags)", scStringSearch, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// slice
-	tinyJS->addNative("function String.prototype.slice(start,end)", scStringSlice, 0); // find the last position of a string in a string, -1 if not
-	tinyJS->addNative("function String.slice(this,start,end)", scStringSlice, (void*)1); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.prototype.slice(start,end)", scStringSlice, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.slice(this,start,end)", scStringSlice, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
 	// split
-	tinyJS->addNative("function String.prototype.split(separator,limit)", scStringSplit, 0);
-	tinyJS->addNative("function String.split(this,separator,limit)", scStringSplit, 0);
+	tinyJS->addNative("function String.prototype.split(separator,limit)", scStringSplit, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.split(this,separator,limit)", scStringSplit, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// substr
-	tinyJS->addNative("function String.prototype.substr(start,length)", scStringSubstr, 0);
-	tinyJS->addNative("function String.substr(this,start,length)", scStringSubstr, (void*)1);
+	tinyJS->addNative("function String.prototype.substr(start,length)", scStringSubstr, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.substr(this,start,length)", scStringSubstr, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT);
 	// substring
-	tinyJS->addNative("function String.prototype.substring(start,end)", scStringSlice, (void*)2);
-	tinyJS->addNative("function String.substring(this,start,end)", scStringSlice, (void*)3);
+	tinyJS->addNative("function String.prototype.substring(start,end)", scStringSlice, (void*)2, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.substring(this,start,end)", scStringSlice, (void*)3, SCRIPTVARLINK_BUILDINDEFAULT);
 	// toLowerCase toLocaleLowerCase currently the same function
-	tinyJS->addNative("function String.prototype.toLowerCase()", scStringToLowerCase, 0);
-	tinyJS->addNative("function String.toLowerCase(this)", scStringToLowerCase, 0);
-	tinyJS->addNative("function String.prototype.toLocaleLowerCase()", scStringToLowerCase, 0);
-	tinyJS->addNative("function String.toLocaleLowerCase(this)", scStringToLowerCase, 0);
+	tinyJS->addNative("function String.prototype.toLowerCase()", scStringToLowerCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.toLowerCase(this)", scStringToLowerCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.toLocaleLowerCase()", scStringToLowerCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.toLocaleLowerCase(this)", scStringToLowerCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// toUpperCase toLocaleUpperCase currently the same function
-	tinyJS->addNative("function String.prototype.toUpperCase()", scStringToUpperCase, 0);
-	tinyJS->addNative("function String.toUpperCase(this)", scStringToUpperCase, 0);
-	tinyJS->addNative("function String.prototype.toLocaleUpperCase()", scStringToUpperCase, 0);
-	tinyJS->addNative("function String.toLocaleUpperCase(this)", scStringToUpperCase, 0);
+	tinyJS->addNative("function String.prototype.toUpperCase()", scStringToUpperCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.toUpperCase(this)", scStringToUpperCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.toLocaleUpperCase()", scStringToUpperCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.toLocaleUpperCase(this)", scStringToUpperCase, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// trim
-	tinyJS->addNative("function String.prototype.trim()", scStringTrim, 0);
-	tinyJS->addNative("function String.trim(this)", scStringTrim, 0);
+	tinyJS->addNative("function String.prototype.trim()", scStringTrim, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.trim(this)", scStringTrim, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	// trimLeft
-	tinyJS->addNative("function String.prototype.trimLeft()", scStringTrim, (void*)1);
-	tinyJS->addNative("function String.trimLeft(this)", scStringTrim, (void*)1);
+	tinyJS->addNative("function String.prototype.trimLeft()", scStringTrim, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.trimLeft(this)", scStringTrim, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT);
 	// trimRight
-	tinyJS->addNative("function String.prototype.trimRight()", scStringTrim, (void*)2);
-	tinyJS->addNative("function String.trimRight(this)", scStringTrim, (void*)2);
+	tinyJS->addNative("function String.prototype.trimRight()", scStringTrim, (void*)2, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.trimRight(this)", scStringTrim, (void*)2, SCRIPTVARLINK_BUILDINDEFAULT);
 
-	tinyJS->addNative("function charToInt(ch)", scCharToInt, 0); //  convert a character to an int - get its value
+	tinyJS->addNative("function charToInt(ch)", scCharToInt, 0, SCRIPTVARLINK_BUILDINDEFAULT); //  convert a character to an int - get its value
 	
-	tinyJS->addNative("function String.prototype.fromCharCode(char)", scStringFromCharCode, 0);
+	tinyJS->addNative("function String.prototype.fromCharCode(char)", scStringFromCharCode, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #ifndef NO_REGEXP
-	tinyJS->addNative("function RegExp.prototype.test(str)", scRegExpTest, 0);
-	tinyJS->addNative("function RegExp.prototype.exec(str)", scRegExpExec, 0);
+	tinyJS->addNative("function RegExp.prototype.test(str)", scRegExpTest, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function RegExp.prototype.exec(str)", scRegExpExec, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #endif /* NO_REGEXP */
 }
 
