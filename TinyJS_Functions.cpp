@@ -148,14 +148,14 @@ static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
 void registerFunctions(CTinyJS *tinyJS) {
 }
 extern "C" void _registerFunctions(CTinyJS *tinyJS) {
-	tinyJS->addNative("function trace()", scTrace, tinyJS);
-	tinyJS->addNative("function Object.prototype.dump()", scObjectDump, 0);
-	tinyJS->addNative("function Object.prototype.clone()", scObjectClone, 0);
+	tinyJS->addNative("function trace()", scTrace, tinyJS, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Object.prototype.dump()", scObjectDump, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Object.prototype.clone()", scObjectClone, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 
-	tinyJS->addNative("function Integer.valueOf(str)", scIntegerValueOf, 0); // value of a single character
-	tinyJS->addNative("function JSON.stringify(obj, replacer)", scJSONStringify, 0); // convert to JSON. replacer is ignored at the moment
-	tinyJS->addNative("function Array.prototype.contains(obj)", scArrayContains, 0);
-	tinyJS->addNative("function Array.prototype.remove(obj)", scArrayRemove, 0);
-	tinyJS->addNative("function Array.prototype.join(separator)", scArrayJoin, 0);
+	tinyJS->addNative("function Integer.valueOf(str)", scIntegerValueOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // value of a single character
+	tinyJS->addNative("function JSON.stringify(obj, replacer)", scJSONStringify, 0, SCRIPTVARLINK_BUILDINDEFAULT); // convert to JSON. replacer is ignored at the moment
+	tinyJS->addNative("function Array.prototype.contains(obj)", scArrayContains, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.remove(obj)", scArrayRemove, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.join(separator)", scArrayJoin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 

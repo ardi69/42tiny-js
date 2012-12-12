@@ -163,6 +163,8 @@ string int2string(int intData) {
 }
 string float2string(const double &floatData) {
 	ostringstream str;
+	str.precision(numeric_limits<double>::max_digits10-1);
+	
 	str << floatData;
 	return str.str();
 }
@@ -3384,7 +3386,7 @@ CTinyJS::CTinyJS() {
 	// Add built-in classes
 	//////////////////////////////////////////////////////////////////////////
 	// Object
-	var = addNative("function Object()", this, &CTinyJS::native_Object);
+	var = addNative("function Object()", this, &CTinyJS::native_Object, 0, SCRIPTVARLINK_CONSTANT);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
 	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_preventExtensions); 
@@ -3398,7 +3400,7 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Array
-	var = addNative("function Array()", this, &CTinyJS::native_Array);
+	var = addNative("function Array()", this, &CTinyJS::native_Array, 0, SCRIPTVARLINK_CONSTANT);
 	arrayPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	arrayPrototype->addChild("valueOf", objectPrototype_valueOf);
 	arrayPrototype->addChild("toString", objectPrototype_toString);
@@ -3406,17 +3408,17 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// String
-	var = addNative("function String()", this, &CTinyJS::native_String);
+	var = addNative("function String()", this, &CTinyJS::native_String, 0, SCRIPTVARLINK_CONSTANT);
 	stringPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	stringPrototype->addChild("valueOf", objectPrototype_valueOf);
 	stringPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_refered.push_back(&stringPrototype);
 	addNative("function String.__constructor__()", this, &CTinyJS::native_String__constructor__);
+
 	//////////////////////////////////////////////////////////////////////////
 	// RegExp
 #ifndef NO_REGEXP
-
-	var = addNative("function RegExp()", this, &CTinyJS::native_RegExp);
+	var = addNative("function RegExp()", this, &CTinyJS::native_RegExp, 0, SCRIPTVARLINK_CONSTANT);
 	regexpPrototype  = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	regexpPrototype->addChild("valueOf", objectPrototype_valueOf);
 	regexpPrototype->addChild("toString", objectPrototype_toString);
@@ -3425,10 +3427,12 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
-	var = addNative("function Number()", this, &CTinyJS::native_Number);
-	var->addChild("NaN", constNaN = newScriptVarNaN(this), SCRIPTVARLINK_ENUMERABLE);
-	var->addChild("POSITIVE_INFINITY", constInfinityPositive = newScriptVarInfinity(this, InfinityPositive), SCRIPTVARLINK_ENUMERABLE);
-	var->addChild("NEGATIVE_INFINITY", constInfinityNegative = newScriptVarInfinity(this, InfinityNegative), SCRIPTVARLINK_ENUMERABLE);
+	var = addNative("function Number()", this, &CTinyJS::native_Number, 0, SCRIPTVARLINK_CONSTANT);
+	var->addChild("NaN", constNaN = newScriptVarNaN(this), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MAX_VALUE", constInfinityPositive = ::newScriptVar(this, numeric_limits<double>::max()), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MIN_VALUE", constInfinityPositive = ::newScriptVar(this, numeric_limits<double>::min()), SCRIPTVARLINK_CONSTANT);
+	var->addChild("POSITIVE_INFINITY", constInfinityPositive = newScriptVarInfinity(this, InfinityPositive), SCRIPTVARLINK_CONSTANT);
+	var->addChild("NEGATIVE_INFINITY", constInfinityNegative = newScriptVarInfinity(this, InfinityNegative), SCRIPTVARLINK_CONSTANT);
 	numberPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	numberPrototype->addChild("valueOf", objectPrototype_valueOf);
 	numberPrototype->addChild("toString", objectPrototype_toString);
@@ -3440,7 +3444,7 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Boolean
-	var = addNative("function Boolean()", this, &CTinyJS::native_Boolean);
+	var = addNative("function Boolean()", this, &CTinyJS::native_Boolean, 0, SCRIPTVARLINK_CONSTANT);
 	booleanPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	booleanPrototype->addChild("valueOf", objectPrototype_valueOf);
 	booleanPrototype->addChild("toString", objectPrototype_toString);
@@ -3449,7 +3453,7 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Function
-	var = addNative("function Function(params, body)", this, &CTinyJS::native_Function); 
+	var = addNative("function Function(params, body)", this, &CTinyJS::native_Function, 0, SCRIPTVARLINK_CONSTANT); 
 	var->addChildOrReplace(TINYJS_PROTOTYPE_CLASS, functionPrototype);
 	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_prototype_call); 
 	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_prototype_apply); 
@@ -3459,7 +3463,7 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Error
-	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error); 
+	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[Error] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[Error]->addChild("message", newScriptVar(""));
 	errorPrototypes[Error]->addChild("name", newScriptVar("Error"));
@@ -3467,38 +3471,38 @@ CTinyJS::CTinyJS() {
 	errorPrototypes[Error]->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
 	errorPrototypes[Error]->addChild("column", newScriptVar(-1));			// -1 means not viable
 
-	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError); 
+	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[EvalError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[EvalError]->addChildOrReplace(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[EvalError]->addChild("name", newScriptVar("EvalError"));
 
-	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError); 
+	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[RangeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[RangeError]->addChildOrReplace(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[RangeError]->addChild("name", newScriptVar("RangeError"));
 
-	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError); 
+	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[ReferenceError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[ReferenceError]->addChildOrReplace(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[ReferenceError]->addChild("name", newScriptVar("ReferenceError"));
 
-	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError); 
+	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[SyntaxError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[SyntaxError]->addChildOrReplace(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[SyntaxError]->addChild("name", newScriptVar("SyntaxError"));
 
-	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError); 
+	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError, 0, SCRIPTVARLINK_CONSTANT); 
 	errorPrototypes[TypeError] = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	errorPrototypes[TypeError]->addChildOrReplace(TINYJS___PROTO___VAR, errorPrototypes[Error], SCRIPTVARLINK_WRITABLE);
 	errorPrototypes[TypeError]->addChild("name", newScriptVar("TypeError"));
 
 	//////////////////////////////////////////////////////////////////////////
 	// add global built-in vars & constants
-	root->addChild("undefined", constUndefined = newScriptVarUndefined(this), SCRIPTVARLINK_ENUMERABLE);
+	root->addChild("undefined", constUndefined = newScriptVarUndefined(this), SCRIPTVARLINK_CONSTANT);
 	pseudo_refered.push_back(&constUndefined);
 	constNull	= newScriptVarNull(this);	pseudo_refered.push_back(&constNull);
-	root->addChild("NaN", constNaN, SCRIPTVARLINK_ENUMERABLE);
-	root->addChild("Infinity", constInfinityPositive, SCRIPTVARLINK_ENUMERABLE);
+	root->addChild("NaN", constNaN, SCRIPTVARLINK_CONSTANT);
+	root->addChild("Infinity", constInfinityPositive, SCRIPTVARLINK_CONSTANT);
 	constFalse	= newScriptVarBool(this, false);	pseudo_refered.push_back(&constFalse);
 	constTrue	= newScriptVarBool(this, true);	pseudo_refered.push_back(&constTrue);
 	constZero	= newScriptVar(0);					pseudo_refered.push_back(&constZero);
@@ -4346,7 +4350,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(bool &execute) {
 		a = execute_unary(execute); // no getter - delete can remove the accessor
 		if (execute) {
 			// !!! no right-hand-check by delete
-			if(a->isOwned() && a->isDeletable()) {
+			if(a->isOwned() && a->isConfigurable()) {
 				a->getOwner()->removeLink(a);	// removes the link from owner
 				a(constScriptVar(true));
 			}

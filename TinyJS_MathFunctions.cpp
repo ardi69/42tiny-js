@@ -38,7 +38,7 @@
  * SOFTWARE.
  */
 
-#include <math.h>
+#include <cmath>
 #include <cstdlib>
 #include <sstream>
 #include <ctime>
@@ -352,53 +352,53 @@ static void scMathSqrt(const CFunctionsScopePtr &c, void *userdata) {
 void registerMathFunctions(CTinyJS *tinyJS) {}
 extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 
-	 CScriptVarPtr Math = tinyJS->getRoot()->addChild("Math", tinyJS->newScriptVar(Object));
+	 CScriptVarPtr Math = tinyJS->getRoot()->addChild("Math", tinyJS->newScriptVar(Object), SCRIPTVARLINK_CONSTANT);
 
 	 // --- Math and Trigonometry functions ---
-	 tinyJS->addNative("function Math.abs(a)", scMathAbs, 0);
-	 tinyJS->addNative("function Math.round(a)", scMathRound, 0);
-	 tinyJS->addNative("function Math.ceil(a)", scMathCeil, 0);
-	 tinyJS->addNative("function Math.floor(a)", scMathFloor, 0);
-	 tinyJS->addNative("function Math.min()", scMathMin, 0);
-	 tinyJS->addNative("function Math.max()", scMathMax, 0);
-	 tinyJS->addNative("function Math.range(x,a,b)", scMathRange, 0);
-	 tinyJS->addNative("function Math.sign(a)", scMathSign, 0);
-	 tinyJS->addNative("function Math.random(a)", scMathRandom, 0);
+	 tinyJS->addNative("function Math.abs(a)", scMathAbs, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.round(a)", scMathRound, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.ceil(a)", scMathCeil, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.floor(a)", scMathFloor, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.min()", scMathMin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.max()", scMathMax, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.range(x,a,b)", scMathRange, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.sign(a)", scMathSign, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.random(a)", scMathRandom, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 
 
 // atan2, ceil, floor, random, round, 
 
-	 Math->addChild("LN2", tinyJS->newScriptVar(k_LN2), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("LN10", tinyJS->newScriptVar(k_LN10), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("LOG2E", tinyJS->newScriptVar(k_LOG2E), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("LOG10E", tinyJS->newScriptVar(k_LOG10E), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("SQRT1_2", tinyJS->newScriptVar(k_SQRT1_2), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("SQRT2", tinyJS->newScriptVar(k_SQRT2), SCRIPTVARLINK_ENUMERABLE);
-	 Math->addChild("PI", tinyJS->newScriptVar(k_PI), SCRIPTVARLINK_ENUMERABLE);
+	 Math->addChild("LN2", tinyJS->newScriptVar(k_LN2), SCRIPTVARLINK_READONLY);
+	 Math->addChild("LN10", tinyJS->newScriptVar(k_LN10), SCRIPTVARLINK_READONLY);
+	 Math->addChild("LOG2E", tinyJS->newScriptVar(k_LOG2E), SCRIPTVARLINK_READONLY);
+	 Math->addChild("LOG10E", tinyJS->newScriptVar(k_LOG10E), SCRIPTVARLINK_READONLY);
+	 Math->addChild("SQRT1_2", tinyJS->newScriptVar(k_SQRT1_2), SCRIPTVARLINK_READONLY);
+	 Math->addChild("SQRT2", tinyJS->newScriptVar(k_SQRT2), SCRIPTVARLINK_READONLY);
+	 Math->addChild("PI", tinyJS->newScriptVar(k_PI), SCRIPTVARLINK_READONLY);
 //    tinyJS->addNative("function Math.PI()", scMathPI, 0);
-	 tinyJS->addNative("function Math.toDegrees(a)", scMathToDegrees, 0);
-	 tinyJS->addNative("function Math.toRadians(a)", scMathToRadians, 0);
-	 tinyJS->addNative("function Math.sin(a)", scMathSin, 0);
-	 tinyJS->addNative("function Math.asin(a)", scMathASin, 0);
-	 tinyJS->addNative("function Math.cos(a)", scMathCos, 0);
-	 tinyJS->addNative("function Math.acos(a)", scMathACos, 0);
-	 tinyJS->addNative("function Math.tan(a)", scMathTan, 0);
-	 tinyJS->addNative("function Math.atan(a)", scMathATan, 0);
-	 tinyJS->addNative("function Math.sinh(a)", scMathSinh, 0);
-	 tinyJS->addNative("function Math.asinh(a)", scMathASinh, 0);
-	 tinyJS->addNative("function Math.cosh(a)", scMathCosh, 0);
-	 tinyJS->addNative("function Math.acosh(a)", scMathACosh, 0);
-	 tinyJS->addNative("function Math.tanh(a)", scMathTanh, 0);
-	 tinyJS->addNative("function Math.atanh(a)", scMathATanh, 0);
+	 tinyJS->addNative("function Math.toDegrees(a)", scMathToDegrees, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.toRadians(a)", scMathToRadians, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.sin(a)", scMathSin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.asin(a)", scMathASin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.cos(a)", scMathCos, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.acos(a)", scMathACos, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.tan(a)", scMathTan, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.atan(a)", scMathATan, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.sinh(a)", scMathSinh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.asinh(a)", scMathASinh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.cosh(a)", scMathCosh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.acosh(a)", scMathACosh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.tanh(a)", scMathTanh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.atanh(a)", scMathATanh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 		 
-	 Math->addChild("E", tinyJS->newScriptVar(k_E), SCRIPTVARLINK_ENUMERABLE);
-//	 tinyJS->addNative("function Math.E()", scMathE, 0);
-	 tinyJS->addNative("function Math.log(a)", scMathLog, 0);
-	 tinyJS->addNative("function Math.log10(a)", scMathLog10, 0);
-	 tinyJS->addNative("function Math.exp(a)", scMathExp, 0);
-	 tinyJS->addNative("function Math.pow(a,b)", scMathPow, 0);
+	 Math->addChild("E", tinyJS->newScriptVar(k_E), SCRIPTVARLINK_READONLY);
+//	 tinyJS->addNative("function Math.E()", scMathE, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.log(a)", scMathLog, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.log10(a)", scMathLog10, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.exp(a)", scMathExp, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.pow(a,b)", scMathPow, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 
-	 tinyJS->addNative("function Math.sqr(a)", scMathSqr, 0);
-	 tinyJS->addNative("function Math.sqrt(a)", scMathSqrt, 0);    
+	 tinyJS->addNative("function Math.sqr(a)", scMathSqr, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.sqrt(a)", scMathSqrt, 0, SCRIPTVARLINK_BUILDINDEFAULT);    
   
 }

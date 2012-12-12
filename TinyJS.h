@@ -185,12 +185,14 @@ enum LEX_TYPES {
 enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_OWNED				= 1<<0,
 	SCRIPTVARLINK_WRITABLE			= 1<<1,
-	SCRIPTVARLINK_DELETABLE			= 1<<2,
+	SCRIPTVARLINK_CONFIGURABLE		= 1<<2,
 	SCRIPTVARLINK_ENUMERABLE		= 1<<3,
-	SCRIPTVARLINK_HIDDEN				= 1<<4,
-	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_DELETABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_VARDEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_ENUMERABLE,
-	SCRIPTVARLINK_NATIVEDEFAULT	= SCRIPTVARLINK_WRITABLE,
+	SCRIPTVARLINK_BUILDINDEFAULT	= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE,
+	SCRIPTVARLINK_READONLY			= SCRIPTVARLINK_CONFIGURABLE,
+	SCRIPTVARLINK_READONLY_ENUM	= SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_CONSTANT			= 0,
 };
 enum RUNTIME_FLAGS {
 	RUNTIME_BREAK				= 1<<0,
@@ -748,13 +750,11 @@ public:
 	bool isOwner() const { return owner!=0; }
 
 	bool isWritable() const { return (flags & SCRIPTVARLINK_WRITABLE) != 0; }
-	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_DELETABLE); }
-	bool isDeletable() const { return (flags & SCRIPTVARLINK_DELETABLE) != 0; }
-	void setDeletable(bool On) { On ? (flags |= SCRIPTVARLINK_DELETABLE) : (flags &= ~SCRIPTVARLINK_DELETABLE); }
+	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_CONFIGURABLE); }
+	bool isConfigurable() const { return (flags & SCRIPTVARLINK_CONFIGURABLE) != 0; }
+	void setConfigurable(bool On) { On ? (flags |= SCRIPTVARLINK_CONFIGURABLE) : (flags &= ~SCRIPTVARLINK_CONFIGURABLE); }
 	bool isEnumerable() const { return (flags & SCRIPTVARLINK_ENUMERABLE) != 0; }
 	void setEnumerable(bool On) { On ? (flags |= SCRIPTVARLINK_ENUMERABLE) : (flags &= ~SCRIPTVARLINK_ENUMERABLE); }
-	bool isHidden() const { return (flags & SCRIPTVARLINK_HIDDEN) != 0; }
-	void setHidden(bool On) { On ? (flags |= SCRIPTVARLINK_HIDDEN) : (flags &= ~SCRIPTVARLINK_HIDDEN); }
 
 	CScriptVar *getOwner() { return owner; };
 	void setOwner(CScriptVar *Owner) { owner = Owner; }
@@ -1589,9 +1589,9 @@ public:
 		\endcode
 	*/
 
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_NATIVEDEFAULT);
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT);
 	template<class C>
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_NATIVEDEFAULT)
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT)
 	{
 		return addNative(funcDesc, ::newScriptVar<C>(this, class_ptr, class_fnc, userdata), LinkFlags);
 	}
