@@ -799,11 +799,15 @@ static bool tokens2str_sorted = tokens2str_sort();
 
 CScriptToken::CScriptToken(CScriptLex *l, int Match, int Alternate) : line(l->currentLine()), column(l->currentColumn()), token(l->tk), intData(0)
 {
-	if(token == LEX_INT)
-		intData = strtol(l->tkStr.c_str(),0,0);
-	else if(LEX_TOKEN_DATA_FLOAT(token))
-		floatData = new double(strtod(l->tkStr.c_str(),0));
-	else if(LEX_TOKEN_DATA_STRING(token))
+	if(token == LEX_INT || LEX_TOKEN_DATA_FLOAT(token)) {
+		CNumber number(l->tkStr);
+		if(number.isInfinity())
+			token=LEX_ID, (tokenData=new CScriptTokenDataString("Infinity"))->ref();
+		else if(number.isInt32())
+			token=LEX_INT, intData=number.toInt32();
+		else
+			token=LEX_FLOAT, floatData=new double(number.toDouble());
+	} else if(LEX_TOKEN_DATA_STRING(token))
 		(tokenData = new CScriptTokenDataString(l->tkStr))->ref();
 	else if(LEX_TOKEN_DATA_FUNCTION(token))
 		(tokenData = new CScriptTokenDataFnc)->ref();
