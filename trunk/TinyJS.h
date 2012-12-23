@@ -248,7 +248,8 @@ typedef STRING_SET_t::iterator STRING_SET_it;
 /// convert the given string into a quoted string suitable for javascript
 std::string getJSString(const std::string &str);
 /// convert the given int into a string
-std::string int2string(int intData);
+std::string int2string(int32_t intData);
+std::string int2string(uint32_t intData);
 /// convert the given double into a string
 std::string float2string(const double &floatData);
 
@@ -622,7 +623,7 @@ public:
 	virtual bool toBoolean();
 	std::string toString(int32_t radix=0); ///< shortcut for this->toPrimitive_hintString()->toCString();
 	std::string toString(bool &execute, int32_t radix=0); ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
-//#define WARN_DEPRECATED
+#define WARN_DEPRECATED
 #ifdef WARN_DEPRECATED
 	int DEPRECATED("getInt() is deprecated use toNumber().toInt32 instead") getInt();
 	bool DEPRECATED("getBool() is deprecated use toBoolean() instead") getBool(); 
@@ -671,9 +672,9 @@ public:
 	void removeAllChildren();
 
 	/// ARRAY
-	CScriptVarPtr getArrayIndex(int idx); ///< The the value at an array index
-	void setArrayIndex(int idx, const CScriptVarPtr &value); ///< Set the value at an array index
-	int getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
+	CScriptVarPtr getArrayIndex(uint32_t idx); ///< The the value at an array index
+	void setArrayIndex(uint32_t idx, const CScriptVarPtr &value); ///< Set the value at an array index
+	uint32_t getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
 	
 	//////////////////////////////////////////////////////////////////////////
 	int getChildren() { return Childs.size(); } ///< Get the number of children
@@ -771,7 +772,6 @@ public:
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLink
 //////////////////////////////////////////////////////////////////////////
-
 class CScriptVarLink : public fixed_size_object<CScriptVarLink>
 {
 private: // prevent gloabal creating
@@ -802,6 +802,30 @@ public:
 
 	CScriptVar *getOwner() { return owner; };
 	void setOwner(CScriptVar *Owner) { owner = Owner; }
+
+	/// forward to ScriptVar
+
+	CScriptVarPrimitivePtr toPrimitive() { ///< by default call getDefaultValue_hintNumber by a Date-object calls getDefaultValue_hintString
+		return var->toPrimitive(); } 	
+	CScriptVarPrimitivePtr toPrimitive(bool &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+		return var->toPrimitive(execute); } 
+	CScriptVarPrimitivePtr toPrimitive_hintString(int32_t radix=0) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+		return var->toPrimitive_hintString(radix); } 
+	CScriptVarPrimitivePtr toPrimitive_hintString(bool &execute, int32_t radix=0) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+		return var->toPrimitive_hintString(execute, radix); } 
+	CScriptVarPrimitivePtr toPrimitive_hintNumber() { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+		return var->toPrimitive_hintNumber(); } 
+	CScriptVarPrimitivePtr toPrimitive_hintNumber(bool &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+		return var->toPrimitive_hintNumber(execute); } 
+
+	CNumber toNumber(); // { return var->toNumber(); }
+	CNumber toNumber(bool &execute); // { return var->toNumber(execute); }
+	bool toBoolean() { return var->toBoolean(); }
+	std::string toString(int32_t radix=0) { ///< shortcut for this->toPrimitive_hintString()->toCString();
+		return var->toString(radix); }
+	std::string toString(bool &execute, int32_t radix=0) { ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
+		return var->toString(execute, radix); }
+	CScriptVarPtr toObject() { return var->toObject(); };
 
 private:
 	std::string name;
@@ -1088,6 +1112,11 @@ public:
 	CNumber div(const CNumber &Value) const;
 	CNumber modulo(const CNumber &Value) const;
 
+	CNumber round() const;
+	CNumber floor() const;
+	CNumber ceil() const;
+	CNumber abs() const;
+
 	CNumber shift(const CNumber &Value, bool right) const;
 	CNumber ushift(const CNumber &Value, bool right=true) const;
 
@@ -1110,7 +1139,7 @@ public:
 
 	int32_t		toInt32() const { return cast<int32_t>(); }
 	uint32_t		toUInt32() const { return cast<uint32_t>(); }
-	double		toDouble() const { double d= cast<double>(); return d;}
+	double		toDouble() const;
 	bool			toBoolean() const { return !isZero() && type!=tNaN; }
 	std::string	toString(uint32_t Radix=10) const;
 private:
@@ -1152,6 +1181,10 @@ inline bool operator<=(const CNumber &lhs, const CNumber &rhs) { return rhs.less
 inline bool operator>(const CNumber &lhs, const CNumber &rhs) { return rhs.less(lhs)>0; }
 inline bool operator>=(const CNumber &lhs, const CNumber &rhs) { return lhs.less(rhs)<0; }
 
+inline CNumber round(const CNumber &lhs) { return lhs.round(); }
+inline CNumber floor(const CNumber &lhs) { return lhs.floor(); }
+inline CNumber ceil(const CNumber &lhs) { return lhs.ceil(); }
+inline CNumber abs(const CNumber &lhs) { return lhs.abs(); }
 
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarNumber
@@ -1328,8 +1361,6 @@ public:
 	virtual ~CScriptVarRegExp();
 	virtual CScriptVarPtr clone();
 	virtual bool isRegExp(); // { return true; }
-	virtual std::string getString(); // { return regexp; }
-//	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); // { return getJSString(regexp); }
 	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
 
 	CScriptVarPtr exec(const std::string &Input, bool Test=false);
@@ -1821,15 +1852,12 @@ private:
 	void native_Array(const CFunctionsScopePtr &c, void *data);
 
 	void native_String(const CFunctionsScopePtr &c, void *data);
-	void native_String__constructor__(const CFunctionsScopePtr &c, void *data);
 
 	void native_RegExp(const CFunctionsScopePtr &c, void *data);
 
 	void native_Number(const CFunctionsScopePtr &c, void *data);
-	void native_Number__constructor__(const CFunctionsScopePtr &c, void *data);
 
 	void native_Boolean(const CFunctionsScopePtr &c, void *data);
-	void native_Boolean__constructor__(const CFunctionsScopePtr &c, void *data);
 
 	void native_Function(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_call(const CFunctionsScopePtr &c, void *data);
@@ -1870,6 +1898,8 @@ public:
 template<typename T>
 inline const CScriptVarPtr &CScriptVar::constScriptVar(T t) { return context->constScriptVar(t); }
 //////////////////////////////////////////////////////////////////////////
+inline CNumber CScriptVarLink::toNumber() { return var->toNumber(); }
+inline CNumber CScriptVarLink::toNumber(bool &execute) { return var->toNumber(execute); }
 
 #endif
 
