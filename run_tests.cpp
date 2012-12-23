@@ -228,7 +228,9 @@ public:
 	}
 	bool active;
 } end;
-
+void js_print(const CFunctionsScopePtr &v, void *) {
+	printf("> %s\n", v->getArgument("text")->toString().c_str());
+}
 bool run_test(const char *filename) {
   printf("TEST %s ", filename);
   struct stat results;
@@ -250,6 +252,8 @@ bool run_test(const char *filename) {
   fclose(file);
 
   CTinyJS s;
+  s.addNative("function print(text)", &js_print, 0);
+
 //  registerFunctions(&s);
 //  registerMathFunctions(&s);
 //  registerStringFunctions(&s);
@@ -263,7 +267,7 @@ bool run_test(const char *filename) {
     printf("%s\n", e->toString().c_str());
 	delete e;
   }
-  bool pass = s.getRoot()->findChild("result")->getVarPtr()->getBool();
+  bool pass = s.getRoot()->findChild("result")->toBoolean();
 #ifdef WITH_TIME_LOGGER
   TimeLoggerLogprint(Test);
 #endif

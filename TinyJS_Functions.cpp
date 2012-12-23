@@ -64,7 +64,7 @@ static void scObjectClone(const CFunctionsScopePtr &c, void *) {
 }
 
 static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("str")->getString();
+	string str = c->getArgument("str")->toString();
 
 	int val = 0;
 	if (str.length()==1)
@@ -87,7 +87,7 @@ static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr equal = c->constScriptVar(Undefined);
 	for (int i=0;i<l;i++) {
 		equal = obj->mathsOp(arr->getArrayIndex(i), LEX_EQUAL);
-		if(equal->getBool()) {
+		if(equal->toBoolean()) {
 			c->setReturnVar(c->constScriptVar(true));
 			return;
 		}
@@ -105,7 +105,7 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr equal = c->constScriptVar(Undefined);
 	for (i=0;i<l;i++) {
 		equal = obj->mathsOp(arr->getArrayIndex(i), LEX_EQUAL);
-		if(equal->getBool()) {
+		if(equal->toBoolean()) {
 			removedIndices.push_back(i);
 		}
 	}
@@ -131,14 +131,14 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 }
 
 static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
-	string sep = c->getArgument("separator")->getString();
+	string sep = c->getArgument("separator")->toString();
 	CScriptVarPtr arr = c->getArgument("this");
 
 	ostringstream sstr;
 	int l = arr->getArrayLength();
 	for (int i=0;i<l;i++) {
 		if (i>0) sstr << sep;
-		sstr << arr->getArrayIndex(i)->getString();
+		sstr << arr->getArrayIndex(i)->toString();
 	}
 
 	c->setReturnVar(c->newScriptVar(sstr.str()));

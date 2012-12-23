@@ -47,7 +47,7 @@
 //#include "TinyJS_MathFunctions.h"
 #include <assert.h>
 #include <stdio.h>
-	
+
 #ifdef _DEBUG
 #	ifndef _MSC_VER
 #		define DEBUG_MEMORY 1
@@ -60,16 +60,36 @@
 const char *code = "function myfunc(x, y) { return x + y; } var a = myfunc(1,2); print(a);";
 
 void js_print(const CFunctionsScopePtr &v, void *) {
-	printf("> %s\n", v->getArgument("text")->getString().c_str());
+	printf("> %s\n", v->getArgument("text")->toString().c_str());
 }
 
 void js_dump(const CFunctionsScopePtr &v, void *) {
 	v->getContext()->getRoot()->trace(">  ");
 }
 
+class myThread : public CScriptThread {
+public:
+	int ThreadFnc() {
+		printf("Thread started\n");
+		while(isActiv()) {
+			printf("Thread fnc\n");
+		}
+		printf("Thread finish\n");
+		return 55;
+	}
+};
+#include <windows.h>
 
 int main(int , char **)
 {
+/*
+	CNumber(-0.0);
+	CNumber(CNumber(NaN).toDouble());
+	myThread mT;
+	mT.Run();
+	Sleep(20);
+	printf("retvar %d\n", mT.Stop());
+*/
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 //	setlocale( LC_ALL, ".858" );
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));

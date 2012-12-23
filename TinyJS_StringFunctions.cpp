@@ -44,9 +44,20 @@
 using namespace std;
 // ----------------------------------------------- Actual Functions
 
+#define CheckObjectCoercible(var) do { \
+		if(var->isUndefined() || var->isNull())\
+			c->throwError(TypeError, "can't convert undefined to object");\
+	}while(0) 
+
+static string this2string(const CFunctionsScopePtr &c) {
+	CScriptVarPtr This = c->getArgument("this");
+	CheckObjectCoercible(This);
+	return This->toString();
+}
+
 static void scStringCharAt(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
-	int p = c->getArgument("pos")->getInt();
+	string str = this2string(c);
+	int p = c->getArgument("pos")->toNumber().toInt32();
 	if (p>=0 && p<(int)str.length())
 		c->setReturnVar(c->newScriptVar(str.substr(p, 1)));
 	else
@@ -54,48 +65,55 @@ static void scStringCharAt(const CFunctionsScopePtr &c, void *) {
 }
 
 static void scStringCharCodeAt(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
-	int p = c->getArgument("pos")->getInt();
+	string str = this2string(c);
+	int p = c->getArgument("pos")->toNumber().toInt32();
 	if (p>=0 && p<(int)str.length())
 		c->setReturnVar(c->newScriptVar((unsigned char)str.at(p)));
 	else
-		c->setReturnVar(c->newScriptVar(0));
+		c->setReturnVar(c->constScriptVar(NaN));
 }
 
 static void scStringConcat(const CFunctionsScopePtr &c, void *userdata) {
 	int length = c->getArgumentsLength();
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	for(int i=(int)userdata; i<length; i++)
-		str.append(c->getArgument(i)->getString());
+		str.append(c->getArgument(i)->toString());
 	c->setReturnVar(c->newScriptVar(str));
 }
 
 static void scStringIndexOf(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
-	string search = c->getArgument("search")->getString();
-	size_t p = (userdata==0) ? str.find(search) : str.rfind(search);
+	string str = this2string(c);
+	string search = c->getArgument("search")->toString();
+	CNumber pos_n = c->getArgument("pos")->toNumber();
+	string::size_type pos;
+	pos = (userdata) ? string::npos : 0;
+	if(pos_n.sign()<0) pos = 0;
+	else if(pos_n.isInfinity()) pos = string::npos;
+	else if(pos_n.isFinite()) pos = pos_n.toInt32();
+	string::size_type p = (userdata==0) ? str.find(search) : str.rfind(search);
 	int val = (p==string::npos) ? -1 : p;
 	c->setReturnVar(c->newScriptVar(val));
 }
 
 static void scStringLocaleCompare(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
-	string compareString = c->getArgument("compareString")->getString();
+	string str = this2string(c);
+	string compareString = c->getArgument("compareString")->toString();
 	int val = 0;
 	if(str<compareString) val = -1;
 	else if(str>compareString) val = 1;
 	c->setReturnVar(c->newScriptVar(val));
 }
+
 static void scStringQuote(const CFunctionsScopePtr &c, void *userdata) {
-	c->setReturnVar(c->newScriptVar(getJSString(c->getArgument("this")->getString())));
+	string str = this2string(c);
+	c->setReturnVar(c->newScriptVar(getJSString(str)));
 }
 
 #ifndef NO_REGEXP
 // helper-function for replace search
-static bool regex_search(const string &str, const string::const_iterator &search_begin, const string &substr, bool ignoreCase, bool sticky, string::const_iterator &match_begin, string::const_iterator &match_end) {
+static bool regex_search(const string &str, const string::const_iterator &search_begin, const string &substr, bool ignoreCase, bool sticky, string::const_iterator &match_begin, string::const_iterator &match_end, smatch &match) {
 	regex::flag_type flags = regex_constants::ECMAScript;
 	if(ignoreCase) flags |= regex_constants::icase;
-	smatch match;
 	regex_constants::match_flag_type mflag = sticky?regex_constants::match_continuous:regex_constants::format_default;
 	if(str.cbegin() != search_begin) mflag |= regex_constants::match_prev_avail;
 	if(regex_search(search_begin, str.cend(), match, regex(substr, flags), mflag)) {
@@ -104,6 +122,10 @@ static bool regex_search(const string &str, const string::const_iterator &search
 		return true;
 	}
 	return false;
+}
+static bool regex_search(const string &str, const string::const_iterator &search_begin, const string &substr, bool ignoreCase, bool sticky, string::const_iterator &match_begin, string::const_iterator &match_end) {
+	smatch match;
+	return regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end, match);
 }
 #endif /* NO_REGEXP */
 
@@ -139,7 +161,7 @@ static bool string_search(const string &str, const string::const_iterator &searc
 // Parameter: bool & ignoreCase
 // Parameter: bool & sticky
 //************************************
-static CScriptVarPtr getRegExpData(const CFunctionsScopePtr &c, const string &regexp, bool noUndefined, string &flags, string &substr, bool &global, bool &ignoreCase, bool &sticky) {
+static CScriptVarPtr getRegExpData(const CFunctionsScopePtr &c, const string &regexp, bool noUndefined, const char *flags_argument, string &substr, bool &global, bool &ignoreCase, bool &sticky) {
 	CScriptVarPtr regexpVar = c->getArgument(regexp);
 	if(regexpVar->isRegExp()) {
 #ifndef NO_REGEXP
@@ -152,10 +174,10 @@ static CScriptVarPtr getRegExpData(const CFunctionsScopePtr &c, const string &re
 #endif /* NO_REGEXP */
 	} else {
 		substr.clear();
-		if(!noUndefined || !regexpVar->isUndefined()) substr = regexpVar->getString();
-		CScriptVarPtr flagVar = c->getArgument(flags);
-		if(!flagVar->isUndefined()) {
-			flags = flagVar->getString();
+		if(!noUndefined || !regexpVar->isUndefined()) substr = regexpVar->toString();
+		CScriptVarPtr flagVar;
+		if(flags_argument && (flagVar = c->getArgument(flags_argument)) && !flagVar->isUndefined()) {
+			string flags = flagVar->toString();
 			string::size_type pos = flags.find_first_not_of("gimy");
 			if(pos != string::npos) {
 				c->throwError(SyntaxError, string("invalid regular expression flag ")+flags[pos]);
@@ -170,11 +192,11 @@ static CScriptVarPtr getRegExpData(const CFunctionsScopePtr &c, const string &re
 }
 
 static void scStringReplace(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString(), ret_str;
+	string str = this2string(c), ret_str;
 	CScriptVarPtr newsubstrVar = c->getArgument("newsubstr");
-	string flags="flags", substr;
+	string substr;
 	bool global, ignoreCase, sticky;
-	bool isRegExp = getRegExpData(c, "substr", false, flags, substr, global, ignoreCase, sticky);
+	bool isRegExp = getRegExpData(c, "substr", false, "flags", substr, global, ignoreCase, sticky);
 	if(isRegExp && !newsubstrVar->isFunction()) {
 #ifndef NO_REGEXP
 		regex::flag_type flags = regex_constants::ECMAScript;
@@ -182,7 +204,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 		regex_constants::match_flag_type mflags = regex_constants::match_default;
 		if(!global) mflags |= regex_constants::format_first_only;
 		if(sticky) mflags |= regex_constants::match_continuous;
-		ret_str = regex_replace(str, regex(substr, flags), newsubstrVar->getString(), mflags);
+		ret_str = regex_replace(str, regex(substr, flags), newsubstrVar->toString(), mflags);
 #endif /* NO_REGEXP */
 	} else {
 		bool (*search)(const string &, const string::const_iterator &, const string &, bool, bool, string::const_iterator &, string::const_iterator &);
@@ -195,7 +217,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 		string newsubstr;
 		vector<CScriptVarPtr> arguments;
 		if(!newsubstrVar->isFunction()) 
-			newsubstr = newsubstrVar->getString();
+			newsubstr = newsubstrVar->toString();
 		global = global && substr.length();
 		string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
 		if(search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)) {
@@ -203,7 +225,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 				ret_str.append(search_begin, match_begin);
 				if(newsubstrVar->isFunction()) {
 					arguments.push_back(c->newScriptVar(string(match_begin, match_end)));
-					newsubstr = c->getContext()->callFunction(newsubstrVar, arguments, c)->getString();
+					newsubstr = c->getContext()->callFunction(newsubstrVar, arguments, c)->toString();
 					arguments.pop_back();
 				}
 				ret_str.append(newsubstr);
@@ -216,11 +238,11 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 }
 #ifndef NO_REGEXP
 static void scStringMatch(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 
 	string flags="flags", substr, newsubstr, match;
 	bool global, ignoreCase, sticky;
-	CScriptVarRegExpPtr RegExp = getRegExpData(c, "regexp", true, flags, substr, global, ignoreCase, sticky);
+	CScriptVarRegExpPtr RegExp = getRegExpData(c, "regexp", true, "flags", substr, global, ignoreCase, sticky);
 	if(!global) {
 		if(!RegExp)
 			RegExp = ::newScriptVar(c->getContext(), substr, flags);
@@ -259,11 +281,11 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 #endif /* NO_REGEXP */
 
 static void scStringSearch(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 
-	string flags="flags", substr;
+	string substr;
 	bool global, ignoreCase, sticky;
-	getRegExpData(c, "regexp", true, flags, substr, global, ignoreCase, sticky);
+	getRegExpData(c, "regexp", true, "flags", substr, global, ignoreCase, sticky);
 	string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
 #ifndef NO_REGEXP
 	try { 
@@ -277,14 +299,14 @@ static void scStringSearch(const CFunctionsScopePtr &c, void *userdata) {
 }
 
 static void scStringSlice(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	int length = c->getArgumentsLength()-((int)userdata & 1);
 	bool slice = ((int)userdata & 2) == 0;
-	int start = c->getArgument("start")->getInt();
+	int start = c->getArgument("start")->toNumber().toInt32();
 	int end = (int)str.size();
 	if(slice && start<0) start = str.size()+start;
 	if(length>1) {
-		end = c->getArgument("end")->getInt();
+		end = c->getArgument("end")->toNumber().toInt32();
 		if(slice && end<0) end = str.size()+end;
 	}
 	if(!slice && end < start) { end^=start; start^=end; end^=start; }
@@ -298,10 +320,15 @@ static void scStringSlice(const CFunctionsScopePtr &c, void *userdata) {
 }
 
 static void scStringSplit(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
+
+	string seperator;
+	bool global, ignoreCase, sticky;
+	CScriptVarRegExpPtr RegExp = getRegExpData(c, "separator", true, 0, seperator, global, ignoreCase, sticky);
+
 	CScriptVarPtr sep_var = c->getArgument("separator");
 	CScriptVarPtr limit_var = c->getArgument("limit");
-	int limit = limit_var->isUndefined() ? 0x7fffffff : limit_var->getInt();
+	int limit = limit_var->isUndefined() ? 0x7fffffff : limit_var->toNumber().toInt32();
 
 	CScriptVarPtr result(newScriptVar(c->getContext(), Array));
 	c->setReturnVar(result);
@@ -311,49 +338,71 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 		result->setArrayIndex(0, c->newScriptVar(str));
 		return;
 	}
-	string sep = sep_var->getString();
-	if(sep.size() == 0) {
-		for(int i=0; i<min((int)sep.size(), limit); ++i)
+	if(seperator.size() == 0) {
+		for(int i=0; i<min((int)seperator.size(), limit); ++i)
 			result->setArrayIndex(i, c->newScriptVar(str.substr(i,1)));
 		return;
 	}
 	int length = 0;
-	string::size_type pos = 0, last_pos=0;
-	do {
-		pos = str.find(sep, last_pos);
-		result->setArrayIndex(length++, c->newScriptVar(str.substr(last_pos ,pos-last_pos)));
-		if(length == limit || pos == string::npos) break;
-		last_pos = pos+sep.size();
-	} while (last_pos < str.size());
+	string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
+	smatch match;
+	bool found=true;
+	while(found) {
+		if(RegExp) {
+			try { 
+				found = regex_search(str, search_begin, seperator, ignoreCase, sticky, match_begin, match_end, match);
+			} catch(regex_error e) {
+				c->throwError(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
+			}
+		} else /* NO_REGEXP */
+			found = string_search(str, search_begin, seperator, ignoreCase, sticky, match_begin, match_end);
+		string f;
+		if(found) {
+			result->setArrayIndex(length++, c->newScriptVar(string(search_begin, match_begin)));
+			if(length>=limit) break;
+			for(uint32_t i=1; i<match.size(); i++) {
+				if(match[i].matched) 
+					result->setArrayIndex(length++, c->newScriptVar(string(match[i].first, match[i].second)));
+				else
+					result->setArrayIndex(length++, c->constScriptVar(Undefined));
+				if(length>=limit) break;
+			}
+			if(length>=limit) break;
+			search_begin = match_end;
+		} else {
+			result->setArrayIndex(length++, c->newScriptVar(string(search_begin,str.cend())));
+			if(length>=limit) break;
+		}
+	}
 }
 
 static void scStringSubstr(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	int length = c->getArgumentsLength()-(int)userdata;
-	int start = c->getArgument("start")->getInt();
+	int start = c->getArgument("start")->toNumber().toInt32();
 	if(start<0 || start>=(int)str.size()) 
 		c->setReturnVar(c->newScriptVar(""));
 	else if(length>1) {
-		int length = c->getArgument("length")->getInt();
+		int length = c->getArgument("length")->toNumber().toInt32();
 		c->setReturnVar(c->newScriptVar(str.substr(start, length)));
 	} else
 		c->setReturnVar(c->newScriptVar(str.substr(start)));
 }
 
 static void scStringToLowerCase(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	transform(str.begin(), str.end(), str.begin(), ::tolower);
 	c->setReturnVar(c->newScriptVar(str));
 }
 
 static void scStringToUpperCase(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	transform(str.begin(), str.end(), str.begin(), ::toupper);
 	c->setReturnVar(c->newScriptVar(str));
 }
 
 static void scStringTrim(const CFunctionsScopePtr &c, void *userdata) {
-	string str = c->getArgument("this")->getString();
+	string str = this2string(c);
 	string::size_type start = 0;
 	string::size_type end = string::npos;
 	if((((int)userdata) & 2) == 0) {
@@ -370,7 +419,7 @@ static void scStringTrim(const CFunctionsScopePtr &c, void *userdata) {
 
 
 static void scCharToInt(const CFunctionsScopePtr &c, void *) {
-	string str = c->getArgument("ch")->getString();;
+	string str = c->getArgument("ch")->toString();;
 	int val = 0;
 	if (str.length()>0)
 		val = (int)str.c_str()[0];
@@ -380,7 +429,7 @@ static void scCharToInt(const CFunctionsScopePtr &c, void *) {
 
 static void scStringFromCharCode(const CFunctionsScopePtr &c, void *) {
 	char str[2];
-	str[0] = c->getArgument("char")->getInt();
+	str[0] = c->getArgument("char")->toNumber().toInt32();
 	str[1] = 0;
 	c->setReturnVar(c->newScriptVar(str));
 }
@@ -394,14 +443,14 @@ static void scStringFromCharCode(const CFunctionsScopePtr &c, void *) {
 static void scRegExpTest(const CFunctionsScopePtr &c, void *) {
 	CScriptVarRegExpPtr This = c->getArgument("this");
 	if(This)
-		c->setReturnVar(This->exec(c->getArgument("str")->getString(), true));
+		c->setReturnVar(This->exec(c->getArgument("str")->toString(), true));
 	else
 		c->throwError(TypeError, "Object is not a RegExp-Object in test(str)");
 }
 static void scRegExpExec(const CFunctionsScopePtr &c, void *) {
 	CScriptVarRegExpPtr This = c->getArgument("this");
 	if(This)
-		c->setReturnVar(This->exec(c->getArgument("str")->getString()));
+		c->setReturnVar(This->exec(c->getArgument("str")->toString()));
 	else
 		c->throwError(TypeError, "Object is not a RegExp-Object in exec(str)");
 }
@@ -421,11 +470,11 @@ extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function String.prototype.concat()", scStringConcat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function String.concat(this)", scStringConcat, (void*)1, SCRIPTVARLINK_BUILDINDEFAULT);
 	// indexOf
-	tinyJS->addNative("function String.prototype.indexOf(search)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
-	tinyJS->addNative("function String.indexOf(this,search)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
+	tinyJS->addNative("function String.prototype.indexOf(search,pos)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
+	tinyJS->addNative("function String.indexOf(this,search,pos)", scStringIndexOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // find the position of a string in a string, -1 if not
 	// lastIndexOf
-	tinyJS->addNative("function String.prototype.lastIndexOf(search)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
-	tinyJS->addNative("function String.lastIndexOf(this,search)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.prototype.lastIndexOf(search,pos)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
+	tinyJS->addNative("function String.lastIndexOf(this,search,pos)", scStringIndexOf, (void*)-1, SCRIPTVARLINK_BUILDINDEFAULT); // find the last position of a string in a string, -1 if not
 	// localeCompare
 	tinyJS->addNative("function String.prototype.localeCompare(compareString)", scStringLocaleCompare, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function String.localeCompare(this,compareString)", scStringLocaleCompare, 0, SCRIPTVARLINK_BUILDINDEFAULT);
