@@ -2685,8 +2685,12 @@ declare_dummy_t(NaN);
 Infinity InfinityPositive(1);
 Infinity InfinityNegative(-1);
 #if 1
-static inline bool isNaN(volatile double Value) {
-	return !(Value==Value);
+static inline bool _isNaN(volatile double *Value1, volatile double *Value2) {
+	return !(*Value1==*Value2);
+}
+
+static inline bool isNaN(double Value) {
+	return _isNaN(&Value, &Value);
 }
 inline bool isNegZero(double d) {
 	double x=-0.0;
