@@ -78,14 +78,26 @@ namespace
 
 	 double acosh( const double &value )
 	 {
-		  double returned;
+		 double returned;
 
-		  if(value>0)
-		  returned = log(value + sqrt(value * value - 1));
-		  else
-		  returned = -log(-value + sqrt(value * value - 1));
+		 if(value>0)
+			 returned = log(value + sqrt(value * value - 1));
+		 else
+			 returned = -log(-value + sqrt(value * value - 1));
 
-		  return(returned);
+		 return(returned);
+	 }
+
+	 double atanh( double value )
+	 {
+		 bool neg = value<0;
+		 if(neg) value=-value;
+		 double value_x2 = 2.0*value;
+		 if(value>=0.5)
+			 value = log(1.0+value_x2/(1.0-value))/2.0;
+		 else
+			 value = log(1.0+value_x2+value_x2*value/(1.0-value))/2.0;
+		 return(neg ? -value : value);
 	 }
 }
 #endif
@@ -95,11 +107,8 @@ namespace
 #define RETURN_NAN_IS_NAN_OR_INFINITY(v) do{ if(v.isNaN() || v.isInfinity()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
 #define RETURN_INFINITY_IS_INFINITY(v) do{ if(v.isInfinity()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
 #define RETURN_ZERO_IS_ZERO(v) do{ if(v.isZero()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
-#define RETURN(a)	c->setReturnVar(c->newScriptVar(a))
+#define RETURN(a)	do{ c->setReturnVar(c->newScriptVar(a)); return; }while(0)
 #define RETURNconst(a)	c->setReturnVar(c->constScriptVar(a))
-#define RETURN_NAN()	c->setReturnVar(c->constScriptVar(NaN))
-
-#define GET_DOUBLE(v) v.toDouble()
 
 //Math.abs(x) - returns absolute of given value
 static void scMathAbs(const CFunctionsScopePtr &c, void *userdata) {
@@ -155,7 +164,7 @@ static void scMathRange(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
 	PARAMETER_TO_NUMBER(b,"b"); RETURN_NAN_IS_NAN(b);
 
-	if(a>b) RETURN_NAN();
+	if(a>b) RETURNconst(NaN);
 	if(x<a) RETURN(a);
 	if(x>b) RETURN(b);
 	RETURN(x);	
@@ -164,7 +173,7 @@ static void scMathRange(const CFunctionsScopePtr &c, void *userdata) {
 //Math.sign(a) - returns sign of given value (-1==negative,0=zero,1=positive)
 static void scMathSign(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
-	RETURN(a.sign());
+	RETURN(a.isZero() ? 0 : a.sign());
 }
 static void scMathRandom(const CFunctionsScopePtr &c, void *) {
 	static int inited=0;
@@ -172,7 +181,7 @@ static void scMathRandom(const CFunctionsScopePtr &c, void *) {
 		inited = 1;
 		srand((unsigned int)time(NULL));
 	}
-	RETURN((double)(rand()/RAND_MAX));
+	RETURN(double(rand())/RAND_MAX);
 }
 
 //Math.toDegrees(a) - returns degree value of a given angle in radians
@@ -196,7 +205,7 @@ static void scMathSin(const CFunctionsScopePtr &c, void *userdata) {
 //Math.asin(a) - returns trig. arcsine of given angle in radians
 static void scMathASin(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); RETURN_ZERO_IS_ZERO(a);
-	if(a>1 || a<-1) RETURN_NAN();
+	if(abs(a)>1) RETURNconst(NaN);
 	RETURN( asin(a.toDouble()) );
 }
 
@@ -210,8 +219,8 @@ static void scMathCos(const CFunctionsScopePtr &c, void *userdata) {
 //Math.acos(a) - returns trig. arccosine of given angle in radians
 static void scMathACos(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
-	if(a>1 || a<-1) RETURN_NAN();
-	if(a==1) RETURN(0);
+	if(abs(a)>1) RETURNconst(NaN);
+	else if(a==1) RETURN(0);
 	RETURN( acos(a.toDouble()) );
 }
 
@@ -229,80 +238,104 @@ static void scMathATan(const CFunctionsScopePtr &c, void *userdata) {
 	RETURN( atan(a.toDouble()) );
 }
 
-/*
 //Math.atan2(a,b) - returns trig. arctangent of given angle in radians
 static void scMathATan2(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a);
 	PARAMETER_TO_NUMBER(b,"b"); RETURN_NAN_IS_NAN(b);
-	if(a>0 && b==0) RETURN(k_PI/2.0);
-	int infinity=a.isInfinity();
-	if(infinity) RETURN(k_PI/(infinity*2));
+	int sign_a = a.sign();
+	int sign_b = b.sign();
+	if(a.isZero())
+		RETURN(sign_a>0 ? (sign_b>0 ? 0.0 : k_PI) : (sign_b>0 ? -0.0 : -k_PI));
+	else if(b.isZero())
+		RETURN((sign_a>0 ? k_PI : -k_PI)/2.0);
+	int infinity_a=a.isInfinity();
+	int infinity_b=b.isInfinity();
+	if(infinity_a) {
+		if(infinity_b>0) RETURN(k_PI/(infinity_a*4)); 
+		else if(infinity_b<0) RETURN(3.0*k_PI/(infinity_a*4));
+		else RETURN(k_PI/(infinity_a*2));
+	} else if(infinity_b>0)
+		RETURN(sign_a>0 ? 0.0 : -0.0);
+	else if(infinity_b<0)
+		RETURN(sign_a>0 ? k_PI : -k_PI);
 	RETURN( atan2(a.toDouble(), b.toDouble()) );
 }
-*/
+
 
 //Math.sinh(a) - returns trig. hyperbolic sine of given angle in radians
 static void scMathSinh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	RETURN_ZERO_IS_ZERO(a);
+	if(abs(a)>1) RETURNconst(NaN);
 	RETURN( sinh(a.toDouble()) );
 }
 
 //Math.asinh(a) - returns trig. hyperbolic arcsine of given angle in radians
 static void scMathASinh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	RETURN_INFINITY_IS_INFINITY(a);
+	RETURN_ZERO_IS_ZERO(a);
 	RETURN( asinh(a.toDouble()) );
 }
 
 //Math.cosh(a) - returns trig. hyperbolic cosine of given angle in radians
 static void scMathCosh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	if(a.isInfinity()) RETURNconst(InfinityPositive);
 	RETURN( cosh(a.toDouble()) );
 }
 
 //Math.acosh(a) - returns trig. hyperbolic arccosine of given angle in radians
 static void scMathACosh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	RETURN_INFINITY_IS_INFINITY(a);
+	if(abs(a)<1) RETURNconst(NaN);
 	RETURN( acosh(a.toDouble()) );
 }
 
 //Math.tanh(a) - returns trig. hyperbolic tangent of given angle in radians
 static void scMathTanh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	RETURN_ZERO_IS_ZERO(a);
+	if(a.isInfinity()) RETURN(a.sign());
 	RETURN( tanh(a.toDouble()) );
 }
 
-//Math.atan(a) - returns trig. hyperbolic arctangent of given angle in radians
+//Math.atanh(a) - returns trig. hyperbolic arctangent of given angle in radians
 static void scMathATanh(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN_OR_INFINITY(a); 
-	RETURN( atan(a.toDouble()) );
+	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
+	RETURN_ZERO_IS_ZERO(a);
+	CNumber abs_a = abs(a);
+	if(abs_a > 1) RETURNconst(NaN);
+	if(abs_a == 1) RETURNconst(Infinity(a.sign()));
+	RETURN( atanh(a.toDouble()) );
 }
 
 //Math.log(a) - returns natural logaritm (base E) of given value
 static void scMathLog(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
-	int a_i = a.isInfinity();
-	double a_d = a.toDouble();
-	if(a_i>0) { c->setReturnVar(c->constScriptVar(InfinityPositive)); return; }
-	else if(a_i<0 || a_d<0.0) RETURN_NAN();
-	RETURN( log( a_d ) );
+	if(a.isZero()) RETURNconst(InfinityNegative);
+	if(a.sign()<0) RETURNconst(NaN);
+	if(a.isInfinity()) RETURNconst(InfinityPositive);
+	RETURN( log( a.toDouble()) );
 }
 
 //Math.log10(a) - returns logaritm(base 10) of given value
 static void scMathLog10(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
-	int a_i = a.isInfinity();
-	double a_d = a.toDouble();
-	if(a_i>0) { c->setReturnVar(c->constScriptVar(InfinityPositive)); return; }
-	else if(a_i<0 || a_d<0.0) RETURN_NAN();
-	RETURN( log10( a_d ) );
+	if(a.isZero()) RETURNconst(InfinityNegative);
+	if(a.sign()<0) RETURNconst(NaN);
+	if(a.isInfinity()) RETURNconst(InfinityPositive);
+	RETURN( log10( a.toDouble()) );
 }
 
 //Math.exp(a) - returns e raised to the power of a given number
 static void scMathExp(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a);
+	if(a.isZero()) RETURN(1);
 	int a_i = a.isInfinity();
-	if(a_i>0) { c->setReturnVar(c->constScriptVar(InfinityPositive)); return; }
-	else if(a_i<0) { c->setReturnVar(c->newScriptVar(0)); return; }
+	if(a_i>0) RETURNconst(InfinityPositive);
+	else if(a_i<0) RETURN(0);
 	RETURN( exp(a.toDouble()) );
 }
 
@@ -312,61 +345,45 @@ static void scMathPow(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(b,"b"); RETURN_NAN_IS_NAN(b); 
 	if(b.isZero()) RETURN(1);
 	RETURN_NAN_IS_NAN(a);
+	if(b==1) RETURN(a);
 
 	int sign;
 	CNumber a_abs = abs(a);
 	if((sign = b.isInfinity())) {
-		if( (a_abs>1) ^ (sign<0) )	RETURN(b); else RETURN(0);
-	}
-	if((sign = a.isInfinity()) && !b.isZero()) {
+		if( a_abs==1 ) RETURNconst(NaN);
+		else if( (a_abs>1) ^ (sign<0) )	RETURN(b); else RETURN(0);
+	} else if((sign = a.isInfinity())) {
 		if(sign>0) {
 			if(b.sign()>0) RETURN(a); else RETURN(0);
 		} else {
-			bool b_is_odd_int = floor((b+1)/2)*2 == b+1;
+			bool b_is_odd_int = ((b+1)/2).isInteger();
 			if(b.sign()>0) RETURNconst(b_is_odd_int?InfinityNegative:InfinityPositive);
 			else RETURN(b_is_odd_int?CNumber(NegativeZero):CNumber(0));
 		}
-	}
-	if(a.isZero() && !b.isZero()) {
+	} else if(a.isZero()) {
 		if(a.isNegativeZero()) {
-			bool b_is_odd_int = floor((b+1)/2)*2 == b+1;
+			bool b_is_odd_int = ((b+1)/2).isInteger();
 			if(b.sign()>0) RETURN(b_is_odd_int?CNumber(NegativeZero):CNumber(0));
 			else RETURNconst(b_is_odd_int?InfinityNegative:InfinityPositive);
 		} else 
 			if(b.sign()>0) RETURN(a); else RETURNconst(InfinityPositive);
 	}
-	if(a.sign()<0 && a.isFinite() && b.isFinite() && floor(b)!=b) RETURN_NAN();
+	if(a.sign()<0 && !b.isInteger()) RETURNconst(NaN);
+
 	RETURN( pow(a.toDouble(), b.toDouble()) );
-
-/*
-	int a_i = a.isInfinity(), b_i = b.isInfinity();
-	double a_d = a.toDouble(), b_d = b.toDouble();
-	if(b_i>0) {
-		if(a_i || a_d>1.0 || a_d<-1.0) { c->setReturnVar(c->constScriptVar(InfinityPositive)); return; }
-		else if(a_i==0 && (a_d==1.0 || a_d==-1.0)) { c->setReturnVar(c->newScriptVar(1)); return; }
-		if(a_i==0 && a_d<1.0 && a_d>-1.0) { c->setReturnVar(c->newScriptVar(0)); return; }
-	} else if(b_i<0) { c->setReturnVar(c->newScriptVar(0)); return; }
-	else if(b_d == 0.0)  { c->setReturnVar(c->newScriptVar(1)); return; }
-
-	if(a_i) a_d = a_i;
-	double result = pow(a_d, b_d);
-	if(a_i) { c->setReturnVar(c->constScriptVar(Infinity(result>=0.0?1:-1))); return; }
-	scReturnDouble( result );
-*/
 }
 
 //Math.sqr(a) - returns square of given value
 static void scMathSqr(const CFunctionsScopePtr &c, void *userdata) {
-	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a);
-	if(a.isInfinity()) { c->setReturnVar(c->constScriptVar(InfinityPositive)); return; }
-	RETURN( (a.toDouble()*a.toDouble()) );
+	PARAMETER_TO_NUMBER(a,"a");
+	RETURN( a*a );
 }
 
 //Math.sqrt(a) - returns square root of given value
 static void scMathSqrt(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a"); RETURN_NAN_IS_NAN(a); 
 	RETURN_ZERO_IS_ZERO(a);
-	if(a.sign()<0) RETURN_NAN();
+	if(a.sign()<0) RETURNconst(NaN);
 	RETURN_INFINITY_IS_INFINITY(a); 
 	RETURN( sqrt(a.toDouble()) );
 }
@@ -407,7 +424,7 @@ extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 	 tinyJS->addNative("function Math.acos(a)", scMathACos, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.tan(a)", scMathTan, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.atan(a)", scMathATan, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-//	 tinyJS->addNative("function Math.atan2(a,b)", scMathATan2, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	 tinyJS->addNative("function Math.atan2(a,b)", scMathATan2, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.sinh(a)", scMathSinh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.asinh(a)", scMathASinh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.cosh(a)", scMathCosh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -416,7 +433,6 @@ extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 	 tinyJS->addNative("function Math.atanh(a)", scMathATanh, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 		 
 	 Math->addChild("E", tinyJS->newScriptVar(k_E), SCRIPTVARLINK_READONLY);
-//	 tinyJS->addNative("function Math.E()", scMathE, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.log(a)", scMathLog, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.log10(a)", scMathLog10, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.exp(a)", scMathExp, 0, SCRIPTVARLINK_BUILDINDEFAULT);

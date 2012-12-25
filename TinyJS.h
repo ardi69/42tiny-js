@@ -1135,6 +1135,7 @@ public:
 	bool isFinite() const { return type == tInt32 || type == tDouble || type == tnNULL; }
 	bool isNegativeZero() const { return type==tnNULL; }
 	bool isZero() const; ///< is 0, -0
+	bool isInteger() const;
 	int sign() const;
 
 	int32_t		toInt32() const { return cast<int32_t>(); }
