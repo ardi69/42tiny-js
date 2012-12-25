@@ -3050,7 +3050,6 @@ bool CNumber::equal( const CNumber &Value ) const {
 	return toInt32() == Value.toInt32();
 }
 
-
 bool CNumber::isZero() const
 {
 	switch(type) {
@@ -3060,6 +3059,20 @@ bool CNumber::isZero() const
 		return true;
 	case tDouble:
 		return Double==0.0;
+	default:
+		return false;
+	}
+}
+
+bool CNumber::isInteger() const
+{
+	double integral;
+	switch(type) {
+	case tInt32:
+	case tnNULL:
+		return true;
+	case tDouble:
+		return modf(Double, &integral)==0.0;
 	default:
 		return false;
 	}
@@ -3278,12 +3291,11 @@ bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
 CNumber CScriptVarBool::toNumber_Callback() { return data?1:0; }
-string CScriptVarBool::toCString() { return data ? "1" : "0"; }
+string CScriptVarBool::toCString() { return data ? "true" : "false"; }
 
 string CScriptVarBool::getVarType() { return "boolean"; }
 
 CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->booleanPrototype); }
-
 
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarObject
@@ -4860,7 +4872,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_logic(bool &execute, int op /*= LEX_OROR*
 			while (t->tk==op) {
 				t->match(t->tk);
 				shortCircuit = (op==LEX_ANDAND) ? !result_bool : result_bool;
-				CScriptVarLinkWorkPtr b = op_n ? execute_logic(shortCircuit ? noexecute : execute, op_n, 0) : execute_binary_logic(shortCircuit ? noexecute : execute); // L->R
+				b = op_n ? execute_logic(shortCircuit ? noexecute : execute, op_n, 0) : execute_binary_logic(shortCircuit ? noexecute : execute); // L->R
 				if (execute && !shortCircuit) {
 					CheckRightHandVar(execute, b);
 					b(b.getter(execute)); // rebuild b
