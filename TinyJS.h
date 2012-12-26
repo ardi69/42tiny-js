@@ -953,9 +953,10 @@ public:
 
 	virtual bool toBoolean();							/// false by default
 	virtual CNumber toNumber_Callback()=0;
-	virtual std::string toCString()=0;
+	virtual std::string toCString(int radix=0)=0;
 
 	virtual CScriptVarPtr toObject();
+	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
 protected:
 };
 
@@ -977,7 +978,7 @@ public:
 	virtual bool isUndefined(); // { return true; }
 	
 	virtual CNumber toNumber_Callback(); // { return NaN; }
-	virtual std::string toCString();// { return "undefined"; }
+	virtual std::string toCString(int radix=0);// { return "undefined"; }
 
 	virtual std::string getVarType(); // { return "undefined"; }
 	friend define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS *, Undefined_t);
@@ -1004,7 +1005,7 @@ public:
 	virtual bool isNull(); // { return true; }
 
 	virtual CNumber toNumber_Callback(); // { return 0; }
-	virtual std::string toCString();// { return "null"; }
+	virtual std::string toCString(int radix=0);// { return "null"; }
 
 	virtual std::string getVarType(); // { return "null"; }
 
@@ -1031,12 +1032,13 @@ public:
 
 	virtual bool toBoolean();
 	virtual CNumber toNumber_Callback();
-	virtual std::string toCString();
+	virtual std::string toCString(int radix=0);
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); // { return getJSString(data); }
 	virtual std::string getVarType(); // { return "string"; }
 
 	virtual CScriptVarPtr toObject();
+	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
 
 	int getChar(int Idx);
 protected:
@@ -1208,12 +1210,11 @@ public:
 
 	virtual bool toBoolean();
 	virtual CNumber toNumber_Callback();
-	virtual std::string toCString();
+	virtual std::string toCString(int radix=0);
 
 	virtual std::string getVarType(); // { return "number"; }
 
 	virtual CScriptVarPtr toObject();
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
 private:
 	CNumber data;
 	friend define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &);
@@ -1244,7 +1245,7 @@ public:
 
 	virtual bool toBoolean();
 	virtual CNumber toNumber_Callback();
-	virtual std::string toCString();
+	virtual std::string toCString(int radix=0);
 
 	virtual std::string getVarType(); // { return "boolean"; }
 
