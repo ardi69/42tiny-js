@@ -176,8 +176,8 @@ string int2string(uint32_t intData) {
 }
 string float2string(const double &floatData) {
 	ostringstream str;
-	str.precision(numeric_limits<double>::max_digits10-1);
-	
+	str.unsetf(ios::floatfield);
+	str.precision(numeric_limits<double>::max_digits10);
 	str << floatData;
 	return str.str();
 }
@@ -327,18 +327,21 @@ void CScriptLex::getNextToken() {
 		tk = CScriptToken::isReservedWord(tkStr);
 	} else if (isNumeric(currCh) || (currCh=='.' && isNumeric(nextCh))) { // Numbers
 		if(currCh=='.') tkStr+='0';
-		bool isHex = false;
-		if (currCh=='0') { tkStr += currCh; getNextCh(); }
+		bool isHex = false, isOct=false;
+		if (currCh=='0') { 
+			tkStr += currCh; getNextCh();
+			if(isOctal(currCh)) isOct = true;
+		}
 		if (currCh=='x' || currCh=='X') {
 			isHex = true;
 			tkStr += currCh; getNextCh();
 		}
 		tk = LEX_INT;
-		while (isNumeric(currCh) || (isHex && isHexadecimal(currCh))) {
+		while (isOctal(currCh) || (!isOct && isNumeric(currCh)) || (isHex && isHexadecimal(currCh))) {
 			tkStr += currCh;
 			getNextCh();
 		}
-		if (!isHex && currCh=='.') {
+		if (!isHex && !isOct && currCh=='.') {
 			tk = LEX_FLOAT;
 			tkStr += '.';
 			getNextCh();
@@ -348,7 +351,7 @@ void CScriptLex::getNextToken() {
 			}
 		}
 		// do fancy e-style floating point
-		if (!isHex && (currCh=='e' || currCh=='E')) {
+		if (!isHex && !isOct && (currCh=='e' || currCh=='E')) {
 			tk = LEX_FLOAT;
 			tkStr += currCh; getNextCh();
 			if (currCh=='-') { tkStr += currCh; getNextCh(); }
@@ -879,9 +882,9 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 		else if(LEX_TOKEN_DATA_STRING(it->token))
 			OutString.append(it->String()), need_space=true;
 		else if(LEX_TOKEN_DATA_FLOAT(it->token))
-			OutString.append(float2string(it->Float())), need_space=true;
+			OutString.append(CNumber(it->Float()).toString()), need_space=true;
 		else if(it->token == LEX_INT)
-			OutString.append(int2string(it->Int())), need_space=true;
+			OutString.append(CNumber(it->Int()).toString()), need_space=true;
 		else if(LEX_TOKEN_DATA_FUNCTION(it->token)) {
 			OutString.append("function ");
 			if(it->Fnc().name.size() )
@@ -2226,8 +2229,8 @@ CNumber CScriptVar::toNumber() {
 };
 CNumber CScriptVar::toNumber(bool &execute) { return toPrimitive_hintNumber(execute)->toNumber_Callback(); };
 bool CScriptVar::toBoolean() { return true; }
-string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(); }
-string CScriptVar::toString(bool &execute, int32_t radix) { return toPrimitive_hintString(execute, radix)->toCString(); }
+string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(radix); }
+string CScriptVar::toString(bool &execute, int32_t radix) { return toPrimitive_hintString(execute, radix)->toCString(radix); }
 
 int CScriptVar::getInt() { return toNumber().toInt32(); }
 double CScriptVar::getDouble() { return toNumber().toDouble(); } 
@@ -2605,7 +2608,9 @@ CScriptVarPrimitive::~CScriptVarPrimitive(){}
 bool CScriptVarPrimitive::isPrimitive() { return true; }
 bool CScriptVarPrimitive::toBoolean() { return false; }
 CScriptVarPtr CScriptVarPrimitive::toObject() { return this; }
-
+CScriptVarPtr CScriptVarPrimitive::toString_CallBack( bool &execute, int radix/*=0*/ ) {
+	return newScriptVar(toCString(radix));
+}
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -2619,7 +2624,7 @@ CScriptVarPtr CScriptVarUndefined::clone() { return new CScriptVarUndefined(*thi
 bool CScriptVarUndefined::isUndefined() { return true; }
 
 CNumber CScriptVarUndefined::toNumber_Callback() { return NaN; }
-string CScriptVarUndefined::toCString() { return "undefined"; }
+string CScriptVarUndefined::toCString(int radix/*=0*/) { return "undefined"; }
 string CScriptVarUndefined::getVarType() { return "undefined"; }
 
 
@@ -2634,7 +2639,7 @@ CScriptVarPtr CScriptVarNull::clone() { return new CScriptVarNull(*this); }
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
-string CScriptVarNull::toCString() { return "null"; }
+string CScriptVarNull::toCString(int radix/*=0*/) { return "null"; }
 string CScriptVarNull::getVarType() { return "null"; }
 
 
@@ -2657,7 +2662,7 @@ bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
 CNumber CScriptVarString::toNumber_Callback() { return data.c_str(); }
-string CScriptVarString::toCString() { return data; }
+string CScriptVarString::toCString(int radix/*=0*/) { return data; }
 
 string CScriptVarString::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) { return getJSString(data); }
 string CScriptVarString::getVarType() { return "string"; }
@@ -2666,6 +2671,10 @@ CScriptVarPtr CScriptVarString::toObject() {
 	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(this), context->stringPrototype); 
 	ret->addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
 	return ret;
+}
+
+CScriptVarPtr CScriptVarString::toString_CallBack( bool &execute, int radix/*=0*/ ) {
+	return this;
 }
 
 int CScriptVarString::getChar(int Idx) {
@@ -2720,6 +2729,8 @@ CNumber &CNumber::operator=(const char *str) {
 	if(*str == '-' || *str == '+') str++;
 	if(*str == '0' && ( str[1]=='x' || str[1]=='X'))
 		parseInt(start, 16, &endptr);
+	else if(*str == '0' && str[1]>='0' && str[1]<='7')
+		parseInt(start, 8, &endptr);
 	else
 		parseFloat(start, &endptr);
 	while(isWhitespace(*endptr)) endptr++;
@@ -2765,10 +2776,11 @@ CNumber &CNumber::operator=(const char *str) {
 int32_t CNumber::parseInt(const char * str, int32_t radix/*=0*/, const char **endptr/*=0*/) {
 	type=tInt32, Int32=0;
 	if(endptr) *endptr = str;
-	bool stripPrefix = true;
-	if(radix == 0)
-		radix=10;	
-	else if(radix < 2 || radix > 36) {
+	bool stripPrefix = false; //< is true if radix==0 or radix==16
+	if(radix == 0) {
+		radix=10;
+		stripPrefix = true;
+	} else if(radix < 2 || radix > 36) {
 		type = tNaN;
 		return 0;
 	} else
@@ -2778,6 +2790,7 @@ int32_t CNumber::parseInt(const char * str, int32_t radix/*=0*/, const char **en
 	if(*str=='-') sign=-1,str++;
 	else if(*str=='+') str++;
 	if(stripPrefix && *str=='0' && (str[1]=='x' || str[1]=='X')) str+=2, radix=16;
+	else if(stripPrefix && *str=='0' && str[1]>='0' && str[1]<='7') str+=1, radix=8;
 	int32_t max = 0x7fffffff/radix;
 	const char *start = str;
 	for( ; *str; str++) {
@@ -2786,7 +2799,7 @@ int32_t CNumber::parseInt(const char * str, int32_t radix/*=0*/, const char **en
 		else if(*str>='A' && *str<='A'-11+radix) Int32 = Int32*radix+*str-'A'+10;
 		else break;
 		if(Int32 >= max) {
-			type=tDouble, Double=(double)Int32;
+			type=tDouble, Double=double(Int32);
 			for(str++ ; *str; str++) {
 				if(*str >= '0' && *str <= '0'-1+radix) Double = Double *radix+*str-'0';
 				else if(*str>='a' && *str<='a'-11+radix) Double = Double *radix+*str-'a'+10;
@@ -2807,14 +2820,6 @@ int32_t CNumber::parseInt(const char * str, int32_t radix/*=0*/, const char **en
 	return radix;
 }
 
-static double my_exp10(uint32_t x) {
-	static double exp[] = {1e1, 1e2, 1e4, 1e8, 1e16, 1e32, 1e64, 1e128, 1e256};
-	double ret=1.0;
-	for(int i=0; i<9 && x!=0; i++,x>>=1)
-		if(x&1) ret *= exp[i];
-	return ret;
-}
-
 void CNumber::parseFloat(const char * str, const char **endptr/*=0*/) {
 	type=tInt32, Int32=0;
 	if(endptr) *endptr = str;
@@ -2823,50 +2828,9 @@ void CNumber::parseFloat(const char * str, const char **endptr/*=0*/) {
 	if(*str=='-') sign=-1,str++;
 	else if(*str=='+') str++;
 	if(strncmp(str, "Infinity", 8) == 0) { type=tInfinity, Int32=sign; return; }
-	const char *start = str;
-	if(*str != '.') {
-		const char *endptr;
-		if(parseInt(str, 10, &endptr)==0) return;
-		str = endptr;
-	}
-	if(*str == '.') {
-		str++;
-		if(*str >= '0' && *str <= '9') {
-			CNumber fract;
-			const char *endptr;
-			if(fract.parseInt(str, 10, &endptr)) {
-				if(type==tInt32) type=tDouble, Double=(double)Int32;
-				Double += fract.toDouble()/my_exp10(endptr-str);
-				str = endptr;
-			}
-		}
-	}
-	if(str == start) { type=tNaN, Int32=0; return; }
-	if(endptr) *endptr = (char*)str;
-	if(*str == 'e' || *str == 'E') {
-		if((str[1] >= '0' && str[1] <= '9') || str[1]=='-' || str[1]=='+') {
-			CNumber exp;
-			const char *endptr;
-			if(exp.parseInt(str+1, 10, &endptr)) {
-				if(!exp.isZero()) {
-					if(exp.sign()>0) {
-						if(exp>=512) { type=tInfinity, Int32=1; return; }
-						if(type==tInt32) type=tDouble, Double=(double)Int32;
-						Double *= my_exp10(exp.toInt32());
-					} else {
-						if(exp<=-512) { type=tInfinity, Int32=-1; return; }
-						if(type==tInt32) type=tDouble, Double=(double)Int32;
-						Double /= my_exp10(-exp.toInt32());
-					}
-				}
-				str = endptr;
-			}
-		}
-	}
-	if(sign<0 && ((type==tInt32 && Int32==0) || (type==tDouble && Double==0.0))) { type=tnNULL,Int32=0; return; }
-	if(type==tInt32) operator=(sign<0 ? -Int32 : Int32);
-	else operator=(sign<0 ? -Double : Double);
-	if(endptr) *endptr = (char*)str;
+	double d = strtod(str, (char**)endptr);
+	operator=(sign>0 ? d : -d);
+	return;
 }
 
 CNumber CNumber::add(const CNumber &Value) const {
@@ -3209,11 +3173,15 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		}
 		break;
 	case tnNULL:
-		return "0";
+		return "-0";
 	case tDouble:
-		if(Radix==10)
-			return float2string(Double);
-		else if( (str = tiny_dtoa(Double, Radix)) ) {
+		if(Radix==10) {
+			ostringstream str;
+			str.unsetf(ios::floatfield);
+			str.precision(numeric_limits<double>::max_digits10);
+			str << Double;
+			return str.str();
+		} else if( (str = tiny_dtoa(Double, Radix)) ) {
 			string ret(str); free(str);
 			return ret;
 		}
@@ -3262,14 +3230,11 @@ int CScriptVarNumber::isInfinity() { return data.isInfinity(); }
 
 bool CScriptVarNumber::toBoolean() { return data.toBoolean(); }
 CNumber CScriptVarNumber::toNumber_Callback() { return data; }
-string CScriptVarNumber::toCString() { return data.toString(); }
+string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(radix); }
 
 string CScriptVarNumber::getVarType() { return "number"; }
 
 CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->numberPrototype); }
-CScriptVarPtr CScriptVarNumber::toString_CallBack(bool &execute, int radix) {
-	return newScriptVar(data.toString(radix)); // TODO throw Error
-}
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) { 
 	if(!Obj.isInt32() && !Obj.isDouble()) {
 		if(Obj.isNaN()) return Context->constScriptVar(NaN);
@@ -3291,7 +3256,7 @@ bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
 CNumber CScriptVarBool::toNumber_Callback() { return data?1:0; }
-string CScriptVarBool::toCString() { return data ? "true" : "false"; }
+string CScriptVarBool::toCString(int radix/*=0*/) { return data ? "true" : "false"; }
 
 string CScriptVarBool::getVarType() { return "boolean"; }
 

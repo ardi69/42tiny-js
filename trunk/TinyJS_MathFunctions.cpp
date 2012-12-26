@@ -64,41 +64,38 @@ using namespace std;
 #ifdef _MSC_VER
 namespace
 {
-	 double asinh( const double &value )
-	 {
-		  double returned;
+	double asinh( const double &value ) {
+		double returned;
 
-		  if(value>0)
-		  returned = log(value + sqrt(value * value + 1));
-		  else
-		  returned = -log(-value + sqrt(value * value + 1));
+		if(value>0)
+			returned = log(value + sqrt(value * value + 1));
+		else
+			returned = -log(-value + sqrt(value * value + 1));
 
-		  return(returned);
-	 }
+		return(returned);
+	}
 
-	 double acosh( const double &value )
-	 {
-		 double returned;
+	double acosh( const double &value ) {
+		double returned;
 
-		 if(value>0)
-			 returned = log(value + sqrt(value * value - 1));
+		if(value>0)
+			returned = log(value + sqrt(value * value - 1));
 		 else
-			 returned = -log(-value + sqrt(value * value - 1));
+			returned = -log(-value + sqrt(value * value - 1));
 
-		 return(returned);
-	 }
+		return(returned);
+	}
 
-	 double atanh( double value )
-	 {
-		 bool neg = value<0;
-		 if(neg) value=-value;
-		 double value_x2 = 2.0*value;
-		 if(value>=0.5)
-			 value = log(1.0+value_x2/(1.0-value))/2.0;
+	 double atanh( double value ) {
+		bool neg = value<0;
+		if(neg) value=-value;
+		double value_x2 = 2.0*value;
+		if(value>=0.5)
+			value = log(1.0+value_x2/(1.0-value))/2.0;
 		 else
-			 value = log(1.0+value_x2+value_x2*value/(1.0-value))/2.0;
-		 return(neg ? -value : value);
-	 }
+			value = log(1.0+value_x2+value_x2*value/(1.0-value))/2.0;
+		return(neg ? -value : value);
+	}
 }
 #endif
 
