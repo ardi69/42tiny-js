@@ -2843,7 +2843,9 @@ CNumber CNumber::add(const CNumber &Value) const {
 			return *this;
 		else
 			return CNumber(tNaN);
-	} else if(type==tnNULL || Value.type==tnNULL)
+	} else if(type==tnNULL)
+		return Value;
+	else if(Value.type==tnNULL)
 		return *this;
 	else if(type==tDouble || Value.type==tDouble)
 		return CNumber(toDouble()+Value.toDouble());
@@ -3173,7 +3175,7 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		}
 		break;
 	case tnNULL:
-		return "-0";
+		return "0";
 	case tDouble:
 		if(Radix==10) {
 			ostringstream str;
@@ -4823,7 +4825,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_binary_logic(bool &execute, int op, int o
 	}
 	return a;
 }
-// L->R: Precedence 13 ==> (logical-or) &&
+// L->R: Precedence 13 ==> (logical-and) &&
 // L->R: Precedence 14 ==> (logical-or) ||
 CScriptVarLinkWorkPtr CTinyJS::execute_logic(bool &execute, int op /*= LEX_OROR*/, int op_n /*= LEX_ANDAND*/) {
 	CScriptVarLinkWorkPtr a = op_n ? execute_logic(execute, op_n, 0) : execute_binary_logic(execute);
@@ -4840,15 +4842,11 @@ CScriptVarLinkWorkPtr CTinyJS::execute_logic(bool &execute, int op /*= LEX_OROR*
 				b = op_n ? execute_logic(shortCircuit ? noexecute : execute, op_n, 0) : execute_binary_logic(shortCircuit ? noexecute : execute); // L->R
 				if (execute && !shortCircuit) {
 					CheckRightHandVar(execute, b);
-					b(b.getter(execute)); // rebuild b
-					//CheckRightHandVar(execute, b);
-					result_bool = (op==LEX_ANDAND) ? result_bool && b->toBoolean() : result_bool || b->toBoolean();
+					a(b.getter(execute)); // rebuild a
+					result_bool = a->toBoolean();
 				}
 			}
-			if (result_bool && ( (op==LEX_ANDAND && !shortCircuit) || (op==LEX_OROR) ) )
-				return b;
-			else 
-				return constFalse;
+			return a;
 		} else
 			op_n ? execute_logic(execute, op_n, 0) : execute_binary_logic(execute); // L->R
 	}
