@@ -2247,6 +2247,30 @@ string CScriptVar::getParsableString(const string &indentString, const string &i
 
 CScriptVarPtr CScriptVar::getNumericVar() { return newScriptVar(toNumber()); }
 
+////// Flags
+
+void CScriptVar::seal() {
+	preventExtensions(); 
+	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it)
+		(*it)->setConfigurable(false);
+}
+bool CScriptVar::isSealed() const {
+	if(isExtensible()) return false; 
+	for(SCRIPTVAR_CHILDS_cit it = Childs.begin(); it != Childs.end(); ++it)
+		if((*it)->isConfigurable()) return false;
+	return true;
+}
+void CScriptVar::freeze() {
+	preventExtensions(); 
+	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it)
+		(*it)->setConfigurable(false), (*it)->setWritable(false);
+}
+bool CScriptVar::isFrozen() const {
+	if(isExtensible()) return false; 
+	for(SCRIPTVAR_CHILDS_cit it = Childs.begin(); it != Childs.end(); ++it)
+		if((*it)->isConfigurable() || (*it)->isWritable()) return false;
+	return true;
+}
 
 ////// Childs
 
@@ -3624,31 +3648,6 @@ CScriptVarPtr CScriptVarAccessor::clone() { return new CScriptVarAccessor(*this)
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; } 
 string CScriptVarAccessor::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
-
-	/*
-	ostringstream destination;
-	string nl = indent.size() ? "\n" : " ";
-
-	destination << "{";
-	int count = Childs.size();
-	if(count) {
-		string new_indentString = indentString + indent;
-
-		destination << nl;
-		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
-			if (isAlphaNum((*it)->getName()))
-				destination << new_indentString << (*it)->getName();
-			else
-				destination << new_indentString << "\"" << getJSString((*it)->getName()) << "\"";
-			destination  << " : ";
-			destination << (*(*it))->getParsableString(new_indentString, indent);
-			if (--count) destination  << "," << nl;
-		}
-		destination << nl << indentString;
-	}
-	destination << "}";
-	return destination.str();
-*/
 	return "";
 }
 string CScriptVarAccessor::getVarType() { return "accessor"; }
@@ -3813,8 +3812,12 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Object()", this, &CTinyJS::native_Object, 0, SCRIPTVARLINK_CONSTANT);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
-	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_preventExtensions); 
-	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isExtensible); 
+	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectState); 
+	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isObjectState); 
+	addNative("function Object.seel(obj)", this, &CTinyJS::native_Object_setObjectState, (void*)1); 
+	addNative("function Object.isSealed(obj)", this, &CTinyJS::native_Object_isObjectState, (void*)1); 
+	addNative("function Object.freeze(obj)", this, &CTinyJS::native_Object_setObjectState, (void*)2); 
+	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isObjectState, (void*)2); 
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString); 
@@ -5548,27 +5551,31 @@ void CTinyJS::native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *da
 	}
 	c->throwError(TypeError, "argument is not an object");
 }
-void CTinyJS::native_Object_preventExtensions(const CFunctionsScopePtr &c, void *data) {
-	if(c->getArgumentsLength()>=1) {
-		CScriptVarPtr obj = c->getArgument(0);
-		if(obj->isObject()) {
-			obj->setExtensible(false);
-			return;
-		}
-	}
-	c->throwError(TypeError, "argument is not an object");
-}
-void CTinyJS::native_Object_isExtensible(const CFunctionsScopePtr &c, void *data) {
-	if(c->getArgumentsLength()>=1) {
-		CScriptVarPtr obj = c->getArgument(0);
-		if(obj->isObject()) {
-			c->setReturnVar(constScriptVar(obj->isExtensible()));
-			return;
-		}
-	}
-	c->throwError(TypeError, "argument is not an object");
+
+void CTinyJS::native_Object_setObjectState(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr obj = c->getArgument(0);
+	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	if(data==(void*)2)
+		obj->freeze();
+	else if(data==(void*)1)
+		obj->seal();
+	else
+		obj->preventExtensions();
+	c->setReturnVar(obj);
 }
 
+void CTinyJS::native_Object_isObjectState(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr obj = c->getArgument(0);
+	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	bool ret;
+	if(data==(void*)2)
+		ret = obj->isFrozen();
+	else if(data==(void*)1)
+		ret = obj->isSealed();
+	else
+		ret = obj->isExtensible();
+	c->setReturnVar(constScriptVar(ret));
+}
 void CTinyJS::native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->constScriptVar((bool) c->getArgument("this")->findChild(c->getArgument("prop")->toString()) ));
 }

@@ -654,8 +654,13 @@ public:
 	CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 #endif
 	/// flags
-	bool isExtensible()			{ return extensible; }
-	void setExtensible(bool On)	{ extensible=On; }
+	void setExtensible(bool On=true)	{ extensible=On; }
+	void preventExtensions()			{ extensible=false; }
+	bool isExtensible() const			{ return extensible; }
+	void seal();
+	bool isSealed() const;
+	void freeze();
+	bool isFrozen() const;
 
 	/// find 
 	CScriptVarLinkPtr findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
@@ -795,7 +800,7 @@ public:
 	bool isOwner() const { return owner!=0; }
 
 	bool isWritable() const { return (flags & SCRIPTVARLINK_WRITABLE) != 0; }
-	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_CONFIGURABLE); }
+	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_WRITABLE); }
 	bool isConfigurable() const { return (flags & SCRIPTVARLINK_CONFIGURABLE) != 0; }
 	void setConfigurable(bool On) { On ? (flags |= SCRIPTVARLINK_CONFIGURABLE) : (flags &= ~SCRIPTVARLINK_CONFIGURABLE); }
 	bool isEnumerable() const { return (flags & SCRIPTVARLINK_ENUMERABLE) != 0; }
@@ -1869,8 +1874,13 @@ private:
 
 	void native_Object(const CFunctionsScopePtr &c, void *data);
 	void native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *data);
-	void native_Object_preventExtensions(const CFunctionsScopePtr &c, void *data);
-	void native_Object_isExtensible(const CFunctionsScopePtr &c, void *data);
+	/* Userdate for set-/isObjectState
+	 * 0 - preventExtensions / isExtensible
+	 * 1 - seal / isSealed
+	 * 2 - freeze / isFrozen
+	 */
+	void native_Object_setObjectState(const CFunctionsScopePtr &c, void *data);
+	void native_Object_isObjectState(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_toString(const CFunctionsScopePtr &c, void *data);
