@@ -598,6 +598,7 @@ public:
 
 	virtual bool isFunction();	///< is CScriptVarFunction / CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
 	virtual bool isNative();	///< is CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
+	virtual bool isBounded();	///< is CScriptVarFunctionBounded
 
 	bool isBasic() { return Childs.empty(); } ///< Is this *not* an array/object/etc
 
@@ -1424,6 +1425,32 @@ inline define_newScriptVar_Fnc(Function, CTinyJS *Context, CScriptTokenDataFnc *
 
 
 ////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarFunctionBounded
+//////////////////////////////////////////////////////////////////////////
+
+define_ScriptVarPtr_Type(FunctionBounded);
+class CScriptVarFunctionBounded : public CScriptVarFunction {
+protected:
+	CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
+	CScriptVarFunctionBounded(const CScriptVarFunctionBounded &Copy) : CScriptVarFunction(Copy), boundedThis(Copy.boundedThis), boundedArguments(Copy.boundedArguments)  { } ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarFunctionBounded();
+	virtual CScriptVarPtr clone();
+	virtual bool isBounded();	///< is CScriptVarFunctionBounded
+	virtual void setTemporaryID_recursive(uint32_t ID);
+	CScriptVarPtr callFunction(bool &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+protected:
+private:
+	CScriptVarFunctionPtr boundedFunction;
+	CScriptVarPtr boundedThis;
+	std::vector<CScriptVarPtr> boundedArguments;
+
+	friend define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
+};
+inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments) { return new CScriptVarFunctionBounded(BoundedFunction, BoundedThis, BoundedArguments); }
+
+
+////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarFunctionNative
 //////////////////////////////////////////////////////////////////////////
 
@@ -1436,8 +1463,6 @@ public:
 	virtual ~CScriptVarFunctionNative();
 	virtual CScriptVarPtr clone()=0;
 	virtual bool isNative(); // { return true; }
-
-	virtual std::string getString(); // {return "[ Function Native ]";}
 
 	virtual void callFunction(const CFunctionsScopePtr &c)=0;// { jsCallback(c, jsCallbackUserData); }
 protected:
@@ -1513,7 +1538,6 @@ public:
 	virtual bool isAccessor(); // { return true; }
 	virtual bool isPrimitive(); // { return false; } 
 
-	virtual std::string getString(); // { return "[ Object ]"; };
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
 	virtual std::string getVarType(); // { return "object"; }
 
@@ -1864,6 +1888,7 @@ private:
 	void native_Function(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_call(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data);
+	void native_Function_prototype_bind(const CFunctionsScopePtr &c, void *data);
 
 	void native_Error(const CFunctionsScopePtr &c, void *data);
 	void native_EvalError(const CFunctionsScopePtr &c, void *data);

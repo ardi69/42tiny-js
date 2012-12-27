@@ -2127,6 +2127,7 @@ bool CScriptVar::isNumber()		{return false;}
 bool CScriptVar::isPrimitive()	{return false;}
 bool CScriptVar::isFunction()		{return false;}
 bool CScriptVar::isNative()		{return false;}
+bool CScriptVar::isBounded()		{return false;}
 
 //////////////////////////////////////////////////////////////////////////
 /// Value
@@ -3529,11 +3530,11 @@ string CScriptVarFunction::getParsableString(const string &indentString, const s
 	// get list of arguments
 	destination.append(data->getArgumentsString()); 
 
-	if(isNative())
-		destination.append("{ /* native Code */ }");
+	if(isNative() || isBounded())
+		destination.append("{ [native code] }");
 	else {
 		destination.append(CScriptToken::getParsableString(data->body, indentString, indent));
-		if(data->body.front().token != '{')
+		if(!data->body.size() || data->body.front().token != '{')
 			destination.append(";");
 	}
 	return destination;
@@ -3543,8 +3544,6 @@ CScriptVarPtr CScriptVarFunction::toString_CallBack(bool &execute, int radix){
 	bool hasRecursion;
 	return newScriptVar(getParsableString("", "", 0, hasRecursion));
 }
-
-
 
 CScriptTokenDataFnc *CScriptVarFunction::getFunctionData() { return data; }
 
@@ -3560,13 +3559,41 @@ void CScriptVarFunction::setFunctionData(CScriptTokenDataFnc *Data) {
 }
 
 
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarFunctionBounded
+//////////////////////////////////////////////////////////////////////////
+
+CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments) 
+	: CScriptVarFunction(BoundedFunction->getContext(), new CScriptTokenDataFnc) ,
+	boundedFunction(BoundedFunction),
+	boundedThis(BoundedThis),
+	boundedArguments(BoundedArguments) {
+		getFunctionData()->name = BoundedFunction->getFunctionData()->name;
+}
+CScriptVarFunctionBounded::~CScriptVarFunctionBounded(){}
+CScriptVarPtr CScriptVarFunctionBounded::clone() { return new CScriptVarFunctionBounded(*this); }
+bool CScriptVarFunctionBounded::isBounded() { return true; }
+void CScriptVarFunctionBounded::setTemporaryID_recursive( uint32_t ID ) {
+	CScriptVarFunction::setTemporaryID_recursive(ID);
+	boundedThis->setTemporaryID_recursive(ID);
+	for(vector<CScriptVarPtr>::iterator it=boundedArguments.begin(); it!=boundedArguments.end(); ++it)
+		(*it)->setTemporaryID_recursive(ID);
+}
+
+CScriptVarPtr CScriptVarFunctionBounded::callFunction( bool &execute, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis/*=0*/ )
+{
+	vector<CScriptVarPtr> newArgs=boundedArguments;
+	newArgs.insert(newArgs.end(), Arguments.begin(), Arguments.end());
+	return context->callFunction(execute, boundedFunction, newArgs, newThis ? This : boundedThis, newThis);
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarFunctionNative
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarFunctionNative::~CScriptVarFunctionNative() {}
 bool CScriptVarFunctionNative::isNative() { return true; }
-string CScriptVarFunctionNative::getString() {return "[ Function Native ]";}
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -3596,7 +3623,6 @@ CScriptVarAccessor::~CScriptVarAccessor() {}
 CScriptVarPtr CScriptVarAccessor::clone() { return new CScriptVarAccessor(*this); }
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; } 
-string CScriptVarAccessor::getString() { return "[ Object ]"; };
 string CScriptVarAccessor::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
 
 	/*
@@ -3859,6 +3885,7 @@ CTinyJS::CTinyJS() {
 	var->addChildOrReplace(TINYJS_PROTOTYPE_CLASS, functionPrototype);
 	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_prototype_call); 
 	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_prototype_apply); 
+	addNative("function Function.prototype.bind(objc, args)", this, &CTinyJS::native_Function_prototype_bind); 
 	functionPrototype->addChild("valueOf", objectPrototype_valueOf);
 	functionPrototype->addChild("toString", objectPrototype_toString);
 	pseudo_refered.push_back(&functionPrototype);
@@ -4106,6 +4133,8 @@ CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, vecto
 
 CScriptVarPtr CTinyJS::callFunction(bool &execute, const CScriptVarFunctionPtr &Function, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 	ASSERT(Function && Function->isFunction());
+
+	if(Function->isBounded()) return CScriptVarFunctionBoundedPtr(Function)->callFunction(execute, Arguments, This, newThis);
 
 	CScriptTokenDataFnc *Fnc = Function->getFunctionData();
 	CScriptVarScopeFncPtr functionRoot(::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
@@ -5673,33 +5702,46 @@ void CTinyJS::native_Function(const CFunctionsScopePtr &c, void *data) {
 void CTinyJS::native_Function_prototype_call(const CFunctionsScopePtr &c, void *data) {
 	int length = c->getArgumentsLength();
 	CScriptVarPtr Fnc = c->getArgument("this");
+	if(!Fnc->isFunction()) c->throwError(TypeError, "Function.prototype.call called on incompatible Object");
 	CScriptVarPtr This = c->getArgument(0);
-	vector<CScriptVarPtr> Params;
+	vector<CScriptVarPtr> Args;
 	for(int i=1; i<length; i++)
-		Params.push_back(c->getArgument(i));
-	callFunction(Fnc, Params, This);
+		Args.push_back(c->getArgument(i));
+	c->setReturnVar(callFunction(Fnc, Args, This));
 }
 void CTinyJS::native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data) {
 	int length=0;
 	CScriptVarPtr Fnc = c->getArgument("this");
+	if(!Fnc->isFunction()) c->throwError(TypeError, "Function.prototype.apply called on incompatible Object");
 	// Argument_0
 	CScriptVarPtr This = c->getArgument(0)->toObject();
 	if(This->isNull() || This->isUndefined()) This=root;
 	// Argument_1
 	CScriptVarPtr Array = c->getArgument(1);
 	if(!Array->isNull() && !Array->isUndefined()) { 
-		CScriptVarLinkPtr Length = Array->findChild("length");
+		CScriptVarLinkWorkPtr Length = Array->findChild("length");
 		if(!Length) c->throwError(TypeError, "second argument to Function.prototype.apply must be an array or an array like object");
 		length = Length.getter()->toNumber().toInt32();
 	}
-	vector<CScriptVarPtr> Params;
+	vector<CScriptVarPtr> Args;
 	for(int i=0; i<length; i++) {
 		CScriptVarLinkPtr value = Array->findChild(int2string(i));
-		if(value) Params.push_back(value);
-		else Params.push_back(constScriptVar(Undefined));
+		if(value) Args.push_back(value);
+		else Args.push_back(constScriptVar(Undefined));
 	}
-	callFunction(Fnc, Params, This);
+	c->setReturnVar(callFunction(Fnc, Args, This));
 }
+void CTinyJS::native_Function_prototype_bind(const CFunctionsScopePtr &c, void *data) {
+	int length = c->getArgumentsLength();
+	CScriptVarPtr Fnc = c->getArgument("this");
+	if(!Fnc->isFunction()) c->throwError(TypeError, "Function.prototype.bind called on incompatible Object");
+	CScriptVarPtr This = c->getArgument(0);
+	if(This->isUndefined() || This->isNull()) This = root;
+	vector<CScriptVarPtr> Args;
+	for(int i=1; i<length; i++) Args.push_back(c->getArgument(i));
+	c->setReturnVar(newScriptVarFunctionBounded(Fnc, This, Args));
+}
+
 
 ////////////////////////////////////////////////////////////////////////// 
 /// Error
