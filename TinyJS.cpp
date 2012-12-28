@@ -177,7 +177,7 @@ string int2string(uint32_t intData) {
 string float2string(const double &floatData) {
 	ostringstream str;
 	str.unsetf(ios::floatfield);
-#if defined(_MSC_VER) || __cplusplus >= 201103L
+#if (defined(_MSC_VER) &&_MSC_VER>=1600) || __cplusplus >= 201103L
 	str.precision(numeric_limits<double>::max_digits10);
 #else
 	str.precision(numeric_limits<double>::digits10+2);
@@ -3209,7 +3209,7 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		if(Radix==10) {
 			ostringstream str;
 			str.unsetf(ios::floatfield);
-#if defined(_MSC_VER) || __cplusplus >= 201103L
+#if (defined(_MSC_VER) &&_MSC_VER>=1600) || __cplusplus >= 201103L
 			str.precision(numeric_limits<double>::max_digits10);
 #else
 			str.precision(numeric_limits<double>::digits10+2);
@@ -3820,11 +3820,11 @@ CTinyJS::CTinyJS() {
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
 	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectSecure); 
-	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isObjectSecure); 
+	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isSecureObject); 
 	addNative("function Object.seel(obj)", this, &CTinyJS::native_Object_setObjectSecure, (void*)1); 
-	addNative("function Object.isSealed(obj)", this, &CTinyJS::native_Object_isObjectSecure, (void*)1); 
+	addNative("function Object.isSealed(obj)", this, &CTinyJS::native_Object_isSecureObject, (void*)1); 
 	addNative("function Object.freeze(obj)", this, &CTinyJS::native_Object_setObjectSecure, (void*)2); 
-	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isObjectSecure, (void*)2); 
+	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isSecureObject, (void*)2); 
 	addNative("function Object.keys(obj)", this, &CTinyJS::native_Object_keys); 
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf); 
@@ -5572,7 +5572,7 @@ void CTinyJS::native_Object_setObjectSecure(const CFunctionsScopePtr &c, void *d
 	c->setReturnVar(obj);
 }
 
-void CTinyJS::native_Object_isObjectSecure(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Object_isSecureObject(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument(0);
 	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
 	bool ret;
