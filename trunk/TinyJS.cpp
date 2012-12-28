@@ -177,7 +177,7 @@ string int2string(uint32_t intData) {
 string float2string(const double &floatData) {
 	ostringstream str;
 	str.unsetf(ios::floatfield);
-#if (defined(_MSC_VER) &&_MSC_VER>=1600) || __cplusplus >= 201103L
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || __cplusplus >= 201103L
 	str.precision(numeric_limits<double>::max_digits10);
 #else
 	str.precision(numeric_limits<double>::digits10+2);
@@ -2137,6 +2137,9 @@ bool CScriptVar::isBounded()		{return false;}
 /// Value
 //////////////////////////////////////////////////////////////////////////
 
+CScriptVarPrimitivePtr CScriptVar::getRawPrimitive() {
+	return CScriptVarPrimitivePtr(); // default NULL-Ptr
+}
 CScriptVarPrimitivePtr CScriptVar::toPrimitive() {
 	bool execute=true;
 	CScriptVarPrimitivePtr var = toPrimitive(execute);
@@ -2165,7 +2168,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintString(bool &execute, int32_t
 			}
 			return ret;
 		}
-		return CScriptVarPrimitivePtr(this);
+		return this;
 	}
 	return constScriptVar(Undefined);
 }
@@ -2186,7 +2189,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintNumber(bool &execute) {
 			}
 			return ret;
 		}
-		return CScriptVarPrimitivePtr(this);
+		return this;
 	}
 	return constScriptVar(Undefined);
 }
@@ -2635,6 +2638,7 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( bool &execute, const CScrip
 CScriptVarPrimitive::~CScriptVarPrimitive(){}
 
 bool CScriptVarPrimitive::isPrimitive() { return true; }
+CScriptVarPrimitivePtr CScriptVarPrimitive::getRawPrimitive() { return this; }
 bool CScriptVarPrimitive::toBoolean() { return false; }
 CScriptVarPtr CScriptVarPrimitive::toObject() { return this; }
 CScriptVarPtr CScriptVarPrimitive::toString_CallBack( bool &execute, int radix/*=0*/ ) {
@@ -2706,7 +2710,7 @@ CScriptVarPtr CScriptVarString::toString_CallBack( bool &execute, int radix/*=0*
 	return this;
 }
 
-int CScriptVarString::getChar(int Idx) {
+int CScriptVarString::getChar(uint32_t Idx) {
 	if((string::size_type)Idx >= data.length())
 		return -1;
 	else
@@ -3209,7 +3213,7 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		if(Radix==10) {
 			ostringstream str;
 			str.unsetf(ios::floatfield);
-#if (defined(_MSC_VER) &&_MSC_VER>=1600) || __cplusplus >= 201103L
+#if (defined(_MSC_VER) && _MSC_VER >= 1600) || __cplusplus >= 201103L
 			str.precision(numeric_limits<double>::max_digits10);
 #else
 			str.precision(numeric_limits<double>::digits10+2);
@@ -3305,6 +3309,7 @@ declare_dummy_t(Object);
 CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
 CScriptVarObject::~CScriptVarObject() {}
 CScriptVarPtr CScriptVarObject::clone() { return new CScriptVarObject(*this); }
+CScriptVarPrimitivePtr CScriptVarObject::getRawPrimitive() { return value; }
 bool CScriptVarObject::isObject() { return true; }
 
 string CScriptVarObject::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
@@ -4363,10 +4368,10 @@ void CTinyJS::execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const C
 			t->pushTokenScope(it->value);
 			CScriptVarLinkWorkPtr lhs = execute_condition(execute);
 			if (!lhs->isOwned()) {
-				if(lhs->isOwner() && !lhs->getOwner()->isExtensible())
+				if(lhs->hasOwner() && !lhs->getOwner()->isExtensible())
 					continue;
 				CScriptVarLinkWorkPtr realLhs;
-				if(lhs->isOwner())
+				if(lhs->hasOwner())
 					realLhs = lhs->getOwner()->addChildOrReplace(lhs->getName(), lhs);
 				else
 					realLhs = root->addChildOrReplace(lhs->getName(), lhs);
@@ -4595,12 +4600,15 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, boo
 					} else
 						a = child;
 				} else {
-					if (isIndex && aVar->isString() && name.find_first_not_of("0123456789") == string::npos) {
-						int Char = CScriptVarStringPtr(aVar)->getChar(strtol(name.c_str(),0,0));
+					CScriptVarStringPtr pVar = aVar->getRawPrimitive();
+					uint32_t Idx;
+					if (isIndex && pVar && pVar->isString() && (Idx=isArrayIndex(name))!=uint32_t(-1) && Idx<pVar->stringLength()) {
+						int Char = pVar->getChar(Idx);
 						a(newScriptVar(string(1, (char)Char)), name, 0);
 					} else
 						a(constScriptVar(Undefined), name);
 					a->setOwner(aVar.getVar());  // fake owner - but not set Owned -> for assignment stuff
+					a.setReferencedOwner(aVar.getVar());
 				}
 			}
 		}
@@ -4711,7 +4719,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(bool &execute) {
 			if (execute) {
 				if(a->getName().empty())
 					throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", ErrorPos);
-				else if(!a->isOwned() && !a->isOwner() && !a->getName().empty())
+				else if(!a->isOwned() && !a->hasOwner() && !a->getName().empty())
 					throwError(execute, ReferenceError, a->getName() + " is not defined", ErrorPos);
 				CScriptVarPtr res = newScriptVar(a.getter(execute)->getVarPtr()->toNumber(execute).add(op==LEX_PLUSPLUS ? 1 : -1));
 				if(a->isWritable()) {
@@ -4735,7 +4743,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(bool &execute) {
 		if (execute) {
 			if(a->getName().empty())
 				throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", t->getPrevPos());
-			else if(!a->isOwned() && !a->isOwner() && !a->getName().empty())
+			else if(!a->isOwned() && !a->hasOwner() && !a->getName().empty())
 				throwError(execute, ReferenceError, a->getName() + " is not defined", t->getPrevPos());
 			CNumber num = a.getter(execute)->getVarPtr()->toNumber(execute);
 			CScriptVarPtr res = newScriptVar(num.add(op==LEX_PLUSPLUS ? 1 : -1));
@@ -4925,7 +4933,7 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 		t->match(t->tk);
 		CScriptVarLinkWorkPtr rhs = execute_assignment(execute).getter(execute); // L<-R
 		if (execute) {
-			if (!lhs->isOwned() && !lhs->isOwner() && lhs->getName().empty()) {
+			if (!lhs->isOwned() && !lhs->hasOwner() && lhs->getName().empty()) {
 				throw new CScriptException(ReferenceError, "invalid assignment left-hand side (at runtime)", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
 			} else if (op != '=' && !lhs->isOwned()) {
 				throwError(execute, ReferenceError, lhs->getName() + " is not defined");
@@ -4933,10 +4941,10 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 			else if(lhs->isWritable()) {
 				if (op=='=') {
 					if (!lhs->isOwned()) {
-						if(lhs->isOwner() && !lhs->getOwner()->isExtensible())
+						if(lhs->hasOwner() && !lhs->getOwner()->isExtensible())
 							return rhs->getVarPtr();
 						CScriptVarLinkPtr realLhs;
-						if(lhs->isOwner())
+						if(lhs->hasOwner())
 							realLhs = lhs->getOwner()->addChildOrReplace(lhs->getName(), lhs);
 						else
 							realLhs = root->addChildOrReplace(lhs->getName(), lhs);
@@ -4959,6 +4967,7 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 	}
 	else 
 		CheckRightHandVar(execute, lhs);
+	if(lhs->hasOwner() && !lhs->isOwned()) lhs->setOwner(0); // remove faked Owner
 	return lhs.getter(execute);
 }
 // L->R: Precedence 17 (comma) ,
@@ -5204,7 +5213,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			if( keys.size() ) {
 				if(!for_var->isOwned()) {
 					CScriptVarLinkPtr real_for_var;
-					if(for_var->isOwner())
+					if(for_var->hasOwner())
 						real_for_var = for_var->getOwner()->addChildOrReplace(for_var->getName(), for_var);
 					else
 						real_for_var = root->addChildOrReplace(for_var->getName(), for_var);
@@ -5593,7 +5602,17 @@ void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
 
 	STRING_SET_t keys;
 	obj->keys(keys, true);
-	int idx=0;
+
+	uint32_t length = 0;
+	CScriptVarStringPtr isStringObj = obj->getRawPrimitive();
+	if(isStringObj)
+		length = isStringObj->stringLength();
+	else
+		length = obj->getArrayLength();
+	for(uint32_t i=0; i<length; ++i)
+		keys.insert(int2string(i));
+
+	uint32_t idx=0;
 	for(STRING_SET_it it=keys.begin(); it!=keys.end(); ++it)
 		returnVar->setArrayIndex(idx++, newScriptVar(*it));
 }
@@ -5604,7 +5623,18 @@ void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
 //////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
-	c->setReturnVar(c->constScriptVar((bool) c->getArgument("this")->findChild(c->getArgument("prop")->toString()) ));
+	CScriptVarPtr This = c->getArgument("this");
+	string PropStr = c->getArgument("prop")->toString();
+	CScriptVarLinkPtr Prop = This->findChild(PropStr);
+	bool res = Prop && !Prop->getVarPtr()->isUndefined();
+	if(!res) {
+		CScriptVarStringPtr This_asString = This->getRawPrimitive();
+		if(This_asString) {
+			uint32_t Idx = isArrayIndex(PropStr);
+			res = Idx!=uint32_t(-1) && Idx<This_asString->stringLength();
+		}
+	}
+	c->setReturnVar(c->constScriptVar(res));
 }
 void CTinyJS::native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->getArgument("this")->valueOf_CallBack());
@@ -5633,7 +5663,8 @@ void CTinyJS::native_Array(const CFunctionsScopePtr &c, void *data) {
 		uint32_t new_size = Argument_0.toUInt32();
 		if(Argument_0.isFinite() && Argument_0 == new_size)
 			returnVar->setArrayIndex(new_size-1, constScriptVar(Undefined));
-		c->throwError(RangeError, "invalid array length");
+		else
+			c->throwError(RangeError, "invalid array length");
 	} else for(int i=0; i<length; i++)
 		returnVar->setArrayIndex(i, c->getArgument(i));
 }
