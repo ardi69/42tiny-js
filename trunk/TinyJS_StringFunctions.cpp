@@ -115,8 +115,8 @@ static bool regex_search(const string &str, const string::const_iterator &search
 	regex::flag_type flags = regex_constants::ECMAScript;
 	if(ignoreCase) flags |= regex_constants::icase;
 	regex_constants::match_flag_type mflag = sticky?regex_constants::match_continuous:regex_constants::format_default;
-	if(str.cbegin() != search_begin) mflag |= regex_constants::match_prev_avail;
-	if(regex_search(search_begin, str.cend(), match, regex(substr, flags), mflag)) {
+	if(str.begin() != search_begin) mflag |= regex_constants::match_prev_avail;
+	if(regex_search(search_begin, str.end(), match, regex(substr, flags), mflag)) {
 		match_begin = match[0].first;
 		match_end = match[0].second;
 		return true;
@@ -136,13 +136,13 @@ static bool string_search(const string &str, const string::const_iterator &searc
 	bool (*cmp)(char,char) = ignoreCase ? charicmp : charcmp;
 	if(sticky) {
 		match_begin = match_end = search_begin;
-		string::const_iterator s1e=str.cend();
-		string::const_iterator s2=substr.cbegin(), s2e=substr.cend();
+		string::const_iterator s1e=str.end();
+		string::const_iterator s2=substr.begin(), s2e=substr.end();
 		while(match_end!=s1e && s2!=s2e && cmp(*match_end++, *s2++));
 		return s2==s2e;
 	} 
-	match_begin = search(search_begin, str.cend(), substr.begin(), substr.end(), cmp);
-	if(match_begin==str.cend()) return false;
+	match_begin = search(search_begin, str.end(), substr.begin(), substr.end(), cmp);
+	if(match_begin==str.end()) return false;
 	match_end = match_begin + substr.length();
 	return true;
 }
@@ -192,9 +192,9 @@ static CScriptVarPtr getRegExpData(const CFunctionsScopePtr &c, const string &re
 }
 
 static void scStringReplace(const CFunctionsScopePtr &c, void *) {
-	string str = this2string(c), ret_str;
+	const string str = this2string(c);
 	CScriptVarPtr newsubstrVar = c->getArgument("newsubstr");
-	string substr;
+	string substr, ret_str;
 	bool global, ignoreCase, sticky;
 	bool isRegExp = getRegExpData(c, "substr", false, "flags", substr, global, ignoreCase, sticky);
 	if(isRegExp && !newsubstrVar->isFunction()) {
@@ -219,7 +219,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 		if(!newsubstrVar->isFunction()) 
 			newsubstr = newsubstrVar->toString();
 		global = global && substr.length();
-		string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
+		string::const_iterator search_begin=str.begin(), match_begin, match_end;
 		if(search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)) {
 			do {
 				ret_str.append(search_begin, match_begin);
@@ -232,7 +232,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 				search_begin = match_end;
 			} while(global && search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end));
 		}
-		ret_str.append(search_begin, str.cend());
+		ret_str.append(search_begin, str.end());
 	}
 	c->setReturnVar(c->newScriptVar(ret_str));
 }
@@ -259,10 +259,10 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 			int idx=0;
 			string::size_type offset=0;
 			global = global && substr.length();
-			string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
+			string::const_iterator search_begin=str.begin(), match_begin, match_end;
 			if(regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)) {
 				do {
-					offset = match_begin-str.cbegin();
+					offset = match_begin-str.begin();
 					retVar->addChild(int2string(idx++), c->newScriptVar(string(match_begin, match_end)));
 					search_begin = match_end;
 				} while(global && regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end));
@@ -286,7 +286,7 @@ static void scStringSearch(const CFunctionsScopePtr &c, void *userdata) {
 	string substr;
 	bool global, ignoreCase, sticky;
 	getRegExpData(c, "regexp", true, "flags", substr, global, ignoreCase, sticky);
-	string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
+	string::const_iterator search_begin=str.begin(), match_begin, match_end;
 #ifndef NO_REGEXP
 	try { 
 		c->setReturnVar(c->newScriptVar(regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)?match_begin-search_begin:-1));
@@ -320,7 +320,7 @@ static void scStringSlice(const CFunctionsScopePtr &c, void *userdata) {
 }
 
 static void scStringSplit(const CFunctionsScopePtr &c, void *) {
-	string str = this2string(c);
+	const string str = this2string(c);
 
 	string seperator;
 	bool global, ignoreCase, sticky;
@@ -344,7 +344,7 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 		return;
 	}
 	int length = 0;
-	string::const_iterator search_begin=str.cbegin(), match_begin, match_end;
+	string::const_iterator search_begin=str.begin(), match_begin, match_end;
 	smatch match;
 	bool found=true;
 	while(found) {
@@ -370,7 +370,7 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 			if(length>=limit) break;
 			search_begin = match_end;
 		} else {
-			result->setArrayIndex(length++, c->newScriptVar(string(search_begin,str.cend())));
+			result->setArrayIndex(length++, c->newScriptVar(string(search_begin,str.end())));
 			if(length>=limit) break;
 		}
 	}

@@ -177,7 +177,11 @@ string int2string(uint32_t intData) {
 string float2string(const double &floatData) {
 	ostringstream str;
 	str.unsetf(ios::floatfield);
+#if defined(_MSC_VER) || __cplusplus >= 201103L
 	str.precision(numeric_limits<double>::max_digits10);
+#else
+	str.precision(numeric_limits<double>::digits10+2);
+#endif
 	str << floatData;
 	return str.str();
 }
@@ -2084,7 +2088,7 @@ CScriptVar::CScriptVar(const CScriptVar &Copy) {
 	prev = 0;
 	refs = 0;
 	SCRIPTVAR_CHILDS_cit it;
-	for(it = Copy.Childs.cbegin(); it!= Copy.Childs.cend(); ++it) {
+	for(it = Copy.Childs.begin(); it!= Copy.Childs.end(); ++it) {
 		addChild((*it)->getName(), (*it)->getVarPtr(), (*it)->getFlags());
 	}
 
@@ -3205,7 +3209,11 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		if(Radix==10) {
 			ostringstream str;
 			str.unsetf(ios::floatfield);
+#if defined(_MSC_VER) || __cplusplus >= 201103L
 			str.precision(numeric_limits<double>::max_digits10);
+#else
+			str.precision(numeric_limits<double>::digits10+2);
+#endif
 			str << Double;
 			return str.str();
 		} else if( (str = tiny_dtoa(Double, Radix)) ) {
@@ -3476,21 +3484,20 @@ void CScriptVarRegExp::LastIndex(unsigned int Idx) {
 
 CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/ )
 {
-	string Str=Input;
 	regex::flag_type flags = regex_constants::ECMAScript;
 	if(IgnoreCase()) flags |= regex_constants::icase;
 	bool global = Global(), sticky = Sticky();
 	unsigned int lastIndex = LastIndex();
 	int offset = 0;
 	if(global || sticky) {
-		if(lastIndex > Str.length()) goto failed; 
+		if(lastIndex > Input.length()) goto failed; 
 		offset=lastIndex;
 	}
 	{
 		regex_constants::match_flag_type mflag = sticky?regex_constants::match_continuous:regex_constants::match_default;
 		if(offset) mflag |= regex_constants::match_prev_avail;
 		smatch match;
-		if(regex_search(Str.cbegin()+offset, Str.cend(), match, regex(regexp, flags), mflag) ) {
+		if(regex_search(Input.begin()+offset, Input.end(), match, regex(regexp, flags), mflag) ) {
 			LastIndex(offset+match.position()+match.str().length());
 			if(Test) return constScriptVar(true);
 
@@ -3812,12 +3819,13 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Object()", this, &CTinyJS::native_Object, 0, SCRIPTVARLINK_CONSTANT);
 	objectPrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf); 
-	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectState); 
-	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isObjectState); 
-	addNative("function Object.seel(obj)", this, &CTinyJS::native_Object_setObjectState, (void*)1); 
-	addNative("function Object.isSealed(obj)", this, &CTinyJS::native_Object_isObjectState, (void*)1); 
-	addNative("function Object.freeze(obj)", this, &CTinyJS::native_Object_setObjectState, (void*)2); 
-	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isObjectState, (void*)2); 
+	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectSecure); 
+	addNative("function Object.isExtensible(obj)", this, &CTinyJS::native_Object_isObjectSecure); 
+	addNative("function Object.seel(obj)", this, &CTinyJS::native_Object_setObjectSecure, (void*)1); 
+	addNative("function Object.isSealed(obj)", this, &CTinyJS::native_Object_isObjectSecure, (void*)1); 
+	addNative("function Object.freeze(obj)", this, &CTinyJS::native_Object_setObjectSecure, (void*)2); 
+	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isObjectSecure, (void*)2); 
+	addNative("function Object.keys(obj)", this, &CTinyJS::native_Object_keys); 
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString); 
@@ -5552,7 +5560,7 @@ void CTinyJS::native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *da
 	c->throwError(TypeError, "argument is not an object");
 }
 
-void CTinyJS::native_Object_setObjectState(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Object_setObjectSecure(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument(0);
 	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
 	if(data==(void*)2)
@@ -5564,7 +5572,7 @@ void CTinyJS::native_Object_setObjectState(const CFunctionsScopePtr &c, void *da
 	c->setReturnVar(obj);
 }
 
-void CTinyJS::native_Object_isObjectState(const CFunctionsScopePtr &c, void *data) {
+void CTinyJS::native_Object_isObjectSecure(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument(0);
 	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
 	bool ret;
@@ -5576,6 +5584,25 @@ void CTinyJS::native_Object_isObjectState(const CFunctionsScopePtr &c, void *dat
 		ret = obj->isExtensible();
 	c->setReturnVar(constScriptVar(ret));
 }
+
+void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr obj = c->getArgument(0);
+	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	CScriptVarPtr returnVar = c->newScriptVar(Array);
+	c->setReturnVar(returnVar);
+
+	STRING_SET_t keys;
+	obj->keys(keys, true);
+	int idx=0;
+	for(STRING_SET_it it=keys.begin(); it!=keys.end(); ++it)
+		returnVar->setArrayIndex(idx++, newScriptVar(*it));
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+/// Object.prototype
+//////////////////////////////////////////////////////////////////////////
+
 void CTinyJS::native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->constScriptVar((bool) c->getArgument("this")->findChild(c->getArgument("prop")->toString()) ));
 }

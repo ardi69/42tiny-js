@@ -1879,8 +1879,9 @@ private:
 	 * 1 - seal / isSealed
 	 * 2 - freeze / isFrozen
 	 */
-	void native_Object_setObjectState(const CFunctionsScopePtr &c, void *data);
-	void native_Object_isObjectState(const CFunctionsScopePtr &c, void *data);
+	void native_Object_setObjectSecure(const CFunctionsScopePtr &c, void *data);
+	void native_Object_isObjectSecure(const CFunctionsScopePtr &c, void *data);
+	void native_Object_keys(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_toString(const CFunctionsScopePtr &c, void *data);
