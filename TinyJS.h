@@ -607,6 +607,7 @@ public:
 	/// Value
 	//////////////////////////////////////////////////////////////////////////
 
+	virtual CScriptVarPrimitivePtr getRawPrimitive()=0; ///< is Var==Primitive -> return this isObject return Value
 	CScriptVarPrimitivePtr toPrimitive(); ///< by default call getDefaultValue_hintNumber by a Date-object calls getDefaultValue_hintString
 	virtual CScriptVarPrimitivePtr toPrimitive(bool &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	CScriptVarPrimitivePtr toPrimitive_hintString(int32_t radix=0); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
@@ -770,6 +771,7 @@ template<typename C>
 class CScriptVarPointer : public CScriptVarPtr { 
 public:
 	CScriptVarPointer() {}
+	CScriptVarPointer(CScriptVar *Var) : CScriptVarPtr(dynamic_cast<C*>(Var)) {}
 	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(Copy) { if(var) { var = dynamic_cast<C*>(var); } }
 	C * operator ->() const { C *Var = dynamic_cast<C*>(var); ASSERT(var && Var); return Var; }
 };
@@ -797,7 +799,7 @@ public:
 	bool isOwned() const { return (flags & SCRIPTVARLINK_OWNED) != 0; }
 	void setOwned(bool On) { On ? (flags |= SCRIPTVARLINK_OWNED) : (flags &= ~SCRIPTVARLINK_OWNED); }
 
-	bool isOwner() const { return owner!=0; }
+	bool hasOwner() const { return owner!=0; }
 
 	bool isWritable() const { return (flags & SCRIPTVARLINK_WRITABLE) != 0; }
 	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_WRITABLE); }
@@ -957,6 +959,7 @@ public:
 
 	virtual bool isPrimitive();	///< return true; 
 
+	virtual CScriptVarPrimitivePtr getRawPrimitive();
 	virtual bool toBoolean();							/// false by default
 	virtual CNumber toNumber_Callback()=0;
 	virtual std::string toCString(int radix=0)=0;
@@ -1046,7 +1049,8 @@ public:
 	virtual CScriptVarPtr toObject();
 	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
 
-	int getChar(int Idx);
+	uint32_t stringLength() { return data.size(); }
+	int getChar(uint32_t Idx);
 protected:
 	std::string data;
 private:
@@ -1283,6 +1287,7 @@ public:
 	virtual ~CScriptVarObject();
 	virtual CScriptVarPtr clone();
 
+	virtual CScriptVarPrimitivePtr getRawPrimitive();
 	virtual bool isObject(); // { return true; }
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
@@ -1808,13 +1813,13 @@ private:
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link)
 	{
-		if(execute && link && !link->isOwned() && !link->isOwner() && !link->getName().empty())
+		if(execute && link && !link->isOwned() && !link->hasOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", t->getPrevPos());
 	}
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
 	{
-		if(execute && link && !link->isOwned() && !link->isOwner() && !link->getName().empty())
+		if(execute && link && !link->isOwned() && !link->hasOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", Pos);
 	}
 
@@ -1880,7 +1885,7 @@ private:
 	 * 2 - freeze / isFrozen
 	 */
 	void native_Object_setObjectSecure(const CFunctionsScopePtr &c, void *data);
-	void native_Object_isObjectSecure(const CFunctionsScopePtr &c, void *data);
+	void native_Object_isSecureObject(const CFunctionsScopePtr &c, void *data);
 	void native_Object_keys(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data);
