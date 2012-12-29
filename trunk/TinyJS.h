@@ -191,10 +191,9 @@ enum LEX_TYPES {
 #define LEX_TOKEN_DATA_SIMPLE(tk) (!LEX_TOKEN_DATA_STRING(tk) && !LEX_TOKEN_DATA_FLOAT(tk) && !LEX_TOKEN_DATA_FUNCTION(tk) && !LEX_TOKEN_DATA_OBJECT_LITERAL(tk) && !LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) && !LEX_TOKEN_DATA_FORWARDER(tk))
 
 enum SCRIPTVARLINK_FLAGS {
-	SCRIPTVARLINK_OWNED				= 1<<0,
-	SCRIPTVARLINK_WRITABLE			= 1<<1,
-	SCRIPTVARLINK_CONFIGURABLE		= 1<<2,
-	SCRIPTVARLINK_ENUMERABLE		= 1<<3,
+	SCRIPTVARLINK_WRITABLE			= 1<<0,
+	SCRIPTVARLINK_CONFIGURABLE		= 1<<1,
+	SCRIPTVARLINK_ENUMERABLE		= 1<<2,
 	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_VARDEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_BUILDINDEFAULT	= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE,
@@ -772,7 +771,7 @@ class CScriptVarPointer : public CScriptVarPtr {
 public:
 	CScriptVarPointer() {}
 	CScriptVarPointer(CScriptVar *Var) : CScriptVarPtr(dynamic_cast<C*>(Var)) {}
-	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(Copy) { if(var) { var = dynamic_cast<C*>(var); } }
+	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(dynamic_cast<C*>(Copy.getVar())) {}
 	C * operator ->() const { C *Var = dynamic_cast<C*>(var); ASSERT(var && Var); return Var; }
 };
 
@@ -796,10 +795,7 @@ public:
 	const CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; } ///< simple Replace the Variable pointed to
 
 
-	bool isOwned() const { return (flags & SCRIPTVARLINK_OWNED) != 0; }
-	void setOwned(bool On) { On ? (flags |= SCRIPTVARLINK_OWNED) : (flags &= ~SCRIPTVARLINK_OWNED); }
-
-	bool hasOwner() const { return owner!=0; }
+	bool isOwned() const { return owner!=0; }
 
 	bool isWritable() const { return (flags & SCRIPTVARLINK_WRITABLE) != 0; }
 	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_WRITABLE); }
@@ -912,8 +908,13 @@ public:
 	CScriptVarLinkWorkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLinkPtr(var, name, flags) {}
 	CScriptVarLinkWorkPtr(CScriptVarLink *Link) : CScriptVarLinkPtr(Link) { if(link) referencedOwner = link->getOwner(); } // creates a new CScriptVarLink (from new);
 	CScriptVarLinkWorkPtr(const CScriptVarLinkPtr &Copy) : CScriptVarLinkPtr(Copy) { if(link) referencedOwner = link->getOwner(); } 
+
 	// reconstruct
 	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.clear(); return *this; }
+
+	// copy
+	CScriptVarLinkWorkPtr(const CScriptVarLinkWorkPtr &Copy) : CScriptVarLinkPtr(Copy), referencedOwner(Copy.referencedOwner) {} 
+	CScriptVarLinkWorkPtr &operator=(const CScriptVarLinkWorkPtr &Copy) { CScriptVarLinkPtr::operator=(Copy); referencedOwner = Copy.referencedOwner; return *this; } 
 
 	// getter & setter
 	CScriptVarLinkWorkPtr getter();
@@ -929,7 +930,8 @@ public:
 
 	void clear() { CScriptVarLinkPtr::clear(); referencedOwner.clear(); }
 	void setReferencedOwner(const CScriptVarPtr &Owner) { referencedOwner = Owner; }
-	const CScriptVarPtr &getReferencedOwner() { return referencedOwner; }
+	const CScriptVarPtr &getReferencedOwner() const { return referencedOwner; }
+	bool hasReferencedOwner() const { return referencedOwner; }
 private:
 	CScriptVarPtr referencedOwner;
 };
@@ -1813,13 +1815,13 @@ private:
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link)
 	{
-		if(execute && link && !link->isOwned() && !link->hasOwner() && !link->getName().empty())
+		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", t->getPrevPos());
 	}
 
 	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
 	{
-		if(execute && link && !link->isOwned() && !link->hasOwner() && !link->getName().empty())
+		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", Pos);
 	}
 

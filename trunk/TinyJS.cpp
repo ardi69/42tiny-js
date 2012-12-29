@@ -2362,7 +2362,7 @@ CScriptVarLinkPtr CScriptVar::addChild(const string &childName, const CScriptVar
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		link = CScriptVarLinkPtr(child?child:constScriptVar(Undefined), childName, linkFlags);
 		link->setOwner(this);
-		link->setOwned(true);
+
 		Childs.insert(it, 1, link);
 #ifdef _DEBUG
 	} else {
@@ -2379,7 +2379,6 @@ CScriptVarLinkPtr CScriptVar::addChildOrReplace(const string &childName, const C
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		CScriptVarLinkPtr link(child, childName, linkFlags);
 		link->setOwner(this);
-		link->setOwned(true);
 		Childs.insert(it, 1, link);
 		return link;
 	} else {
@@ -2505,7 +2504,7 @@ void CScriptVar::setTemporaryID_recursive(uint32_t ID) {
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/) 
-	: name(Name), owner(0), flags(Flags&~SCRIPTVARLINK_OWNED), refs(0) {
+	: name(Name), owner(0), flags(Flags), refs(0) {
 #if DEBUG_MEMORY
 	mark_allocated(this);
 #endif
@@ -2538,7 +2537,7 @@ CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, con
 	if(link && link->refs == 1) { // the link is only refered by this
 		link->name = name;
 		link->owner = 0;
-		link->flags = flags & ~SCRIPTVARLINK_OWNED;
+		link->flags = flags;
 		link->var = var;
 	} else {
 		if(link) link->unref();
@@ -3770,10 +3769,8 @@ CScriptVarLinkWorkPtr CScriptVarScopeWith::findInScopes(const string &childName)
 	if( !ret ) {
 		ret = with->getVarPtr()->findChildInPrototypeChain(childName);
 		if(ret) {
-			CScriptVarPtr realOwner = ret.getReferencedOwner();
 			ret(ret->getVarPtr(), ret->getName()); // recreate ret
-			ret.setReferencedOwner(realOwner); // restore referenced Owner
-			ret->setOwner(with->getVarPtr().getVar()); // fake owner - but not set Owned -> for assignment stuff
+			ret.setReferencedOwner(with->getVarPtr()); // fake referenced Owner
 		}
 	}
 	if( !ret ) ret = getParent()->findInScopes(childName);
@@ -4368,13 +4365,13 @@ void CTinyJS::execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const C
 			t->pushTokenScope(it->value);
 			CScriptVarLinkWorkPtr lhs = execute_condition(execute);
 			if (!lhs->isOwned()) {
-				if(lhs->hasOwner() && !lhs->getOwner()->isExtensible())
-					continue;
-				CScriptVarLinkWorkPtr realLhs;
-				if(lhs->hasOwner())
-					realLhs = lhs->getOwner()->addChildOrReplace(lhs->getName(), lhs);
-				else
-					realLhs = root->addChildOrReplace(lhs->getName(), lhs);
+				CScriptVarPtr Owner = lhs.getReferencedOwner();
+				if(Owner) {
+					if(!lhs.getReferencedOwner()->isExtensible())
+						continue;
+					lhs = Owner->addChildOrReplace(lhs->getName(), lhs);
+				} else
+					lhs = root->addChildOrReplace(lhs->getName(), lhs);
 				lhs = realLhs;
 			}
 			lhs.setter(execute, rhs);
@@ -4590,13 +4587,11 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, boo
 				CScriptVarPtr aVar = a->getVarPtr();
 				CScriptVarLinkWorkPtr child = aVar->findChildWithPrototypeChain(name);
 				if ( (child && child->getOwner() != aVar.getVar()) ) 
-					need_temporary = true;
+					need_temporary = true; // found in PrototypeChain
 				if(child) {
 					if(need_temporary) {
-						CScriptVarPtr realOwner = child.getReferencedOwner();
 						a(child->getVarPtr(), child->getName()); // recreate a
-						a.setReferencedOwner(realOwner); // restore referenced Owner
-						a->setOwner(parent->getVarPtr().getVar()); // fake owner - but not set Owned -> for assignment stuff
+						a.setReferencedOwner(aVar); // fake referenced Owner
 					} else
 						a = child;
 				} else {
@@ -4607,8 +4602,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, boo
 						a(newScriptVar(string(1, (char)Char)), name, 0);
 					} else
 						a(constScriptVar(Undefined), name);
-					a->setOwner(aVar.getVar());  // fake owner - but not set Owned -> for assignment stuff
-					a.setReferencedOwner(aVar.getVar());
+					a.setReferencedOwner(aVar);
 				}
 			}
 		}
@@ -4719,12 +4713,12 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(bool &execute) {
 			if (execute) {
 				if(a->getName().empty())
 					throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", ErrorPos);
-				else if(!a->isOwned() && !a->hasOwner() && !a->getName().empty())
+				else if(!a->isOwned() && !a.hasReferencedOwner() && !a->getName().empty())
 					throwError(execute, ReferenceError, a->getName() + " is not defined", ErrorPos);
 				CScriptVarPtr res = newScriptVar(a.getter(execute)->getVarPtr()->toNumber(execute).add(op==LEX_PLUSPLUS ? 1 : -1));
 				if(a->isWritable()) {
-					if(!a->isOwned() && a->getOwner() && a->getOwner()->isExtensible())
-						a->getOwner()->addChildOrReplace(a->getName(), res);
+					if(!a->isOwned() && a.hasReferencedOwner() && a.getReferencedOwner()->isExtensible())
+						a.getReferencedOwner()->addChildOrReplace(a->getName(), res);
 					else
 						a.setter(execute, res);
 				}
@@ -4743,13 +4737,13 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(bool &execute) {
 		if (execute) {
 			if(a->getName().empty())
 				throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", t->getPrevPos());
-			else if(!a->isOwned() && !a->hasOwner() && !a->getName().empty())
+			else if(!a->isOwned() && !a.hasReferencedOwner() && !a->getName().empty())
 				throwError(execute, ReferenceError, a->getName() + " is not defined", t->getPrevPos());
 			CNumber num = a.getter(execute)->getVarPtr()->toNumber(execute);
 			CScriptVarPtr res = newScriptVar(num.add(op==LEX_PLUSPLUS ? 1 : -1));
 			if(a->isWritable()) {
-				if(!a->isOwned() && a->getOwner() && a->getOwner()->isExtensible())
-					a->getOwner()->addChildOrReplace(a->getName(), res);
+				if(!a->isOwned() && a.hasReferencedOwner() && a.getReferencedOwner()->isExtensible())
+					a.getReferencedOwner()->addChildOrReplace(a->getName(), res);
 				else
 					a.setter(execute, res);
 			}
@@ -4933,7 +4927,7 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 		t->match(t->tk);
 		CScriptVarLinkWorkPtr rhs = execute_assignment(execute).getter(execute); // L<-R
 		if (execute) {
-			if (!lhs->isOwned() && !lhs->hasOwner() && lhs->getName().empty()) {
+			if (!lhs->isOwned() && !lhs.hasReferencedOwner() && lhs->getName().empty()) {
 				throw new CScriptException(ReferenceError, "invalid assignment left-hand side (at runtime)", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
 			} else if (op != '=' && !lhs->isOwned()) {
 				throwError(execute, ReferenceError, lhs->getName() + " is not defined");
@@ -4941,14 +4935,13 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 			else if(lhs->isWritable()) {
 				if (op=='=') {
 					if (!lhs->isOwned()) {
-						if(lhs->hasOwner() && !lhs->getOwner()->isExtensible())
-							return rhs->getVarPtr();
-						CScriptVarLinkPtr realLhs;
-						if(lhs->hasOwner())
-							realLhs = lhs->getOwner()->addChildOrReplace(lhs->getName(), lhs);
-						else
-							realLhs = root->addChildOrReplace(lhs->getName(), lhs);
-						lhs = realLhs;
+						CScriptVarPtr fakedOwner = lhs.getReferencedOwner();
+						if(fakedOwner) {
+							if(!fakedOwner->isExtensible())
+								return rhs->getVarPtr();
+							lhs = fakedOwner->addChildOrReplace(lhs->getName(), lhs);
+						} else
+							lhs = root->addChildOrReplace(lhs->getName(), lhs);
 					}
 					lhs.setter(execute, rhs);
 					return rhs->getVarPtr();
@@ -4967,7 +4960,6 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, bool &e
 	}
 	else 
 		CheckRightHandVar(execute, lhs);
-	if(lhs->hasOwner() && !lhs->isOwned()) lhs->setOwner(0); // remove faked Owner
 	return lhs.getter(execute);
 }
 // L->R: Precedence 17 (comma) ,
@@ -5212,12 +5204,10 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 			for_in_var->getVarPtr()->keys(keys, true, getUniqueID());
 			if( keys.size() ) {
 				if(!for_var->isOwned()) {
-					CScriptVarLinkPtr real_for_var;
-					if(for_var->hasOwner())
-						real_for_var = for_var->getOwner()->addChildOrReplace(for_var->getName(), for_var);
+					if(for_var.hasReferencedOwner())
+						for_var = for_var.getReferencedOwner()->addChildOrReplace(for_var->getName(), for_var);
 					else
-						real_for_var = root->addChildOrReplace(for_var->getName(), for_var);
-					for_var = real_for_var;
+						for_var = root->addChildOrReplace(for_var->getName(), for_var);
 				}
 
 				CScriptTokenizer::ScriptTokenPosition loopStart = t->getPos();
