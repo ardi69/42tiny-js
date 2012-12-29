@@ -773,6 +773,7 @@ static token2str_t tokens2str_begin[] = {
 	{ LEX_PERCENTEQUAL,			"%=",							false },
 	// special tokens
 	{ LEX_T_FOR_IN,				"for",						true  },
+	{ LEX_T_OF,						"of",							true  },
 	{ LEX_T_FOR_EACH_IN,			"for each",					true  },
 	{ LEX_T_FUNCTION_OPERATOR,	"function",					true  },
 	{ LEX_T_GET,					"get",						true  },
@@ -1298,10 +1299,10 @@ void CScriptTokenizer::tokenizeIf(TOKEN_VECT &Tokens, vector<int> &BlockStart, v
 void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags) {
 
 	CScriptLex::POS prev_pos = l->pos;
-	bool for_in, for_each_in;
+	bool for_in, for_of, for_each_in;
 	l->match(LEX_R_FOR);
 	if((for_in = for_each_in = (l->tk == LEX_ID && l->tkStr == "each"))) {
-		l->match(LEX_ID);
+		l->match(LEX_ID); // match "each"
 	}
 	if(!for_in) {
 		l->match('(');
@@ -1313,13 +1314,15 @@ void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 			l->match(LEX_ID);
 			if(l->tk == LEX_R_IN)
 				for_in = true;
+			else if(l->tk == LEX_ID && l->tkStr == "of")
+				for_in = for_of = true;
 		}
 	}
 	l->reset(prev_pos);
 
 	Marks.push_back(pushToken(Tokens)); // push Token & push tokenBeginIdx
 	if(for_in) Tokens[Tokens.size()-1].token = for_each_in?LEX_T_FOR_EACH_IN:LEX_T_FOR_IN;
-	if(for_each_in) l->match(LEX_ID);
+	if(for_each_in) l->match(LEX_ID); // match "each"
 
 	// inject & push LEX_T_LOOP_LABEL
 	int label_count = PushLoopLabels(Tokens, &LoopLabels);
@@ -1335,7 +1338,8 @@ void CScriptTokenizer::tokenizeFor(TOKEN_VECT &Tokens, vector<int> &BlockStart, 
 			Tokens[BlockStart.back()].Forwarder().lets.insert(l->tkStr);
 		}
 		pushToken(Tokens, LEX_ID);
-		pushToken(Tokens, LEX_R_IN);
+		if(for_of) l->tk = LEX_T_OF; // fake token
+		pushToken(Tokens, LEX_R_IN, LEX_T_OF);
 	} else {
 		if(l->tk == LEX_R_VAR)
 			tokenizeVar(Tokens, BlockStart, Marks, Labels, LoopLabels, Flags | TOKENIZE_FLAGS_forFor);
@@ -5191,16 +5195,19 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 				t->match(LEX_ID);
 				for_var = scope()->scopeLet()->findChildOrCreate(var);
 			}
-			else
+			else {
+				if(t->tk == LEX_R_VAR) t->match(LEX_R_VAR); // skip var
 				for_var = execute_function_call(execute);
+			}
 
-			t->match(LEX_R_IN);
+			if(!for_each) for_each = t->tk==LEX_T_OF;
+			t->match(LEX_R_IN, LEX_T_OF);
 
 			for_in_var = execute_function_call(execute);
 			CheckRightHandVar(execute, for_in_var);
 			t->match(')');
 			STRING_SET_t keys;
-			for_in_var->getVarPtr()->keys(keys, true, getUniqueID());
+			for_in_var->getVarPtr()->keys(keys, true, 0);
 			if( keys.size() ) {
 				if(!for_var->isOwned()) {
 					if(for_var.hasReferencedOwner())
@@ -5215,7 +5222,7 @@ CScriptVarLinkPtr CTinyJS::execute_statement(bool &execute) {
 					CScriptVarLinkPtr link = for_var;
 					if(link) {
 						if (for_each)
-							link->setVarPtr(for_in_var->getVarPtr()->findChildWithPrototypeChain(*it));
+							link->setVarPtr(for_in_var->getVarPtr()->findChild(*it));
 						else
 							link->setVarPtr(newScriptVar(*it));
 					} 					else ASSERT(0);
