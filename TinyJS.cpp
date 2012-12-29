@@ -4372,7 +4372,6 @@ void CTinyJS::execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const C
 					lhs = Owner->addChildOrReplace(lhs->getName(), lhs);
 				} else
 					lhs = root->addChildOrReplace(lhs->getName(), lhs);
-				lhs = realLhs;
 			}
 			lhs.setter(execute, rhs);
 		}
