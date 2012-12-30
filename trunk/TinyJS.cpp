@@ -2145,10 +2145,7 @@ CScriptVarPrimitivePtr CScriptVar::getRawPrimitive() {
 	return CScriptVarPrimitivePtr(); // default NULL-Ptr
 }
 CScriptVarPrimitivePtr CScriptVar::toPrimitive() {
-	bool execute=true;
-	CScriptVarPrimitivePtr var = toPrimitive(execute);
-	if(!execute) throw (CScriptVarPtr)context->removeExeptionVar();
-	return var;
+	return toPrimitive_hintNumber();
 }
 
 CScriptVarPrimitivePtr CScriptVar::toPrimitive(bool &execute) {
@@ -2233,12 +2230,7 @@ CScriptVarPtr CScriptVar::toString_CallBack(bool &execute, int radix/*=0*/) {
 	return this;
 }
 
-CNumber CScriptVar::toNumber() { 
-	bool execute=true;
-	CNumber ret = toPrimitive_hintNumber(execute)->toNumber_Callback(); 
-	if(!execute) throw (CScriptVarPtr)context->removeExeptionVar();
-	return ret;
-};
+CNumber CScriptVar::toNumber() { return toPrimitive_hintNumber()->toNumber_Callback(); };
 CNumber CScriptVar::toNumber(bool &execute) { return toPrimitive_hintNumber(execute)->toNumber_Callback(); };
 bool CScriptVar::toBoolean() { return true; }
 string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(radix); }
@@ -2285,13 +2277,114 @@ bool CScriptVar::isFrozen() const {
 
 ////// Childs
 
+CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const string &Name) {
+	CScriptVarLinkPtr child = findChild(Name);
+	if(!child) {
+		CScriptVarStringPtr strVar = getRawPrimitive();
+		uint32_t Idx;
+		if (strVar && (Idx=isArrayIndex(Name))!=uint32_t(-1) && Idx<strVar->stringLength()) {
+			int Char = strVar->getChar(Idx);
+			CScriptVarPtr ret = newScriptVar(Object);
+			ret->addChild("value", newScriptVar(string(1, (char)Char)));
+			ret->addChild("writable", constScriptVar(false));
+			ret->addChild("enumerable", constScriptVar(true));
+			ret->addChild("configurable", constScriptVar(false));
+			return ret;
+		}
+	}
+
+	if(!child || child->getVarPtr()->isUndefined()) return constScriptVar(Undefined);
+	CScriptVarPtr ret = newScriptVar(Object);
+	if(child->getVarPtr()->isAccessor()) {
+		CScriptVarLinkPtr value = child->getVarPtr()->findChild(TINYJS_ACCESSOR_GET_VAR);
+		ret->addChild("get", value ? value->getVarPtr() : constScriptVar(Undefined));
+		value = child->getVarPtr()->findChild(TINYJS_ACCESSOR_SET_VAR);
+		ret->addChild("set", value ? value->getVarPtr() : constScriptVar(Undefined));
+	} else {
+		ret->addChild("value", child->getVarPtr()->valueOf_CallBack());
+		ret->addChild("writable", constScriptVar(child->isWritable()));
+	}
+	ret->addChild("enumerable", constScriptVar(child->isEnumerable()));
+	ret->addChild("configurable", constScriptVar(child->isConfigurable()));
+	return ret;
+}
+const char *CScriptVar::defineProperty(const string &Name, CScriptVarPtr Attributes) {
+	CScriptVarPtr attr;
+	CScriptVarLinkPtr child = findChildWithStringChars(Name);
+
+	CScriptVarPtr attr_value			= Attributes->findChild("value");
+	CScriptVarPtr attr_writable		= Attributes->findChild("writable");
+	CScriptVarPtr attr_get				= Attributes->findChild("get");
+	CScriptVarPtr attr_set				= Attributes->findChild("set");
+	CScriptVarPtr attr_enumerable		= Attributes->findChild("enumerable");
+	CScriptVarPtr attr_configurable	= Attributes->findChild("configurable");
+	bool attr_isDataDescriptor			= !attr_get && !attr_set;
+	if(!attr_isDataDescriptor && (attr_value || attr_writable)) return "property descriptors must not specify a value or be writable when a getter or setter has been specified";
+	if(attr_isDataDescriptor) {
+		if(attr_get && (!attr_get->isUndefined() || !attr_get->isFunction())) return "property descriptor's getter field is neither undefined nor a function";
+		if(attr_set && (!attr_set->isUndefined() || !attr_set->isFunction())) return "property descriptor's setter field is neither undefined nor a function";
+	}
+	if(!child) {
+		if(!isExtensible()) return "is not extensible";
+		if(attr_isDataDescriptor) {
+			child = addChild(Name, attr_value?attr_value:constScriptVar(Undefined), 0);
+			if(attr_writable) child->setWritable(attr_writable->toBoolean());
+		} else {
+			child = addChild(Name, newScriptVarAccessor(context, attr_get, attr_set), SCRIPTVARLINK_WRITABLE);
+		}
+	} else {
+		if(!child->isConfigurable()) {
+			if(attr_configurable && attr_configurable->toBoolean()) goto cant_redefine;
+			if(attr_enumerable && attr_enumerable->toBoolean() != child->isEnumerable()) goto cant_redefine;
+			if(child->getVarPtr()->isAccessor()) {
+				if(attr_isDataDescriptor) goto cant_redefine;
+				if(attr_get && attr_get != child->getVarPtr()->findChild(TINYJS_ACCESSOR_GET_VAR)) goto cant_redefine;
+				if(attr_set && attr_set != child->getVarPtr()->findChild(TINYJS_ACCESSOR_SET_VAR)) goto cant_redefine;
+			} else if(!attr_isDataDescriptor) goto cant_redefine;
+			else if(!child->isWritable()) {
+				if(attr_writable && attr_writable->toBoolean()) goto cant_redefine;
+				if(attr_value && !attr_value->mathsOp(child, LEX_EQUAL)->toBoolean()) goto cant_redefine;
+			}
+		}
+		if(attr_isDataDescriptor) {
+			if(child->getVarPtr()->isAccessor()) child->setWritable(false);
+			child->setVarPtr(attr_value?attr_value:constScriptVar(Undefined));
+			if(attr_writable) child->setWritable(attr_writable->toBoolean());
+		} else {
+			if(child->getVarPtr()->isAccessor()) {
+				if(!attr_get) attr_get = child->getVarPtr()->findChild(TINYJS_ACCESSOR_GET_VAR);
+				if(!attr_set) attr_set = child->getVarPtr()->findChild(TINYJS_ACCESSOR_SET_VAR);
+			}
+			child->setVarPtr(newScriptVarAccessor(context, attr_get, attr_set));
+			child->setWritable(true);
+		}
+	}
+	if(attr_enumerable) child->setEnumerable(attr_enumerable->toBoolean());
+	if(attr_configurable) child->setConfigurable(attr_configurable->toBoolean());
+	return 0;
+cant_redefine:
+	return "can't redefine non-configurable property";
+}
 
 CScriptVarLinkPtr CScriptVar::findChild(const string &childName) {
 	if(Childs.empty()) return 0;
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(),
-		childName);
+	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it != Childs.end() && (*it)->getName() == childName)
 		return *it;
+	return 0;
+}
+
+CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childName) {
+	CScriptVarLinkWorkPtr child = findChild(childName);
+	if(child) return child;
+	CScriptVarStringPtr strVar = getRawPrimitive();
+	uint32_t Idx;
+	if (strVar && (Idx=isArrayIndex(childName))!=uint32_t(-1) && Idx<strVar->stringLength()) {
+		int Char = strVar->getChar(Idx);
+		child(newScriptVar(string(1, (char)Char)), childName, SCRIPTVARLINK_ENUMERABLE);
+		child.setReferencedOwner(this); // fake referenced Owner
+		return child;
+	}
 	return 0;
 }
 
@@ -2309,16 +2402,15 @@ CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName)
 	return 0;
 }
 
-CScriptVarLinkPtr CScriptVar::findChildWithPrototypeChain(const string &childName) {
-	unsigned int uniqueID = context->getUniqueID();
-	CScriptVarPtr object = this;
-	while( object && object->getTempraryID() != uniqueID) {
-		CScriptVarLinkPtr implementation = object->findChild(childName);
-		if (implementation) return implementation;
-		object->setTemporaryID(uniqueID); // prevents recursions
-		object = object->findChild(TINYJS___PROTO___VAR);
+CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const string &childName) {
+	CScriptVarLinkWorkPtr child = findChildWithStringChars(childName);
+	if(child) return child;
+	child = findChildInPrototypeChain(childName);
+	if(child) {
+		child(child->getVarPtr(), child->getName(), child->getFlags()); // recreate implementation
+		child.setReferencedOwner(this); // fake referenced Owner
 	}
-	return 0;
+	return child;
 }
 CScriptVarLinkPtr CScriptVar::findChildByPath(const string &path) {
 	string::size_type p = path.find('.');
@@ -2599,8 +2691,8 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::getter(bool &execute) {
 		CScriptVarLinkPtr getter = var->findChild(TINYJS_ACCESSOR_GET_VAR);
 		if(getter) {
 			vector<CScriptVarPtr> Params;
-			ASSERT(link->getOwner());
-			return getter->getVarPtr()->getContext()->callFunction(execute, getter->getVarPtr(), Params, link->getOwner());
+			ASSERT(getReferencedOwner());
+			return getter->getVarPtr()->getContext()->callFunction(execute, getter->getVarPtr(), Params, getReferencedOwner());
 		} else
 			return var->constScriptVar(Undefined);
 	} else
@@ -2624,8 +2716,8 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( bool &execute, const CScrip
 			if(setter) {
 				vector<CScriptVarPtr> Params;
 				Params.push_back(Var);
-				ASSERT(link->getOwner());
-				setter->getVarPtr()->getContext()->callFunction(execute, setter->getVarPtr(), Params, link->getOwner());
+				ASSERT(getReferencedOwner());
+				setter->getVarPtr()->getContext()->callFunction(execute, setter->getVarPtr(), Params, getReferencedOwner());
 			}
 		} else if(link->isWritable())
 			link->setVarPtr(Var);
@@ -3658,6 +3750,14 @@ CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context, JSCallback getterFnc, v
 	if(setterFnc)
 		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, setterFnc, setterData), 0);
 }
+
+CScriptVarAccessor::CScriptVarAccessor( CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) : CScriptVarObject(Context, Context->objectPrototype) {
+	if(getter)
+		addChild(TINYJS_ACCESSOR_GET_VAR, getter, 0);
+	if(setter)
+		addChild(TINYJS_ACCESSOR_SET_VAR, setter, 0);
+}
+
 CScriptVarAccessor::~CScriptVarAccessor() {}
 CScriptVarPtr CScriptVarAccessor::clone() { return new CScriptVarAccessor(*this); }
 bool CScriptVarAccessor::isAccessor() { return true; }
@@ -3832,6 +3932,12 @@ CTinyJS::CTinyJS() {
 	addNative("function Object.freeze(obj)", this, &CTinyJS::native_Object_setObjectSecure, (void*)2); 
 	addNative("function Object.isFrozen(obj)", this, &CTinyJS::native_Object_isSecureObject, (void*)2); 
 	addNative("function Object.keys(obj)", this, &CTinyJS::native_Object_keys); 
+	addNative("function Object.getOwnPropertyNames(obj)", this, &CTinyJS::native_Object_keys, (void*)1); 
+	addNative("function Object.getOwnPropertyDescriptor(obj,name)", this, &CTinyJS::native_Object_getOwnPropertyDescriptor); 
+	addNative("function Object.defineProperty(obj,name,attributes)", this, &CTinyJS::native_Object_defineProperty); 
+	addNative("function Object.defineProperties(obj,properties)", this, &CTinyJS::native_Object_defineProperties); 
+	addNative("function Object.create(obj,properties)", this, &CTinyJS::native_Object_defineProperties, (void*)1); 
+
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty); 
 	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf); 
 	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString); 
@@ -4571,7 +4677,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, boo
 			if(execute && (a->getVarPtr()->isUndefined() || a->getVarPtr()->isNull())) {
 				throwError(execute, ReferenceError, a->getName() + " is " + a->toString(execute));
 			}
-			string name; int isIndex=false;
+			string name;
 			if(t->tk == '.') {
 				t->match('.');
 				name = t->tkStr();
@@ -4581,30 +4687,14 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, boo
 					t->match('[');
 					name = execute_expression(execute)->toString(execute);
 					t->match(']');
-					isIndex = true;
 				} else
 					t->skip(t->getToken().Int());
 			}
 			if (execute) {
-				bool need_temporary = false;
-				CScriptVarPtr aVar = a->getVarPtr();
-				CScriptVarLinkWorkPtr child = aVar->findChildWithPrototypeChain(name);
-				if ( (child && child->getOwner() != aVar.getVar()) ) 
-					need_temporary = true; // found in PrototypeChain
-				if(child) {
-					if(need_temporary) {
-						a(child->getVarPtr(), child->getName()); // recreate a
-						a.setReferencedOwner(aVar); // fake referenced Owner
-					} else
-						a = child;
-				} else {
-					CScriptVarStringPtr pVar = aVar->getRawPrimitive();
-					uint32_t Idx;
-					if (isIndex && pVar && pVar->isString() && (Idx=isArrayIndex(name))!=uint32_t(-1) && Idx<pVar->stringLength()) {
-						int Char = pVar->getChar(Idx);
-						a(newScriptVar(string(1, (char)Char)), name, 0);
-					} else
-						a(constScriptVar(Undefined), name);
+				CScriptVarPtr aVar = a;
+				a = aVar->findChildWithPrototypeChain(name);
+				if(!a) {
+					a(constScriptVar(Undefined), name);
 					a.setReferencedOwner(aVar);
 				}
 			}
@@ -4654,7 +4744,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_function_call(bool &execute) {
 			}
 			t->match(')');
 		}
-		a = execute_member(a, execute);
+		a = execute_member(parent = a, execute);
 	}
 	return a;
 }
@@ -5597,7 +5687,7 @@ void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(returnVar);
 
 	STRING_SET_t keys;
-	obj->keys(keys, true);
+	obj->keys(keys, data==0);
 
 	uint32_t length = 0;
 	CScriptVarStringPtr isStringObj = obj->getRawPrimitive();
@@ -5611,6 +5701,50 @@ void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
 	uint32_t idx=0;
 	for(STRING_SET_it it=keys.begin(); it!=keys.end(); ++it)
 		returnVar->setArrayIndex(idx++, newScriptVar(*it));
+}
+
+void CTinyJS::native_Object_getOwnPropertyDescriptor(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr obj = c->getArgument(0);
+	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	c->setReturnVar(obj->getOwnPropertyDescriptor(c->getArgument(1)->toString()));
+}
+
+void CTinyJS::native_Object_defineProperty(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr obj = c->getArgument(0);
+	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	string name = c->getArgument(1)->toString();
+	CScriptVarPtr attributes = c->getArgument(2);
+	if(!attributes->isObject()) c->throwError(TypeError, "attributes is not an object");
+	const char *err = obj->defineProperty(name, attributes);
+	if(err) c->throwError(TypeError, err);
+	c->setReturnVar(obj);
+}
+
+void CTinyJS::native_Object_defineProperties(const CFunctionsScopePtr &c, void *data) {
+	bool ObjectCreate = data!=0;
+	CScriptVarPtr obj = c->getArgument(0);
+	if(ObjectCreate) {
+		if(!obj->isObject() && !obj->isNull()) c->throwError(TypeError, "argument is not an object or null");
+		obj = newScriptVar(Object, obj);
+	} else
+		if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
+	c->setReturnVar(obj);
+	if(c->getArrayLength()<2) {
+		if(ObjectCreate) return;
+		c->throwError(TypeError, "Object.defineProperties requires 2 arguments");
+	}
+
+	CScriptVarPtr properties = c->getArgument(1);
+
+	STRING_SET_t names;
+	properties->keys(names, true);
+
+	for(STRING_SET_it it=names.begin(); it!=names.end(); ++it) {
+		CScriptVarPtr attributes = properties->findChildWithStringChars(*it).getter();
+		if(!attributes->isObject()) c->throwError(TypeError, "descriptor for "+*it+" is not an object");
+		const char *err = obj->defineProperty(*it, attributes);
+		if(err) c->throwError(TypeError, err);
+	}
 }
 
 

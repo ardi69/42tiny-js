@@ -654,6 +654,15 @@ public:
 #else
 	CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
 #endif
+
+	//////////////////////////////////////////////////////////////////////////
+	/// Childs
+	//////////////////////////////////////////////////////////////////////////
+
+
+	CScriptVarPtr getOwnPropertyDescriptor(const std::string &Name);
+	const char *defineProperty(const std::string &Name, CScriptVarPtr Attributes);
+
 	/// flags
 	void setExtensible(bool On=true)	{ extensible=On; }
 	void preventExtensions()			{ extensible=false; }
@@ -665,8 +674,9 @@ public:
 
 	/// find 
 	CScriptVarLinkPtr findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
+	CScriptVarLinkWorkPtr findChildWithStringChars(const std::string &childName);
 	CScriptVarLinkPtr findChildInPrototypeChain(const std::string &childName);
-	CScriptVarLinkPtr findChildWithPrototypeChain(const std::string &childName);
+	CScriptVarLinkWorkPtr findChildWithPrototypeChain(const std::string &childName);
 	CScriptVarLinkPtr findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
 	CScriptVarLinkPtr findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
 	CScriptVarLinkPtr findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
@@ -1543,6 +1553,7 @@ protected:
 		if(setterFnc)
 			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
 	}
+	CScriptVarAccessor(CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter);
 
 	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
 public:
@@ -1559,10 +1570,12 @@ public:
 	friend define_newScriptVar_Fnc(Accessor, CTinyJS *Context, Accessor_t);
 	friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
 	template<class C> friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData);
+	friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, const CScriptVarFunctionPtr &, const CScriptVarFunctionPtr &);
 };
 inline define_newScriptVar_Fnc(Accessor, CTinyJS *Context, Accessor_t) { return new CScriptVarAccessor(Context); }
 inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata) { return new CScriptVarAccessor(Context, getter, getterdata, setter, setterdata); }
 template<class C> define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData)  { return new CScriptVarAccessor(Context, class_ptr, getterFnc, getterData, setterFnc, setterData); }
+inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) { return new CScriptVarAccessor(Context, getter, setter); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1890,6 +1903,10 @@ private:
 	void native_Object_setObjectSecure(const CFunctionsScopePtr &c, void *data);
 	void native_Object_isSecureObject(const CFunctionsScopePtr &c, void *data);
 	void native_Object_keys(const CFunctionsScopePtr &c, void *data);
+	void native_Object_getOwnPropertyDescriptor(const CFunctionsScopePtr &c, void *data);
+	void native_Object_defineProperty(const CFunctionsScopePtr &c, void *data);
+	void native_Object_defineProperties(const CFunctionsScopePtr &c, void *data);
+
 	void native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_valueOf(const CFunctionsScopePtr &c, void *data);
 	void native_Object_prototype_toString(const CFunctionsScopePtr &c, void *data);
