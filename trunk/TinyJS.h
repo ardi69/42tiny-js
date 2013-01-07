@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2012 ardisoft
+ * Copyright (C) 2010-2013 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -136,10 +136,11 @@ enum LEX_TYPES {
 #define LEX_TOKEN_LOOP_BEGIN LEX_R_DO
 	LEX_R_DO,
 	LEX_R_WHILE,
+#define LEX_TOKEN_FOR_BEGIN LEX_R_FOR
 	LEX_R_FOR,
 	LEX_T_FOR_IN,
-	LEX_T_FOR_EACH_IN,
-#define LEX_TOKEN_LOOP_END LEX_T_FOR_EACH_IN
+#define LEX_TOKEN_FOR_END LEX_T_FOR_IN
+#define LEX_TOKEN_LOOP_END LEX_T_FOR_IN
 	LEX_R_IN,
 	LEX_T_OF,
 	LEX_R_BREAK,
@@ -176,6 +177,7 @@ enum LEX_TYPES {
 	LEX_T_SET,
 #define LEX_TOKEN_FUNCTION_END LEX_T_SET
 
+	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
 
 	LEX_T_FORWARD,
@@ -188,8 +190,9 @@ enum LEX_TYPES {
 #define LEX_TOKEN_DATA_OBJECT_LITERAL(tk) (tk==LEX_T_OBJECT_LITERAL)
 #define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) (tk==LEX_T_DESTRUCTURING_VAR)
 #define LEX_TOKEN_DATA_FORWARDER(tk) (tk==LEX_T_FORWARD)
+#define LEX_TOKEN_DATA_FOR(tk) (LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
 
-#define LEX_TOKEN_DATA_SIMPLE(tk) (!LEX_TOKEN_DATA_STRING(tk) && !LEX_TOKEN_DATA_FLOAT(tk) && !LEX_TOKEN_DATA_FUNCTION(tk) && !LEX_TOKEN_DATA_OBJECT_LITERAL(tk) && !LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) && !LEX_TOKEN_DATA_FORWARDER(tk))
+#define LEX_TOKEN_DATA_SIMPLE(tk) (!LEX_TOKEN_DATA_STRING(tk) && !LEX_TOKEN_DATA_FLOAT(tk) && !LEX_TOKEN_DATA_FUNCTION(tk) && !LEX_TOKEN_DATA_OBJECT_LITERAL(tk) && !LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) && !LEX_TOKEN_DATA_FORWARDER(tk) && !LEX_TOKEN_DATA_FOR(tk))
 
 enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_WRITABLE			= 1<<0,
@@ -372,6 +375,23 @@ public:
 private:
 };
 
+class CScriptTokenDataFor : public fixed_size_object<CScriptTokenDataFor>, public CScriptTokenData {
+public:
+	CScriptTokenDataFor() { type=FOR; }
+	enum {
+		FOR,
+		FOR_EACH,
+		FOR_IN,
+		FOR_OF
+	} type;
+	STRING_VECTOR_t labels;
+	TOKEN_VECT init;
+	TOKEN_VECT condition;
+	TOKEN_VECT iter;
+	TOKEN_VECT body;
+	std::string getParsableString();
+};
+
 typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
 typedef std::vector<DESTRUCTURING_VAR_t> DESTRUCTURING_VARS_t;
 typedef DESTRUCTURING_VARS_t::iterator DESTRUCTURING_VARS_it;
@@ -433,7 +453,11 @@ public:
 	const CScriptTokenDataFnc &Fnc() const { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return *dynamic_cast<CScriptTokenDataFnc*>(tokenData); }
 	CScriptTokenDataObjectLiteral &Object() { ASSERT(LEX_TOKEN_DATA_OBJECT_LITERAL(token)); return *dynamic_cast<CScriptTokenDataObjectLiteral*>(tokenData); }
 	CScriptTokenDataDestructuringVar &DestructuringVar() { ASSERT(LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)); return *dynamic_cast<CScriptTokenDataDestructuringVar*>(tokenData); }
+	CScriptTokenDataFor &For() { ASSERT(LEX_TOKEN_DATA_FOR(token)); return *dynamic_cast<CScriptTokenDataFor*>(tokenData); }
 	CScriptTokenDataForwards &Forwarder() { ASSERT(LEX_TOKEN_DATA_FORWARDER(token)); return *dynamic_cast<CScriptTokenDataForwards*>(tokenData); }
+#ifdef _DEBUG
+	std::string token_str;
+#endif
 	uint16_t			line;
 	uint16_t			column;
 	uint16_t			token;
@@ -507,8 +531,8 @@ private:
 	void _tokenizeDestructionVar(DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t &VarNames);
 	CScriptToken tokenizeDestructionVar(STRING_VECTOR_t &VarNames);
 	void tokenizeFunction(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeLet(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeVar(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
+	void tokenizeLet(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int *State=0);
+	void tokenizeVar(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int *State=0);
 	void _tokenizeLiteralObject(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void _tokenizeLiteralArray(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void tokenizeObjectLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
@@ -521,6 +545,7 @@ private:
 	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
+	void tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
 	void tokenizeBlock(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 	void tokenizeStatement(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
 
@@ -600,6 +625,8 @@ public:
 	virtual bool isNative();	///< is CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
 	virtual bool isBounded();	///< is CScriptVarFunctionBounded
 
+	virtual bool isIterator();
+
 	bool isBasic() { return Childs.empty(); } ///< Is this *not* an array/object/etc
 
 
@@ -640,6 +667,10 @@ public:
 	virtual CScriptTokenDataFnc *getFunctionData(); ///< { return 0; }
 	
 	virtual CScriptVarPtr toObject()=0;
+
+	CScriptVarPtr toIterator(int Mode=3);
+	CScriptVarPtr toIterator(bool &execute, int Mode=3);
+
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, bool &hasRecursion); ///< get Data as a parsable javascript string
 #define getParsableStringRecursionsCheck() do{		\
@@ -783,6 +814,7 @@ public:
 	CScriptVarPointer() {}
 	CScriptVarPointer(CScriptVar *Var) : CScriptVarPtr(dynamic_cast<C*>(Var)) {}
 	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(dynamic_cast<C*>(Copy.getVar())) {}
+	CScriptVarPointer<C> &operator=(const CScriptVarPtr &Copy) { CScriptVarPtr::operator=(dynamic_cast<C*>(Copy.getVar())); return *this; }
 	C * operator ->() const { C *Var = dynamic_cast<C*>(var); ASSERT(var && Var); return Var; }
 };
 
@@ -1287,6 +1319,7 @@ inline define_newScriptVar_NamedFnc(Bool, CTinyJS *Context, bool Obj) { return n
 /// CScriptVarObject
 //////////////////////////////////////////////////////////////////////////
 
+define_dummy_t(StopIteration);
 define_dummy_t(Object);
 define_ScriptVarPtr_Type(Object);
 
@@ -1416,6 +1449,37 @@ private:
 inline define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &Obj, const std::string &Flags) { return new CScriptVarRegExp(Context, Obj, Flags); }
 
 #endif /* NO_REGEXP */
+
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarDefaultIterator
+//////////////////////////////////////////////////////////////////////////
+
+define_dummy_t(DefaultIterator);
+define_ScriptVarPtr_Type(DefaultIterator);
+
+class CScriptVarDefaultIterator : public CScriptVarObject {
+protected:
+	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, int Mode);
+	CScriptVarDefaultIterator(const CScriptVarDefaultIterator &Copy) 
+	: 
+	CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
+	keys(Copy.keys), pos(keys.begin()){} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarDefaultIterator();
+	virtual CScriptVarPtr clone();
+	virtual bool isIterator();
+
+	void native_next(const CFunctionsScopePtr &c, void *data);
+private:
+	int mode;
+	CScriptVarPtr object;
+	STRING_SET_t keys;
+	STRING_SET_it pos;
+	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, int);
+
+};
+inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, int Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1577,6 +1641,19 @@ inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback gette
 template<class C> define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData)  { return new CScriptVarAccessor(Context, class_ptr, getterFnc, getterData, setterFnc, setterData); }
 inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) { return new CScriptVarAccessor(Context, getter, setter); }
 
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarDestructuring
+//////////////////////////////////////////////////////////////////////////
+
+class CScriptVarDestructuring : public CScriptVarObject {
+protected: // only derived classes or friends can be created
+	CScriptVarDestructuring(CTinyJS *Context) // constructor for rootScope
+		: CScriptVarObject(Context) {}
+	virtual CScriptVarPtr clone();
+public:
+	virtual ~CScriptVarDestructuring();
+};
 
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarScope
@@ -1777,6 +1854,7 @@ public:
 	const CScriptVarPtr &constScriptVar(Infinity t)			{ return t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
 	const CScriptVarPtr &constScriptVar(bool Val)			{ return Val?constTrue:constFalse; }
 	const CScriptVarPtr &constScriptVar(NegativeZero_t)	{ return constNegativZero; }
+	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
 
 
 private:
@@ -1812,6 +1890,7 @@ public:
 	CScriptVarPtr regexpPrototype; /// Built in string class
 	CScriptVarPtr numberPrototype; /// Built in number class
 	CScriptVarPtr booleanPrototype; /// Built in boolean class
+	CScriptVarPtr iteratorPrototype; /// Built in boolean class
 	CScriptVarPtr functionPrototype; /// Built in function class
 	const CScriptVarPtr &getErrorPrototype(ERROR_TYPES Type) { return errorPrototypes[Type]; }
 private:
@@ -1824,6 +1903,8 @@ private:
 	CScriptVarPtr constNegativZero;
 	CScriptVarPtr constTrue;
 	CScriptVarPtr constFalse;
+	CScriptVarPtr constStopIteration;
+
 	std::vector<CScriptVarPtr *> pseudo_refered;
 	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
@@ -1852,7 +1933,7 @@ public:
 
 	CScriptVarPtr mathsOp(bool &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
 private:
-
+	void assign_destructuring_var(const CScriptVarPtr &Scope, CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, bool &execute);
 	void execute_var_init(bool hideLetScope, bool &execute);
 	void execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, bool &execute);
 	CScriptVarLinkWorkPtr execute_literals(bool &execute);
@@ -1920,6 +2001,8 @@ private:
 	void native_Number(const CFunctionsScopePtr &c, void *data);
 
 	void native_Boolean(const CFunctionsScopePtr &c, void *data);
+
+	void native_Iterator(const CFunctionsScopePtr &c, void *data);
 
 	void native_Function(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_call(const CFunctionsScopePtr &c, void *data);
