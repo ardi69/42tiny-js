@@ -119,6 +119,7 @@ enum LEX_TYPES {
 	LEX_XOREQUAL,
 #define LEX_ASSIGNMENTS_END LEX_XOREQUAL
 
+#define LEX_TOKEN_NONSIMPLE_1_BEGIN LEX_TOKEN_STRING_BEGIN
 #define LEX_TOKEN_STRING_BEGIN LEX_ID
 	LEX_ID,
 	LEX_STR,
@@ -129,18 +130,14 @@ enum LEX_TYPES {
 #define LEX_TOKEN_STRING_END LEX_T_LOOP_LABEL
 
 	LEX_FLOAT,
+#define LEX_TOKEN_NONSIMPLE_1_END LEX_FLOAT
 
 	// reserved words
 	LEX_R_IF,
 	LEX_R_ELSE,
-#define LEX_TOKEN_LOOP_BEGIN LEX_R_DO
 	LEX_R_DO,
 	LEX_R_WHILE,
-#define LEX_TOKEN_FOR_BEGIN LEX_R_FOR
 	LEX_R_FOR,
-	LEX_T_FOR_IN,
-#define LEX_TOKEN_FOR_END LEX_T_FOR_IN
-#define LEX_TOKEN_LOOP_END LEX_T_FOR_IN
 	LEX_R_IN,
 	LEX_T_OF,
 	LEX_R_BREAK,
@@ -148,6 +145,7 @@ enum LEX_TYPES {
 	LEX_R_RETURN,
 	LEX_R_VAR,
 	LEX_R_LET,
+	LEX_R_CONST,
 	LEX_R_WITH,
 	LEX_R_TRUE,
 	LEX_R_FALSE,
@@ -167,32 +165,37 @@ enum LEX_TYPES {
 
 	// special token
 //	LEX_T_FILE,
-#define LEX_TOKEN_FUNCTION_BEGIN LEX_R_FUNCTION_PLACEHOLDER
-	LEX_R_FUNCTION_PLACEHOLDER,
+#define LEX_TOKEN_NONSIMPLE_2_BEGIN LEX_TOKEN_FOR_BEGIN
+#define LEX_TOKEN_FOR_BEGIN LEX_T_LOOP
+	LEX_T_LOOP,
+	LEX_T_FOR_IN,
+#define LEX_TOKEN_FOR_END LEX_T_FOR_IN
+#define LEX_TOKEN_FUNCTION_BEGIN LEX_R_FUNCTION
 	LEX_R_FUNCTION,
+	LEX_T_FUNCTION_PLACEHOLDER,
 	LEX_T_FUNCTION_OPERATOR,
-	LEX_T_FUNCTION_SHORT,
-	LEX_T_FUNCTION_OPERATOR_SHORT,
 	LEX_T_GET,
 	LEX_T_SET,
 #define LEX_TOKEN_FUNCTION_END LEX_T_SET
+	LEX_T_TRY,
+	LEX_T_OBJECT_LITERAL,
+	LEX_T_DESTRUCTURING_VAR,
+	LEX_T_FORWARD,
+#define LEX_TOKEN_NONSIMPLE_2_END LEX_T_FORWARD
 
 	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
-
-	LEX_T_FORWARD,
-	LEX_T_DESTRUCTURING_VAR,
-	LEX_T_OBJECT_LITERAL,
 };
 #define LEX_TOKEN_DATA_STRING(tk) ((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
 #define LEX_TOKEN_DATA_FLOAT(tk) (tk==LEX_FLOAT)
+#define LEX_TOKEN_DATA_LOOP(tk) (LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
 #define LEX_TOKEN_DATA_FUNCTION(tk) (LEX_TOKEN_FUNCTION_BEGIN <= tk && tk <= LEX_TOKEN_FUNCTION_END)
+#define LEX_TOKEN_DATA_TRY(tk) (tk == LEX_T_TRY)
 #define LEX_TOKEN_DATA_OBJECT_LITERAL(tk) (tk==LEX_T_OBJECT_LITERAL)
 #define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) (tk==LEX_T_DESTRUCTURING_VAR)
 #define LEX_TOKEN_DATA_FORWARDER(tk) (tk==LEX_T_FORWARD)
-#define LEX_TOKEN_DATA_FOR(tk) (LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
 
-#define LEX_TOKEN_DATA_SIMPLE(tk) (!LEX_TOKEN_DATA_STRING(tk) && !LEX_TOKEN_DATA_FLOAT(tk) && !LEX_TOKEN_DATA_FUNCTION(tk) && !LEX_TOKEN_DATA_OBJECT_LITERAL(tk) && !LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) && !LEX_TOKEN_DATA_FORWARDER(tk) && !LEX_TOKEN_DATA_FOR(tk))
+#define LEX_TOKEN_DATA_SIMPLE(tk) (!((LEX_TOKEN_NONSIMPLE_1_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_1_END) || (LEX_TOKEN_NONSIMPLE_2_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_2_END)))
 
 enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_WRITABLE			= 1<<0,
@@ -200,6 +203,7 @@ enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_ENUMERABLE		= 1<<2,
 	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_VARDEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_CONSTDEFAULT		= SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_BUILDINDEFAULT	= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE,
 	SCRIPTVARLINK_READONLY			= SCRIPTVARLINK_CONFIGURABLE,
 	SCRIPTVARLINK_READONLY_ENUM	= SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
@@ -338,6 +342,28 @@ public:
 private:
 	int refs;
 };
+template<typename C>
+class CScriptTokenDataPtr {
+public:
+	CScriptTokenDataPtr() : ptr(0) {}
+	CScriptTokenDataPtr(const CScriptTokenDataPtr &Copy) : ptr(0) { *this=Copy; }
+	CScriptTokenDataPtr &operator=(const CScriptTokenDataPtr &Copy) { 
+		if(ptr != Copy.ptr) {
+			if(ptr) ptr->unref();
+			if((ptr = Copy.ptr)) ptr->ref();
+		}
+		return *this; 
+	}
+	CScriptTokenDataPtr(C &Init) { (ptr=&Init)->ref(); }
+	~CScriptTokenDataPtr() { if(ptr) ptr->unref(); }
+	C *operator->() { return ptr; }
+	C &operator*() { return *ptr; }
+	operator bool() { return ptr!=0; }
+	bool operator==(const CScriptTokenDataPtr& rhs) { return ptr==rhs.ptr; }
+private:
+	C *ptr;
+};
+
 class CScriptTokenDataString : public fixed_size_object<CScriptTokenDataString>, public CScriptTokenData {
 public:
 	CScriptTokenDataString(const std::string &String) : tokenStr(String) {}
@@ -358,8 +384,13 @@ public:
 class CScriptTokenDataForwards : public fixed_size_object<CScriptTokenDataForwards>, public CScriptTokenData {
 public:
 	CScriptTokenDataForwards() {}
-	STRING_SET_t vars;
-	STRING_SET_t lets;
+	enum { 
+		LETS = 0,
+		VARS,
+		CONSTS,
+		END
+	};
+	STRING_SET_t varNames[END];
 	STRING_SET_t vars_in_letscope;
 	class compare_fnc_token_by_name {
 	public:
@@ -370,20 +401,37 @@ public:
 	FNC_SET_t functions;
 	bool checkRedefinition(const std::string &Str, bool checkVars);
 	void addVars( STRING_VECTOR_t &Vars );
+	void addConsts( STRING_VECTOR_t &Vars );
 	std::string addVarsInLetscope(STRING_VECTOR_t &Vars);
 	std::string addLets(STRING_VECTOR_t &Lets);
+	bool empty() { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
 private:
 };
-
-class CScriptTokenDataFor : public fixed_size_object<CScriptTokenDataFor>, public CScriptTokenData {
+class CScriptTokenDataForwardsPtr {
 public:
-	CScriptTokenDataFor() { type=FOR; }
-	enum {
-		FOR,
-		FOR_EACH,
-		FOR_IN,
-		FOR_OF
-	} type;
+	CScriptTokenDataForwardsPtr() : ptr(0) {}
+	CScriptTokenDataForwardsPtr(const CScriptTokenDataForwardsPtr &Copy) : ptr(0) { *this=Copy; }
+	CScriptTokenDataForwardsPtr &operator=(const CScriptTokenDataForwardsPtr &Copy) { 
+		if(ptr != Copy.ptr) {
+			if(ptr) ptr->unref();
+			if((ptr = Copy.ptr)) ptr->ref();
+		}
+		return *this; 
+	}
+	CScriptTokenDataForwardsPtr(CScriptTokenDataForwards &Init) { (ptr=&Init)->ref(); }
+	~CScriptTokenDataForwardsPtr() { if(ptr) ptr->unref(); }
+	CScriptTokenDataForwards *operator->() { return ptr; }
+	operator bool() { return ptr!=0; }
+	bool operator==(const CScriptTokenDataForwardsPtr& rhs) { return ptr==rhs.ptr; }
+private:
+	CScriptTokenDataForwards *ptr;
+};
+typedef std::vector<CScriptTokenDataForwardsPtr> FORWARDER_VECTOR_t;
+
+class CScriptTokenDataLoop : public fixed_size_object<CScriptTokenDataLoop>, public CScriptTokenData {
+public:
+	CScriptTokenDataLoop() { type=FOR; }
+	enum {FOR_EACH=0, FOR_IN, FOR_OF, FOR, WHILE, DO} type; // do not change the order
 	STRING_VECTOR_t labels;
 	TOKEN_VECT init;
 	TOKEN_VECT condition;
@@ -395,6 +443,7 @@ public:
 typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
 typedef std::vector<DESTRUCTURING_VAR_t> DESTRUCTURING_VARS_t;
 typedef DESTRUCTURING_VARS_t::iterator DESTRUCTURING_VARS_it;
+typedef DESTRUCTURING_VARS_t::const_iterator DESTRUCTURING_VARS_cit;
 class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDataDestructuringVar>, public CScriptTokenData {
 public:
 	DESTRUCTURING_VARS_t vars;
@@ -417,6 +466,20 @@ public:
 	void setMode(bool Destructuring);
 	std::string getParsableString();
 private:
+};
+
+class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry>, public CScriptTokenData {
+public:
+	TOKEN_VECT tryBlock;
+	struct CatchBlock {
+		CScriptTokenDataPtr<CScriptTokenDataDestructuringVar> indentifiers;
+		TOKEN_VECT condition;
+		TOKEN_VECT block;
+	};
+	std::vector<CatchBlock> catchBlocks;
+	typedef std::vector<CatchBlock>::iterator CatchBlock_it;
+	TOKEN_VECT finallyBlock;
+	std::string getParsableString();
 };
 
 
@@ -453,7 +516,8 @@ public:
 	const CScriptTokenDataFnc &Fnc() const { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return *dynamic_cast<CScriptTokenDataFnc*>(tokenData); }
 	CScriptTokenDataObjectLiteral &Object() { ASSERT(LEX_TOKEN_DATA_OBJECT_LITERAL(token)); return *dynamic_cast<CScriptTokenDataObjectLiteral*>(tokenData); }
 	CScriptTokenDataDestructuringVar &DestructuringVar() { ASSERT(LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)); return *dynamic_cast<CScriptTokenDataDestructuringVar*>(tokenData); }
-	CScriptTokenDataFor &For() { ASSERT(LEX_TOKEN_DATA_FOR(token)); return *dynamic_cast<CScriptTokenDataFor*>(tokenData); }
+	CScriptTokenDataLoop &Loop() { ASSERT(LEX_TOKEN_DATA_LOOP(token)); return *dynamic_cast<CScriptTokenDataLoop*>(tokenData); }
+	CScriptTokenDataTry &Try() { ASSERT(LEX_TOKEN_DATA_TRY(token)); return *dynamic_cast<CScriptTokenDataTry*>(tokenData); }
 	CScriptTokenDataForwards &Forwarder() { ASSERT(LEX_TOKEN_DATA_FORWARDER(token)); return *dynamic_cast<CScriptTokenDataForwards*>(tokenData); }
 #ifdef _DEBUG
 	std::string token_str;
@@ -498,6 +562,17 @@ public:
 		int currentLine()		{ return pos->line; }
 		int currentColumn()	{ return pos->column; }
 	};
+	struct ScriptTokenState {
+		TOKEN_VECT Tokens;
+		FORWARDER_VECTOR_t Forwarders;
+		std::vector<int> Marks;
+		STRING_VECTOR_t Labels;
+		STRING_VECTOR_t LoopLabels;
+		bool LeftHand;
+		void pushLeftHandState() { States.push_back(LeftHand); }
+		void popLeftHandeState() { LeftHand = States.back(); States.pop_back(); }
+		std::vector<bool> States;
+	};
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
 	CScriptTokenizer(const char *Code, const std::string &File="", int Line=0, int Column=0);
@@ -518,42 +593,39 @@ public:
 	int currentColumn() { return getPos().currentColumn();}
 	const std::string &tkStr() { static std::string empty; return LEX_TOKEN_DATA_STRING(getToken().token)?getToken().String():empty; }
 private:
-	void tokenizeCatch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeTry(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeSwitch(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeWith(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeWhile(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeDo(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeIf(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeFor(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void _tokenizeDeconstructionVarObject(DESTRUCTURING_VARS_t &Vars, STRING_VECTOR_t &VarNames);
-	void _tokenizeDeconstructionVarArray(DESTRUCTURING_VARS_t &Vars, STRING_VECTOR_t &VarNames);
-	void _tokenizeDestructionVar(DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t &VarNames);
-	CScriptToken tokenizeDestructionVar(STRING_VECTOR_t &VarNames);
-	void tokenizeFunction(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeLet(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int *State=0);
-	void tokenizeVar(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int *State=0);
-	void _tokenizeLiteralObject(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void _tokenizeLiteralArray(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeObjectLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
+	void tokenizeCatch(ScriptTokenState &State, int Flags);
+	void tokenizeTry(ScriptTokenState &State, int Flags);
+	void _tokenizeTry(ScriptTokenState &State, int Flags);
+	void tokenizeSwitch(ScriptTokenState &State, int Flags);
+	void tokenizeWith(ScriptTokenState &State, int Flags);
+	void tokenizeWhileAndDo(ScriptTokenState &State, int Flags);
+	void tokenizeIf(ScriptTokenState &State, int Flags);
+	void tokenizeFor(ScriptTokenState &State, int Flags);
+	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
+	void tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef=false);
+	void tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef=false);
+	void tokenizeVarNoConst(ScriptTokenState &State, int Flags);
+	void tokenizeVarAndConst(ScriptTokenState &State, int Flags);
+	void _tokenizeLiteralObject(ScriptTokenState &State, int Flags);
+	void _tokenizeLiteralArray(ScriptTokenState &State, int Flags);
 
-	void tokenizeLiteral(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeMember(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeFunctionCall(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeSubExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeCondition(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeAssignment(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeExpression(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags, int &State);
-	void tokenizeBlock(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
-	void tokenizeStatement(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks, STRING_VECTOR_t &Labels, STRING_VECTOR_t &LoopLabels, int Flags);
+	void tokenizeLiteral(ScriptTokenState &State, int Flags);
+	void tokenizeMember(ScriptTokenState &State, int Flags);
+	void tokenizeFunctionCall(ScriptTokenState &State, int Flags);
+	void tokenizeSubExpression(ScriptTokenState &State, int Flags);
+	void tokenizeCondition(ScriptTokenState &State, int Flags);
+	void tokenizeAssignment(ScriptTokenState &State, int Flags);
+	void tokenizeExpression(ScriptTokenState &State, int Flags);
+	void tokenizeBlock(ScriptTokenState &State, int Flags);
+	void tokenizeStatementNoLet(ScriptTokenState &State, int Flags);
+	void tokenizeStatement(ScriptTokenState &State, int Flags);
 
 	int pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
 	int pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token);
-	CScriptTokenDataForwards &pushForwarder(TOKEN_VECT &Tokens, std::vector<int> &BlockStart);
-	void removeEmptyForwarder(TOKEN_VECT &Tokens, std::vector<int> &BlockStart, std::vector<int> &Marks);
-	CScriptTokenDataForwards &__getForwarder(TOKEN_VECT &Tokens, int Pos, std::vector<int> &BlockStart, std::vector<int> &Marks);
+	void pushForwarder(ScriptTokenState &State, bool noMarks=false);
+	void removeEmptyForwarder(ScriptTokenState &State);
+	void pushForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, std::vector<int> &Marks);
+	void removeEmptyForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, std::vector<int> &Marks);
 	void throwTokenNotExpected();
 	CScriptLex *l;
 	TOKEN_VECT tokens;
@@ -582,7 +654,7 @@ typedef CScriptVarPointer<CScriptVarScopeFnc> CFunctionsScopePtr;
 typedef void (*JSCallback)(const CFunctionsScopePtr &var, void *userdata);
 
 class CTinyJS;
-
+class CScriptResult;
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVar
@@ -636,22 +708,22 @@ public:
 
 	virtual CScriptVarPrimitivePtr getRawPrimitive()=0; ///< is Var==Primitive -> return this isObject return Value
 	CScriptVarPrimitivePtr toPrimitive(); ///< by default call getDefaultValue_hintNumber by a Date-object calls getDefaultValue_hintString
-	virtual CScriptVarPrimitivePtr toPrimitive(bool &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	CScriptVarPrimitivePtr toPrimitive_hintString(int32_t radix=0); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
-	CScriptVarPrimitivePtr toPrimitive_hintString(bool &execute, int32_t radix=0); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPrimitivePtr toPrimitive_hintString(CScriptResult &execute, int32_t radix=0); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 	CScriptVarPrimitivePtr toPrimitive_hintNumber(); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
-	CScriptVarPrimitivePtr toPrimitive_hintNumber(bool &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPrimitivePtr toPrimitive_hintNumber(CScriptResult &execute); ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 
-	CScriptVarPtr callJS_toString(bool &execute, int radix=0);
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
-	CScriptVarPtr callJS_valueOf(bool &execute);
+	CScriptVarPtr callJS_toString(CScriptResult &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	CScriptVarPtr callJS_valueOf(CScriptResult &execute);
 	virtual CScriptVarPtr valueOf_CallBack();
 
 	CNumber toNumber();
-	CNumber toNumber(bool &execute);
+	CNumber toNumber(CScriptResult &execute);
 	virtual bool toBoolean();
 	std::string toString(int32_t radix=0); ///< shortcut for this->toPrimitive_hintString()->toCString();
-	std::string toString(bool &execute, int32_t radix=0); ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
+	std::string toString(CScriptResult &execute, int32_t radix=0); ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
 #define WARN_DEPRECATED
 #ifdef WARN_DEPRECATED
 	int DEPRECATED("getInt() is deprecated use toNumber().toInt32 instead") getInt();
@@ -669,7 +741,7 @@ public:
 	virtual CScriptVarPtr toObject()=0;
 
 	CScriptVarPtr toIterator(int Mode=3);
-	CScriptVarPtr toIterator(bool &execute, int Mode=3);
+	CScriptVarPtr toIterator(CScriptResult &execute, int Mode=3);
 
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, bool &hasRecursion); ///< get Data as a parsable javascript string
@@ -854,23 +926,23 @@ public:
 
 	CScriptVarPrimitivePtr toPrimitive() { ///< by default call getDefaultValue_hintNumber by a Date-object calls getDefaultValue_hintString
 		return var->toPrimitive(); } 	
-	CScriptVarPrimitivePtr toPrimitive(bool &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 		return var->toPrimitive(execute); } 
 	CScriptVarPrimitivePtr toPrimitive_hintString(int32_t radix=0) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 		return var->toPrimitive_hintString(radix); } 
-	CScriptVarPrimitivePtr toPrimitive_hintString(bool &execute, int32_t radix=0) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPrimitivePtr toPrimitive_hintString(CScriptResult &execute, int32_t radix=0) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 		return var->toPrimitive_hintString(execute, radix); } 
 	CScriptVarPrimitivePtr toPrimitive_hintNumber() { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 		return var->toPrimitive_hintNumber(); } 
-	CScriptVarPrimitivePtr toPrimitive_hintNumber(bool &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
+	CScriptVarPrimitivePtr toPrimitive_hintNumber(CScriptResult &execute) { ///< if the var an ObjectType gets the valueOf; if valueOf of an ObjectType gets toString / otherwise gets the Var itself 
 		return var->toPrimitive_hintNumber(execute); } 
 
 	CNumber toNumber(); // { return var->toNumber(); }
-	CNumber toNumber(bool &execute); // { return var->toNumber(execute); }
+	CNumber toNumber(CScriptResult &execute); // { return var->toNumber(execute); }
 	bool toBoolean() { return var->toBoolean(); }
 	std::string toString(int32_t radix=0) { ///< shortcut for this->toPrimitive_hintString()->toCString();
 		return var->toString(radix); }
-	std::string toString(bool &execute, int32_t radix=0) { ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
+	std::string toString(CScriptResult &execute, int32_t radix=0) { ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
 		return var->toString(execute, radix); }
 	CScriptVarPtr toObject() { return var->toObject(); };
 
@@ -919,9 +991,9 @@ public:
 
 	// getter & setter
 	CScriptVarLinkWorkPtr getter();
-	CScriptVarLinkWorkPtr getter(bool &execute);
+	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
-	CScriptVarLinkWorkPtr setter(bool &execute, const CScriptVarPtr &Var);
+	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
 
 	// if
 	operator bool() const { return link!=0; } 
@@ -961,9 +1033,9 @@ public:
 
 	// getter & setter
 	CScriptVarLinkWorkPtr getter();
-	CScriptVarLinkWorkPtr getter(bool &execute);
+	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
-	CScriptVarLinkWorkPtr setter(bool &execute, const CScriptVarPtr &Var);
+	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
 
 
 	void swap(CScriptVarLinkWorkPtr &Link) { 
@@ -1010,7 +1082,7 @@ public:
 	virtual std::string toCString(int radix=0)=0;
 
 	virtual CScriptVarPtr toObject();
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 protected:
 };
 
@@ -1092,7 +1164,7 @@ public:
 	virtual std::string getVarType(); // { return "string"; }
 
 	virtual CScriptVarPtr toObject();
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 
 	uint32_t stringLength() { return data.size(); }
 	int getChar(uint32_t Idx);
@@ -1341,7 +1413,7 @@ public:
 	virtual CScriptVarPtr toObject();
 
 	virtual CScriptVarPtr valueOf_CallBack();
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 	virtual void setTemporaryID_recursive(uint32_t ID);
 protected:
 private:
@@ -1374,11 +1446,14 @@ public:
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	CScriptException *toCScriptException();
 private:
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
+	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, const CScriptException &Exception);
 };
 inline define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message=0, const char *file=0, int line=-1, int column=-1) { return new CScriptVarError(Context, type, message, file, line, column); }
+inline define_newScriptVar_NamedFnc(Error, CTinyJS *Context, const CScriptException &Exception) { return new CScriptVarError(Context, Exception.errorType, Exception.message.c_str(), Exception.fileName.c_str(), Exception.lineNumber, Exception.column); }
 
 ////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarArray
@@ -1397,7 +1472,7 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
 
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 
 	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 private:
@@ -1420,7 +1495,7 @@ public:
 	virtual ~CScriptVarRegExp();
 	virtual CScriptVarPtr clone();
 	virtual bool isRegExp(); // { return true; }
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 
 	CScriptVarPtr exec(const std::string &Input, bool Test=false);
 
@@ -1500,7 +1575,7 @@ public:
 
 	virtual std::string getVarType(); // { return "function"; }
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
-	virtual CScriptVarPtr toString_CallBack(bool &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 	virtual CScriptTokenDataFnc *getFunctionData();
 	void setFunctionData(CScriptTokenDataFnc *Data);
 private:
@@ -1525,7 +1600,7 @@ public:
 	virtual CScriptVarPtr clone();
 	virtual bool isBounded();	///< is CScriptVarFunctionBounded
 	virtual void setTemporaryID_recursive(uint32_t ID);
-	CScriptVarPtr callFunction(bool &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	CScriptVarPtr callFunction(CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 protected:
 private:
 	CScriptVarFunctionPtr boundedFunction;
@@ -1765,6 +1840,44 @@ inline CScriptVarPtr CScriptVar::newScriptVar(T1 t1, T2 t2) { return ::newScript
 //inline CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(context, t); }
 //////////////////////////////////////////////////////////////////////////
 
+
+class CScriptResult {
+public:
+	enum TYPE {
+		Normal,
+		Break,
+		Continue,
+		Return,
+		Throw,
+		noExecute
+	};
+	CScriptResult() : type(Normal) {}
+	CScriptResult(TYPE Type) : type(Type) {}
+//		~RESULT() { if(type==Throw) throw value; }
+	bool isNormal() { return type==Normal; }
+	bool isBreak() { return type==Break; }
+	bool isContinue() { return type==Continue; }
+	bool isBreakContinue() { return type==Break || type==Continue; }
+	bool isReturn() { return type==Return; }
+	bool isReturnNormal() { return type==Return || type==Normal; }
+	bool isThrow() { return type==Throw; }
+
+	operator bool() const { return type==Normal; }
+	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.clear(), target.clear(); }
+	void set(TYPE Type, const CScriptVarPtr &Value) { type=Type; value=Value; }
+	void set(TYPE Type, const std::string &Target) { type=Type; target=Target; }
+
+	void cThrow() { if(type==Throw) throw value; }
+
+	CScriptResult &operator<<(const CScriptResult &rhs) { if(type!=Normal) *this=rhs; return *this; }
+
+	enum TYPE type;
+	CScriptVarPtr value;
+	std::string target;
+};
+
+
+
 //////////////////////////////////////////////////////////////////////////
 /// CTinyJS
 //////////////////////////////////////////////////////////////////////////
@@ -1856,12 +1969,10 @@ public:
 	const CScriptVarPtr &constScriptVar(NegativeZero_t)	{ return constNegativZero; }
 	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
 
-
 private:
-	static bool noexecute;
+	static CScriptResult noexecute;
 	CScriptTokenizer *t;       /// current tokenizer
-	int runtimeFlags;
-	std::string label;
+	bool haveTry;
 	std::vector<CScriptVarScopePtr>scopes;
 	CScriptVarScopePtr root;
 	const CScriptVarScopePtr &scope() { return scopes.back(); }
@@ -1906,15 +2017,15 @@ private:
 	CScriptVarPtr constStopIteration;
 
 	std::vector<CScriptVarPtr *> pseudo_refered;
-	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
+//	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
-	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link)
+	void CheckRightHandVar(CScriptResult &execute, CScriptVarLinkWorkPtr &link)
 	{
 		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", t->getPrevPos());
 	}
 
-	void CheckRightHandVar(bool &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
+	void CheckRightHandVar(CScriptResult &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
 	{
 		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
 			throwError(execute, ReferenceError, link->getName() + " is not defined", Pos);
@@ -1923,36 +2034,31 @@ private:
 public:
 	// function call
 	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
-	CScriptVarPtr callFunction(bool &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
-	/// clears the RUNTIME_THROW flag
-	/// clears the exceptionVar
-	/// returns the old exceptionVar
-	CScriptVarPtr removeExeptionVar() { runtimeFlags &= ~RUNTIME_THROW; CScriptVarPtr ret = exceptionVar; exceptionVar.clear(); return ret; }
-	//
-	// parsing - in order of precedence
+	CScriptVarPtr callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 
-	CScriptVarPtr mathsOp(bool &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
+	// parsing - in order of precedence
+	CScriptVarPtr mathsOp(CScriptResult &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
 private:
-	void assign_destructuring_var(const CScriptVarPtr &Scope, CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, bool &execute);
-	void execute_var_init(bool hideLetScope, bool &execute);
-	void execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, bool &execute);
-	CScriptVarLinkWorkPtr execute_literals(bool &execute);
-	CScriptVarLinkWorkPtr execute_member(CScriptVarLinkWorkPtr &parent, bool &execute);
-	CScriptVarLinkWorkPtr execute_function_call(bool &execute);
-	bool execute_unary_rhs(bool &execute, CScriptVarLinkWorkPtr& a);
-	CScriptVarLinkWorkPtr execute_unary(bool &execute);
-	CScriptVarLinkWorkPtr execute_term(bool &execute);
-	CScriptVarLinkWorkPtr execute_expression(bool &execute);
-	CScriptVarLinkWorkPtr execute_binary_shift(bool &execute);
-	CScriptVarLinkWorkPtr execute_relation(bool &execute, int set=LEX_EQUAL, int set_n='<');
-	CScriptVarLinkWorkPtr execute_binary_logic(bool &execute, int op='|', int op_n1='^', int op_n2='&');
-	CScriptVarLinkWorkPtr execute_logic(bool &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
-	CScriptVarLinkWorkPtr execute_condition(bool &execute);
-	CScriptVarLinkPtr execute_assignment(CScriptVarLinkWorkPtr Lhs, bool &execute);
-	CScriptVarLinkPtr execute_assignment(bool &execute);
-	CScriptVarLinkPtr execute_base(bool &execute);
-	void execute_block(bool &execute, bool createLetScope=true);
-	CScriptVarLinkPtr execute_statement(bool &execute);
+	void assign_destructuring_var(const CScriptVarPtr &Scope, const CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, CScriptResult &execute);
+	void execute_var_init(bool hideLetScope, CScriptResult &execute);
+	void execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_literals(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_function_call(CScriptResult &execute);
+	bool execute_unary_rhs(CScriptResult &execute, CScriptVarLinkWorkPtr& a);
+	CScriptVarLinkWorkPtr execute_unary(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_term(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_expression(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_binary_shift(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_relation(CScriptResult &execute, int set=LEX_EQUAL, int set_n='<');
+	CScriptVarLinkWorkPtr execute_binary_logic(CScriptResult &execute, int op='|', int op_n1='^', int op_n2='&');
+	CScriptVarLinkWorkPtr execute_logic(CScriptResult &execute, int op=LEX_OROR, int op_n=LEX_ANDAND);
+	CScriptVarLinkWorkPtr execute_condition(CScriptResult &execute);
+	CScriptVarLinkPtr execute_assignment(CScriptVarLinkWorkPtr Lhs, CScriptResult &execute);
+	CScriptVarLinkPtr execute_assignment(CScriptResult &execute);
+	CScriptVarLinkPtr execute_base(CScriptResult &execute);
+	void execute_block(CScriptResult &execute);
+	void execute_statement(CScriptResult &execute);
 	// parsing utility functions
 	CScriptVarLinkWorkPtr parseFunctionDefinition(const CScriptToken &FncToken);
 	CScriptVarLinkWorkPtr parseFunctionsBodyFromString(const std::string &ArgumentList, const std::string &FncBody);
@@ -1966,9 +2072,9 @@ private:
 	//////////////////////////////////////////////////////////////////////////
 	/// throws an Error & Exception
 public:
-	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message);
+	void throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const std::string &message);
 	void throwException(ERROR_TYPES ErrorType, const std::string &message);
-	void throwError(bool &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
+	void throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
 	void throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos);
 private:
 	//////////////////////////////////////////////////////////////////////////
@@ -2045,7 +2151,7 @@ template<typename T>
 inline const CScriptVarPtr &CScriptVar::constScriptVar(T t) { return context->constScriptVar(t); }
 //////////////////////////////////////////////////////////////////////////
 inline CNumber CScriptVarLink::toNumber() { return var->toNumber(); }
-inline CNumber CScriptVarLink::toNumber(bool &execute) { return var->toNumber(execute); }
+inline CNumber CScriptVarLink::toNumber(CScriptResult &execute) { return var->toNumber(execute); }
 
 #endif
 
