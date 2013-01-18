@@ -235,8 +235,6 @@ extern const char *ERROR_NAME[];
 #define TINYJS_ACCESSOR_SET_VAR			"__accessor_set__"
 #define TINYJS_TEMP_NAME			""
 #define TINYJS_BLANK_DATA			""
-#define TINYJS_NEGATIVE_INFINITY_DATA			"-1"
-#define TINYJS_POSITIVE_INFINITY_DATA			"+1"
 
 typedef std::vector<std::string> STRING_VECTOR_t;
 typedef STRING_VECTOR_t::iterator STRING_VECTOR_it;
@@ -429,7 +427,7 @@ public:
 	TOKEN_VECT condition;
 	TOKEN_VECT iter;
 	TOKEN_VECT body;
-	std::string getParsableString();
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
 typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
@@ -471,7 +469,7 @@ public:
 	std::vector<CatchBlock> catchBlocks;
 	typedef std::vector<CatchBlock>::iterator CatchBlock_it;
 	TOKEN_VECT finallyBlock;
-	std::string getParsableString();
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
 
