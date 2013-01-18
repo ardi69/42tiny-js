@@ -588,11 +588,10 @@ std::string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 // CScriptTokenDataLoop
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataLoop::getParsableString() {
+std::string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
 	static const char *heads[] = {"for each(", "for(", "for(", "for(", "while(", "do "};
 	static const char *ops[] = {" in ", " in ", " of ", "; "};
-	string out;
-	out.append(heads[type]);
+	string out = heads[type];
 	if(init.size() && type==FOR)out.append(CScriptToken::getParsableString(init));
 	if(type<=WHILE) out.append(CScriptToken::getParsableString(condition.begin(), condition.end()-(type>=FOR ? 0 : 7)));
 	if(type<=FOR) out.append(ops[type]);
@@ -608,8 +607,21 @@ string CScriptTokenDataLoop::getParsableString() {
 // CScriptTokenDataTry
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataTry::getParsableString() {
-	return "under construction";
+std::string CScriptTokenDataTry::getParsableString( const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
+	string out = "try ";
+	string nl = Indent.size() ? "\n"+IndentString : " ";
+
+	out.append(CScriptToken::getParsableString(tryBlock, IndentString, Indent));
+	for(CScriptTokenDataTry::CatchBlock_it catchBlock = catchBlocks.begin(); catchBlock!=catchBlocks.end(); catchBlock++) {
+		out.append(nl).append("catch(").append(catchBlock->indentifiers->getParsableString());
+		if(catchBlock->condition.size()>1) {
+			out.append(" if ").append(CScriptToken::getParsableString(catchBlock->condition.begin()+1, catchBlock->condition.end()));
+		}
+		out.append(") ").append(CScriptToken::getParsableString(catchBlock->block, IndentString, Indent));
+	}
+	if(finallyBlock.size())
+		out.append(nl).append("finally ").append(CScriptToken::getParsableString(finallyBlock, IndentString, Indent));
+	return out;
 }
 
 
@@ -948,14 +960,14 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 			if(it->Fnc().name.size() )
 				OutString.append(it->Fnc().name);
 			OutString.append(it->Fnc().getArgumentsString());
-			OutString.append(getParsableString(it->Fnc().body, IndentString, Indent));
+			OutString.append(getParsableString(it->Fnc().body, my_indentString, Indent));
 			if(it->Fnc().body.front().token != '{') {
 				OutString.append(";");
 			}
 		} else if(LEX_TOKEN_DATA_LOOP(it->token)) {
-			OutString.append(it->Loop().getParsableString());
+			OutString.append(it->Loop().getParsableString(my_indentString, Indent));
 		} else if(LEX_TOKEN_DATA_TRY(it->token)) {
-			OutString.append(it->Try().getParsableString());
+			OutString.append(it->Try().getParsableString(my_indentString, Indent));
 		} else if(LEX_TOKEN_DATA_DESTRUCTURING_VAR(it->token)) {
 			OutString.append(it->DestructuringVar().getParsableString());
 		} else if(LEX_TOKEN_DATA_OBJECT_LITERAL(it->token)) {
@@ -3789,7 +3801,7 @@ string CScriptVarFunction::getParsableString(const string &indentString, const s
 
 CScriptVarPtr CScriptVarFunction::toString_CallBack(CScriptResult &execute, int radix){
 	bool hasRecursion;
-	return newScriptVar(getParsableString("", "", 0, hasRecursion));
+	return newScriptVar(getParsableString("", "  ", 0, hasRecursion));
 }
 
 CScriptTokenDataFnc *CScriptVarFunction::getFunctionData() { return data; }
@@ -5445,7 +5457,6 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 			execute_block(execute);
 
 			bool isThrow = execute.isThrow();
-			bool catched = false;
 
 			if(isThrow) {
 				// execute catch-blocks
@@ -5474,9 +5485,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				CScriptResult finally_execute; // alway execute finally-block
 				t->pushTokenScope(TryData.finallyBlock); // finally;
 				execute_block(finally_execute);
-				if(!finally_execute) { 
-					execute = finally_execute;
-				}
+				execute(finally_execute);
 			}
 			// restore haveTry
 			haveTry = old_haveTry;
