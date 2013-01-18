@@ -126,8 +126,7 @@ enum LEX_TYPES {
 	LEX_REGEXP,
 	LEX_T_LABEL,
 	LEX_T_DUMMY_LABEL,
-	LEX_T_LOOP_LABEL,
-#define LEX_TOKEN_STRING_END LEX_T_LOOP_LABEL
+#define LEX_TOKEN_STRING_END LEX_T_DUMMY_LABEL
 
 	LEX_FLOAT,
 #define LEX_TOKEN_NONSIMPLE_1_END LEX_FLOAT
@@ -208,13 +207,6 @@ enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_READONLY			= SCRIPTVARLINK_CONFIGURABLE,
 	SCRIPTVARLINK_READONLY_ENUM	= SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_CONSTANT			= 0,
-};
-enum RUNTIME_FLAGS {
-	RUNTIME_BREAK				= 1<<0,
-	RUNTIME_CONTINUE			= 1<<1,
-	RUNTIME_CAN_THROW			= 1<<2,
-	RUNTIME_THROW				= 1<<3,
-	RUNTIME_THROW_MASK		= RUNTIME_CAN_THROW | RUNTIME_THROW,
 };
 
 enum ERROR_TYPES {
@@ -593,9 +585,7 @@ public:
 	int currentColumn() { return getPos().currentColumn();}
 	const std::string &tkStr() { static std::string empty; return LEX_TOKEN_DATA_STRING(getToken().token)?getToken().String():empty; }
 private:
-	void tokenizeCatch(ScriptTokenState &State, int Flags);
 	void tokenizeTry(ScriptTokenState &State, int Flags);
-	void _tokenizeTry(ScriptTokenState &State, int Flags);
 	void tokenizeSwitch(ScriptTokenState &State, int Flags);
 	void tokenizeWith(ScriptTokenState &State, int Flags);
 	void tokenizeWhileAndDo(ScriptTokenState &State, int Flags);
@@ -613,6 +603,7 @@ private:
 	void tokenizeMember(ScriptTokenState &State, int Flags);
 	void tokenizeFunctionCall(ScriptTokenState &State, int Flags);
 	void tokenizeSubExpression(ScriptTokenState &State, int Flags);
+	void tokenizeLogic(ScriptTokenState &State, int Flags, int op= LEX_OROR, int op_n=LEX_ANDAND); 
 	void tokenizeCondition(ScriptTokenState &State, int Flags);
 	void tokenizeAssignment(ScriptTokenState &State, int Flags);
 	void tokenizeExpression(ScriptTokenState &State, int Flags);
@@ -1869,7 +1860,7 @@ public:
 
 	void cThrow() { if(type==Throw) throw value; }
 
-	CScriptResult &operator<<(const CScriptResult &rhs) { if(type!=Normal) *this=rhs; return *this; }
+	CScriptResult &operator()(const CScriptResult &rhs) { if(type!=Normal) *this=rhs; return *this; }
 
 	enum TYPE type;
 	CScriptVarPtr value;
@@ -1970,7 +1961,6 @@ public:
 	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
 
 private:
-	static CScriptResult noexecute;
 	CScriptTokenizer *t;       /// current tokenizer
 	bool haveTry;
 	std::vector<CScriptVarScopePtr>scopes;
@@ -2017,7 +2007,6 @@ private:
 	CScriptVarPtr constStopIteration;
 
 	std::vector<CScriptVarPtr *> pseudo_refered;
-//	CScriptVarPtr exceptionVar; /// containing the exception var by (runtimeFlags&RUNTIME_THROW) == true; 
 
 	void CheckRightHandVar(CScriptResult &execute, CScriptVarLinkWorkPtr &link)
 	{
