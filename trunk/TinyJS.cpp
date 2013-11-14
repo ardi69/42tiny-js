@@ -1389,7 +1389,7 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 			LoopData.init.push_back(LoopData.condition.front());
 			LoopData.condition.erase(LoopData.condition.begin());
 		}
-		LoopData.body.back().token = LEX_T_FOR_IN;
+		mainTokens.back().token = LEX_T_FOR_IN;
 	} else {
 		l->check(';'); // no automatic ;-injection
 		pushToken(State.Tokens, ';');
