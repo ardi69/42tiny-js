@@ -1871,6 +1871,8 @@ public:
 /// CTinyJS
 //////////////////////////////////////////////////////////////////////////
 
+typedef int (*native_require_read_fnc)(const std::string &Fname, std::string &Data);
+
 class CTinyJS {
 public:
 	CTinyJS();
@@ -1906,6 +1908,12 @@ public:
 	/** Evaluate the given code and return a string. If nothing to return, will return
 	 * 'undefined' */
 	std::string evaluate(const std::string &code, const std::string &File="", int Line=0, int Column=0);
+
+	native_require_read_fnc setRequireReadFnc(native_require_read_fnc fnc) { 
+		native_require_read_fnc old = native_require_read;
+		native_require_read = fnc;
+		return old;
+	}
 
 	/// add a native function to be called from TinyJS
 	/** example:
@@ -2114,12 +2122,12 @@ private:
 	/// global function
 
 	void native_eval(const CFunctionsScopePtr &c, void *data);
+	void native_require(const CFunctionsScopePtr &c, void *data);
+	native_require_read_fnc native_require_read;
 	void native_isNAN(const CFunctionsScopePtr &c, void *data);
 	void native_isFinite(const CFunctionsScopePtr &c, void *data);
 	void native_parseInt(const CFunctionsScopePtr &c, void *data);
 	void native_parseFloat(const CFunctionsScopePtr &c, void *data);
-
-
 
 	void native_JSON_parse(const CFunctionsScopePtr &c, void *data);
 
