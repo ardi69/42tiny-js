@@ -42,6 +42,7 @@
 #	endif
 #endif
 #include <sstream>
+#include <fstream>
 
 #include "TinyJS.h"
 
@@ -4197,6 +4198,8 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// add global functions
 	addNative("function eval(jsCode)", this, &CTinyJS::native_eval);
+	native_require_read = 0;
+	addNative("function require(jsFile)", this, &CTinyJS::native_require);
 	addNative("function isNaN(objc)", this, &CTinyJS::native_isNAN);
 	addNative("function isFinite(objc)", this, &CTinyJS::native_isFinite);
 	addNative("function parseInt(string, radix)", this, &CTinyJS::native_parseInt);
@@ -5990,6 +5993,35 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 	scopes.push_back(scEvalScope); // restore Scopes;
 	if(execute.value)
 		c->setReturnVar(execute.value);
+}
+
+static int _native_require_read(const string &Fname, std::string &Data) {
+	std::ifstream in(Fname, std::ios::in | std::ios::binary);
+	if (in) {
+		in.seekg(0, std::ios::end);
+		Data.resize((string::size_type)in.tellg());
+		in.seekg(0, std::ios::beg);
+		in.read(&Data[0], Data.size());
+		in.close();
+		return(0);
+	}
+	return errno;
+}
+
+void CTinyJS::native_require(const CFunctionsScopePtr &c, void *data) {
+	string File = c->getArgument("jsFile")->toString();
+	string Code;
+	int ErrorNo;
+	if(!native_require_read) 
+		native_require_read = _native_require_read; // use builtin if no callback
+
+	if((ErrorNo = native_require_read(File, Code))) {
+		ostringstream msg;
+		msg << "can't read \"" << File << "\" (Error=" << ErrorNo << ")";
+		c->throwError(Error, msg.str());
+	}
+	c->addChildOrReplace("jsCode", c->newScriptVar(Code));
+	native_eval(c, data);
 }
 
 void CTinyJS::native_isNAN(const CFunctionsScopePtr &c, void *data) {
