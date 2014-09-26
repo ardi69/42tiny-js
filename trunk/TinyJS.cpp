@@ -300,7 +300,7 @@ void CScriptLex::getNextCh() {
 	}
 }
 
-static uint16_t not_allowed_tokens_befor_regexp[] = {LEX_ID, LEX_INT, LEX_FLOAT, LEX_STR, LEX_R_TRUE, LEX_R_FALSE, LEX_R_NULL, ']', ')', '.', LEX_EOF};
+static uint16_t not_allowed_tokens_befor_regexp[] = {LEX_ID, LEX_INT, LEX_FLOAT, LEX_STR, LEX_R_TRUE, LEX_R_FALSE, LEX_R_NULL, ']', ')', '.', LEX_PLUSPLUS, LEX_MINUSMINUS, LEX_EOF};
 void CScriptLex::getNextToken() {
 	while (currCh && isWhitespace(currCh)) getNextCh();
 	// newline comments
@@ -1404,7 +1404,7 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 	if(for_in || l->tk != ')') tokenizeExpression(State, Flags); 
 	l->match(')');
 	State.Tokens.swap(LoopData.iter);
-	Flags = TOKENIZE_FLAGS_canBreak | TOKENIZE_FLAGS_canContinue;
+	Flags = (Flags & TOKENIZE_FLAGS_canReturn) | TOKENIZE_FLAGS_canBreak | TOKENIZE_FLAGS_canContinue; 
 	if(haveLetScope) Flags |= TOKENIZE_FLAGS_noBlockStart;
 	tokenizeStatementNoLet(State, Flags);
 	if(haveLetScope) State.Forwarders.pop_back();
@@ -2091,13 +2091,16 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 			}
 		}
 		break;
-	default:
+	case 0:
+		break;
+	default: 
 		State.Marks.push_back(pushToken(State.Tokens, CScriptToken(LEX_T_SKIP))); // push skip & skiperBeginIdx
 		tokenizeExpression(State, Flags); 
 		pushToken(State.Tokens, ';'); 
 		setTokenSkip(State);
 		break;
 	}
+
 }
 
 int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match, int Alternate) {
@@ -2292,7 +2295,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintNumber(CScriptResult &execute
 CScriptVarPtr CScriptVar::callJS_valueOf(CScriptResult &execute) {
 	if(execute) {
 		CScriptVarPtr FncValueOf = findChildWithPrototypeChain("valueOf").getter(execute);
-		if(FncValueOf != context->objectPrototype_valueOf) { // custom valueOf in JavaScript
+		if(FncValueOf && FncValueOf != context->objectPrototype_valueOf) { // custom valueOf in JavaScript
 			if(FncValueOf->isFunction()) { // no Error if toString not callable
 				vector<CScriptVarPtr> Params;
 				return context->callFunction(execute, FncValueOf, Params, this);
@@ -2309,7 +2312,7 @@ CScriptVarPtr CScriptVar::valueOf_CallBack() {
 CScriptVarPtr CScriptVar::callJS_toString(CScriptResult &execute, int radix/*=0*/) {
 	if(execute) {
 		CScriptVarPtr FncToString = findChildWithPrototypeChain("toString").getter(execute);
-		if(FncToString != context->objectPrototype_toString) { // custom valueOf in JavaScript
+		if(FncToString && FncToString != context->objectPrototype_toString) { // custom valueOf in JavaScript
 			if(FncToString->isFunction()) { // no Error if toString not callable
 				vector<CScriptVarPtr> Params;
 				Params.push_back(newScriptVar(radix));
@@ -3147,7 +3150,7 @@ CNumber CNumber::modulo( const CNumber &Value ) const {
 	if(type==tNaN || type==tInfinity || Value.type==tNaN || Value.isZero()) return CNumber(tNaN);
 	if(Value.type==tInfinity) return CNumber(*this);
 	if(isZero()) return CNumber(0);
-	if(type==tDouble || Value.type==tDouble) {
+	if(type==tDouble || Value.type==tDouble || (Int32==numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */ ) {
 		double n = toDouble(), d = Value.toDouble(), q;
 		modf(n/d, &q);
 		return CNumber(n - (d * q));
@@ -4819,7 +4822,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, CSc
 			} else {
 				if(execute) {
 					t->match('[');
-					name = execute_expression(execute)->toString(execute);
+					name = execute_base(execute)->toString(execute);
 					t->match(']');
 				} else
 					t->skip(t->getToken().Int());
@@ -4844,8 +4847,8 @@ CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execute) {
 		if (execute) {
 			if(a->getVarPtr()->isUndefined() || a->getVarPtr()->isNull())
 				throwError(execute, ReferenceError, a->getName() + " is " + a->toString(execute));
-			CScriptVarLinkWorkPtr fnc = a.getter(execute);
-			if (!fnc->getVarPtr()->isFunction())
+			CScriptVarPtr fnc = a.getter(execute)->getVarPtr();
+			if (!fnc->isFunction())
 				throwError(execute, TypeError, a->getName() + " is not a function");
 			t->match('('); // path += '(';
 
@@ -4867,7 +4870,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execute) {
 					parent = findInScopes("this");
 				// if no parent use the root-scope
 				CScriptVarPtr This(parent ? parent->getVarPtr() : (CScriptVarPtr )root);
-				a = callFunction(execute, a->getVarPtr(), arguments, This);
+				a = callFunction(execute, fnc, arguments, This);
 			}
 		} else {
 			// function, but not executing - just parse args and be done
@@ -4922,7 +4925,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(CScriptResult &execute) {
 		a = execute_unary(execute); // no getter - delete can remove the accessor
 		if (execute) {
 			// !!! no right-hand-check by delete
-			if(a->isOwned() && a->isConfigurable()) {
+			if(a->isOwned() && a->isConfigurable() && a->getName() != "this") {
 				a->getOwner()->removeLink(a);	// removes the link from owner
 				a = constScriptVar(true);
 			}
@@ -5378,7 +5381,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				}
 				if(t->tk==LEX_R_VAR || t->tk==LEX_R_LET)
 					execute_statement(tmp_execute); // initialisation
-				else
+				else if (t->tk != ';') 
 					execute_base(tmp_execute); // initialisation
 				if(!execute(tmp_execute)) break;
 			}
@@ -5432,7 +5435,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 	case LEX_R_RETURN:
 		if (execute) {
 			t->match(LEX_R_RETURN);
-			CScriptVarPtr result;
+			CScriptVarPtr result = constUndefined;
 			if (t->tk != ';')
 				result = execute_base(execute);
 			t->match(';');
