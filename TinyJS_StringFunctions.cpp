@@ -229,7 +229,18 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 					arguments.pop_back();
 				}
 				ret_str.append(newsubstr);
+#if 1 /* Fix from "vcmpeq" (see Issue 14) currently untested */
+				if (match_begin == match_end) {
+					if (search_begin != str.end())
+						++search_begin;
+					else
+						break;
+				} else {
+					search_begin = match_end;
+				}
+#else
 				search_begin = match_end;
+#endif
 			} while(global && search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end));
 		}
 		ret_str.append(search_begin, str.end());
@@ -264,7 +275,18 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 				do {
 					offset = match_begin-str.begin();
 					retVar->addChild(int2string(idx++), c->newScriptVar(string(match_begin, match_end)));
+#if 1 /* Fix from "vcmpeq" (see Issue 14) currently untested */
+					if (match_begin == match_end) {
+						if (search_begin != str.end())
+							++search_begin;
+						else
+							break;
+					} else {
+						search_begin = match_end;
+					}
+#else
 					search_begin = match_end;
+#endif
 				} while(global && regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end));
 			}
 			if(idx) {
