@@ -1340,7 +1340,9 @@ private:
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj);
 inline define_newScriptVar_NamedFnc(Number, CTinyJS *Context, const CNumber &Obj) { return new CScriptVarNumber(Context, Obj); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned int Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned long Obj) { return newScriptVarNumber(Context, CNumber((uint32_t)Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, long Obj) { return newScriptVarNumber(Context, CNumber((int32_t)Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, double Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_DEPRECATED_newScriptVar_Fnc(NaN, CTinyJS *Context, NaN_t) { return newScriptVarNumber(Context, CNumber(NaN)); }
 inline define_DEPRECATED_newScriptVar_Fnc(Infinity, CTinyJS *Context, Infinity Obj) { return newScriptVarNumber(Context, CNumber(Obj)); } 
