@@ -2140,6 +2140,7 @@ private:
 
 	uint32_t uniqueID;
 	int32_t currentMarkSlot;
+	void *stackBase;
 public:
 	int32_t getCurrentMarkSlot() {
 		ASSERT(currentMarkSlot >= 0); // UniqueID not allocated
@@ -2157,6 +2158,8 @@ public:
 	CScriptVar *first;
 	void setTemporaryID_recursive(uint32_t ID);
 	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
+	void setStackBase(void * StackBase) { stackBase = StackBase; }
+	void setStackBase(uint32_t StackSize) { char dummy; stackBase = StackSize ? &dummy-StackSize : 0; }
 };
 
 

@@ -80,8 +80,14 @@ public:
 };
 //#include <windows.h>
 
+char *topOfStack;
+#define sizeOfStack 1*1024*1024 /* for example 1 MB depend of Compiler-Options */
+#define sizeOfSafeStack 50*1024 /* safety area */
+
 int main(int , char **)
 {
+	char dummy;
+	topOfStack = &dummy;
 /*
 	CNumber(-0.0);
 	CNumber(CNumber(NaN).toDouble());
@@ -103,6 +109,7 @@ int main(int , char **)
 //  js->addNative("function dump()", &js_dump, js);
 	/* Execute out bit of code - we could call 'evaluate' here if
 		we wanted something returned */
+	js->setStackBase(topOfStack-(sizeOfStack-sizeOfSafeStack));
 	try {
 		js->execute("var lets_quit = 0; function quit() { lets_quit = 1; }");
 		js->execute("print(\"Interactive mode... Type quit(); to exit, or print(...); to print something, or dump() to dump the symbol table!\");");
