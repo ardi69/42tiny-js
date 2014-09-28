@@ -2331,7 +2331,7 @@ CNumber CScriptVar::toNumber() { return toPrimitive_hintNumber()->toNumber_Callb
 CNumber CScriptVar::toNumber(CScriptResult &execute) { return toPrimitive_hintNumber(execute)->toNumber_Callback(); };
 bool CScriptVar::toBoolean() { return true; }
 string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(radix); }
-string CScriptVar::toString(CScriptResult &execute, int32_t radix) { return toPrimitive_hintString(execute, radix)->toCString(radix); }
+string CScriptVar::toString(CScriptResult &execute, int32_t radix/*=0*/) { return toPrimitive_hintString(execute, radix)->toCString(radix); }
 
 int CScriptVar::getInt() { return toNumber().toInt32(); }
 double CScriptVar::getDouble() { return toNumber().toDouble(); } 
@@ -3607,7 +3607,7 @@ CScriptException *CScriptVarError::toCScriptException()
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Array);
-CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype) {
+CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false) {
 	CScriptVarLinkPtr acc = addChild("length", newScriptVar(Accessor), 0);
 	CScriptVarFunctionPtr getter(::newScriptVar(Context, this, &CScriptVarArray::native_Length, 0));
 	getter->setFunctionData(new CScriptTokenDataFnc);
@@ -3637,11 +3637,21 @@ string CScriptVarArray::getParsableString(const string &indentString, const stri
 }
 CScriptVarPtr CScriptVarArray::toString_CallBack( CScriptResult &execute, int radix/*=0*/ ) {
 	ostringstream destination;
-	int len = getArrayLength();
-	for (int i=0;i<len;i++) {
-		destination << getArrayIndex(i)->toString(execute);
-		if (i<len-1) destination  << ", ";
+	if(toStringRecursion) {
+		return newScriptVar("");
 	}
+	toStringRecursion = true;
+	try {
+		int len = getArrayLength();
+		for (int i=0;i<len;i++) {
+			destination << getArrayIndex(i)->toString(execute);
+			if (i<len-1) destination  << ", ";
+		}
+	} catch(...) {
+		toStringRecursion = false;
+		throw; // rethrow
+	} 
+	toStringRecursion = false;
 	return newScriptVar(destination.str());
 
 }
