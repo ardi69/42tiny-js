@@ -4056,6 +4056,7 @@ CTinyJS::CTinyJS() {
 	first = 0;
 	uniqueID = 0;
 	currentMarkSlot = -1;
+	stackBase = 0;
 
 	
 	//////////////////////////////////////////////////////////////////////////
@@ -4526,7 +4527,13 @@ CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPtr &A, c
 		string da = a->isNull() ? "" : a->toString(execute);
 		string db = b->isNull() ? "" : b->toString(execute);
 		switch (op) {
-		case '+':			return newScriptVar(da+db);
+		case '+':
+			try{
+				return newScriptVar(da+db);
+			} catch(exception& e) {
+				throwError(execute, ERROR_TYPES::Error, e.what());
+				return constUndefined;
+			}
 		case LEX_EQUAL:	return constScriptVar(da==db);
 		case LEX_NEQUAL:	return constScriptVar(da!=db);
 		case '<':			return constScriptVar(da<db);
@@ -4879,6 +4886,12 @@ CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execute) {
 			CScriptVarPtr fnc = a.getter(execute)->getVarPtr();
 			if (!fnc->isFunction())
 				throwError(execute, TypeError, a->getName() + " is not a function");
+			if (stackBase) {
+				int dummy;
+				if(&dummy < stackBase)
+					throwError(execute, Error, "too much recursion");
+			}
+
 			t->match('('); // path += '(';
 
 			// grab in all parameters
