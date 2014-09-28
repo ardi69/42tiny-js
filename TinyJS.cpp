@@ -1976,7 +1976,7 @@ void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, int Flags, int op 
 void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
 	tokenizeLogic(State, Flags);
 	if(l->tk == '?') {
-		Flags &= ~TOKENIZE_FLAGS_noIn;
+		Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_canLabel); 
 		State.Marks.push_back(pushToken(State.Tokens));
 		tokenizeCondition(State, Flags);
 		setTokenSkip(State);
@@ -2158,7 +2158,7 @@ void CScriptTokenizer::throwTokenNotExpected() {
 CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 	extensible = true;
 	context = Context;
-	temporaryID = 0;
+	memset(temporaryMark, 0, sizeof(temporaryMark));
 	if(context->first) {
 		next = context->first;
 		next->prev = this;
@@ -2177,7 +2177,7 @@ CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 CScriptVar::CScriptVar(const CScriptVar &Copy) {
 	extensible = Copy.extensible;
 	context = Copy.context;
-	temporaryID = 0;
+	memset(temporaryMark, 0, sizeof(temporaryMark));
 	if(context->first) {
 		next = context->first;
 		next->prev = this;
@@ -2262,7 +2262,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintString(CScriptResult &execute
 			if(execute && !ret->isPrimitive()) {
 				ret = callJS_valueOf(execute);
 				if(execute && !ret->isPrimitive())
-					context->throwError(execute, TypeError, "can't convert b to primitive type");
+					context->throwError(execute, TypeError, "can't convert to primitive type");
 			}
 			return ret;
 		}
@@ -2491,9 +2491,13 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childNa
 	if(child) return child;
 	CScriptVarStringPtr strVar = getRawPrimitive();
 	uint32_t Idx;
-	if (strVar && (Idx=isArrayIndex(childName))!=uint32_t(-1) && Idx<strVar->stringLength()) {
-		int Char = strVar->getChar(Idx);
-		child(newScriptVar(string(1, (char)Char)), childName, SCRIPTVARLINK_ENUMERABLE);
+	if (strVar && (Idx=isArrayIndex(childName))!=uint32_t(-1)) {
+		if (Idx<strVar->stringLength()) {
+			int Char = strVar->getChar(Idx);
+			child(newScriptVar(string(1, (char)Char)), childName, SCRIPTVARLINK_ENUMERABLE);
+		} else {
+			child(constScriptVar(Undefined), childName, SCRIPTVARLINK_ENUMERABLE);
+		}
 		child.setReferencedOwner(this); // fake referenced Owner
 		return child;
 	}
@@ -2501,16 +2505,20 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childNa
 }
 
 CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName) {
-	unsigned int uniqueID = context->getUniqueID();
+	unsigned int uniqueID = context->allocUniqueID();
 	// Look for links to actual parent classes
 	CScriptVarPtr object = this;
 	CScriptVarLinkPtr __proto__;
-	while( object->getTempraryID() != uniqueID && (__proto__ = object->findChild(TINYJS___PROTO___VAR)) ) {
+	while( object->getTemporaryMark() != uniqueID && (__proto__ = object->findChild(TINYJS___PROTO___VAR)) ) {
 		CScriptVarLinkPtr implementation = __proto__->getVarPtr()->findChild(childName);
-		if (implementation) return implementation;
-		object->setTemporaryID(uniqueID); // prevents recursions
+		if (implementation) {
+			context->freeUniqueID();
+			return implementation;
+		}
+		object->setTemporaryMark(uniqueID); // prevents recursions
 		object = __proto__;
 	}
+	context->freeUniqueID();
 	return 0;
 }
 
@@ -2553,7 +2561,7 @@ CScriptVarLinkPtr CScriptVar::findChildOrCreateByPath(const string &path) {
 
 void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/)
 {
-	setTemporaryID(ID);
+	setTemporaryMark(ID);
 	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
 		if(!OnlyEnumerable || (*it)->isEnumerable())
 			Keys.insert((*it)->getName());
@@ -2565,7 +2573,7 @@ void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t 
 			Keys.insert(int2string(i));
 	}
 	CScriptVarLinkPtr __proto__;
-	if( ID && (__proto__ = findChild(TINYJS___PROTO___VAR)) && __proto__->getVarPtr()->getTempraryID() != ID )
+	if( ID && (__proto__ = findChild(TINYJS___PROTO___VAR)) && __proto__->getVarPtr()->getTemporaryMark() != ID )
 		__proto__->getVarPtr()->keys(Keys, OnlyEnumerable, ID);
 }
 
@@ -2647,13 +2655,14 @@ CScriptVarPtr CScriptVar::mathsOp(const CScriptVarPtr &b, int op) {
 
 void CScriptVar::trace(const string &name) {
 	string indentStr;
-	uint32_t uniqueID = context->getUniqueID();
+	uint32_t uniqueID = context->allocUniqueID();
 	trace(indentStr, uniqueID, name);
+	context->freeUniqueID();
 }
 void CScriptVar::trace(string &indentStr, uint32_t uniqueID, const string &name) {
 	string indent = "  ";
 	const char *extra="";
-	if(temporaryID == uniqueID)
+	if(getTemporaryMark() == uniqueID)
 		extra = " recursion detected";
 	TRACE("%s'%s' = '%s' %s%s\n",
 		indentStr.c_str(),
@@ -2661,8 +2670,8 @@ void CScriptVar::trace(string &indentStr, uint32_t uniqueID, const string &name)
 		toString().c_str(),
 		getFlagsAsString().c_str(),
 		extra);
-	if(temporaryID != uniqueID) {
-		temporaryID = uniqueID;
+	if(getTemporaryMark() != uniqueID) {
+		setTemporaryMark(uniqueID);
 		indentStr+=indent;
 		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
 			if((*it)->isEnumerable())
@@ -2703,11 +2712,12 @@ int CScriptVar::getRefs() {
 	return refs;
 }
 
-void CScriptVar::setTemporaryID_recursive(uint32_t ID) {
-	if(temporaryID != ID) {
-		temporaryID = ID;
+void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
+{
+	if(getTemporaryMark() != ID) {
+		setTemporaryMark(ID);
 		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
-			(*it)->getVarPtr()->setTemporaryID_recursive(ID);
+			(*it)->getVarPtr()->setTemporaryMark_recursive(ID);
 		}
 	}
 }
@@ -3490,6 +3500,13 @@ declare_dummy_t(StopIteration);
 CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
 CScriptVarObject::~CScriptVarObject() {}
 CScriptVarPtr CScriptVarObject::clone() { return new CScriptVarObject(*this); }
+
+void CScriptVarObject::removeAllChildren()
+{
+	CScriptVar::removeAllChildren();
+	value.clear();
+}
+
 CScriptVarPrimitivePtr CScriptVarObject::getRawPrimitive() { return value; }
 bool CScriptVarObject::isObject() { return true; }
 
@@ -3529,9 +3546,9 @@ CScriptVarPtr CScriptVarObject::toString_CallBack(CScriptResult &execute, int ra
 	return newScriptVar("[object Object]"); 
 };
 
-void CScriptVarObject::setTemporaryID_recursive( uint32_t ID ) {
-	CScriptVar::setTemporaryID_recursive(ID);
-	if(value) value->setTemporaryID_recursive(ID);
+void CScriptVarObject::setTemporaryMark_recursive( uint32_t ID) {
+	CScriptVar::setTemporaryMark_recursive(ID);
+	if(value) value->setTemporaryMark_recursive(ID);
 }
 
 
@@ -3836,11 +3853,11 @@ CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr Bound
 CScriptVarFunctionBounded::~CScriptVarFunctionBounded(){}
 CScriptVarPtr CScriptVarFunctionBounded::clone() { return new CScriptVarFunctionBounded(*this); }
 bool CScriptVarFunctionBounded::isBounded() { return true; }
-void CScriptVarFunctionBounded::setTemporaryID_recursive( uint32_t ID ) {
-	CScriptVarFunction::setTemporaryID_recursive(ID);
-	boundedThis->setTemporaryID_recursive(ID);
+void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
+	CScriptVarFunction::setTemporaryMark_recursive(ID);
+	boundedThis->setTemporaryMark_recursive(ID);
 	for(vector<CScriptVarPtr>::iterator it=boundedArguments.begin(); it!=boundedArguments.end(); ++it)
-		(*it)->setTemporaryID_recursive(ID);
+		(*it)->setTemporaryMark_recursive(ID);
 }
 
 CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis/*=0*/ )
@@ -4028,6 +4045,7 @@ CTinyJS::CTinyJS() {
 	haveTry = false;
 	first = 0;
 	uniqueID = 0;
+	currentMarkSlot = -1;
 
 	
 	//////////////////////////////////////////////////////////////////////////
@@ -4295,14 +4313,15 @@ CScriptVarLinkPtr CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	t=0;
 	ClearUnreferedVars(execute.value);
 
-	uint32_t UniqueID = getUniqueID(); 
+	uint32_t UniqueID = allocUniqueID(); 
 	setTemporaryID_recursive(UniqueID);
-	if(execute.value) execute.value->setTemporaryID_recursive(UniqueID);
+	if(execute.value) execute.value->setTemporaryMark_recursive(UniqueID);
 	for(CScriptVar *p = first; p; p=p->next)
 	{
-		if(p->temporaryID != UniqueID)
+		if(p->getTemporaryMark() != UniqueID)
 			printf("%p\n", p);
 	}
+	freeUniqueID();
 
 	if (execute.value)
 		return CScriptVarLinkPtr(execute.value);
@@ -5064,12 +5083,13 @@ CScriptVarLinkWorkPtr CTinyJS::execute_relation(CScriptResult &execute, int set,
 					if(!prototype)
 						throwError(execute, TypeError, "invalid 'instanceof' operand "+nameOf_b);
 					else {
-						unsigned int uniqueID = getUniqueID();
+						unsigned int uniqueID = allocUniqueID();
 						CScriptVarPtr object = a->getVarPtr()->findChild(TINYJS___PROTO___VAR);
-						while( object && object!=prototype->getVarPtr() && object->getTempraryID() != uniqueID) {
-							object->setTemporaryID(uniqueID); // prevents recursions
+						while( object && object!=prototype->getVarPtr() && object->getTemporaryMark() != uniqueID) {
+							object->setTemporaryMark(uniqueID); // prevents recursions
 							object = object->findChild(TINYJS___PROTO___VAR);
 						}
+						freeUniqueID();
 						a(constScriptVar(object && object==prototype->getVarPtr()));
 					}
 				} else
@@ -6072,20 +6092,21 @@ void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {
 	for(vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
-		if(**it) (**it)->setTemporaryID_recursive(ID);
+		if(**it) (**it)->setTemporaryMark_recursive(ID);
 	for(int i=Error; i<ERROR_COUNT; i++)
-		if(errorPrototypes[i]) errorPrototypes[i]->setTemporaryID_recursive(ID);
-	root->setTemporaryID_recursive(ID);
+		if(errorPrototypes[i]) errorPrototypes[i]->setTemporaryMark_recursive(ID);
+	root->setTemporaryMark_recursive(ID);
 }
 
 void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/) {
-	uint32_t UniqueID = getUniqueID(); 
+	uint32_t UniqueID = allocUniqueID(); 
 	setTemporaryID_recursive(UniqueID);
-	if(extra) extra->setTemporaryID_recursive(UniqueID);
+	if(extra) extra->setTemporaryMark_recursive(UniqueID);
 	CScriptVar *p = first;
+
 	while(p)
 	{
-		if(p->temporaryID != UniqueID)
+		if(p->getTemporaryMark() != UniqueID)
 		{
 			CScriptVarPtr var = p;
 			var->removeAllChildren();
@@ -6094,5 +6115,6 @@ void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/)
 		else
 			p = p->next;
 	}
+	freeUniqueID();
 }
 

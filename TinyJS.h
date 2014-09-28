@@ -221,6 +221,7 @@ enum ERROR_TYPES {
 #define ERROR_COUNT (ERROR_MAX+1)
 extern const char *ERROR_NAME[];
 
+#define TEMPORARY_MARK_SLOTS 5
 
 #define TINYJS_RETURN_VAR					"return"
 #define TINYJS_LOKALE_VAR					"__locale__"
@@ -735,8 +736,8 @@ public:
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, bool &hasRecursion); ///< get Data as a parsable javascript string
 #define getParsableStringRecursionsCheck() do{		\
-		if(uniqueID && uniqueID==temporaryID) { hasRecursion=true; return "recursion"; } \
-		temporaryID = uniqueID; \
+		if(uniqueID && uniqueID==getTemporaryMark()) { hasRecursion=true; return "recursion"; } \
+		setTemporaryMark(uniqueID); \
 	} while(0)
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); ///< get Data as a parsable javascript string
 	virtual std::string getVarType()=0;
@@ -778,7 +779,7 @@ public:
 	CScriptVarLinkPtr DEPRECATED("addChildNoDup is deprecated use addChildOrReplace instead!") addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
 	CScriptVarLinkPtr addChildOrReplace(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
 	bool removeLink(CScriptVarLinkPtr &link); ///< Remove a specific link (this is faster than finding via a child)
-	void removeAllChildren();
+	virtual void removeAllChildren();
 
 	/// ARRAY
 	CScriptVarPtr getArrayIndex(uint32_t idx); ///< The the value at an array index
@@ -812,9 +813,9 @@ public:
 	template<typename T>	CScriptVarPtr newScriptVar(T t); // { return ::newScriptVar(context, t); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2); // { return ::newScriptVar(context, t); }
 	template<typename T>	const CScriptVarPtr &constScriptVar(T t); // { return ::newScriptVar(context, t); }
-	void setTemporaryID(uint32_t ID) { temporaryID = ID; }
-	virtual void setTemporaryID_recursive(uint32_t ID);
-	uint32_t getTempraryID() { return temporaryID; }
+	void setTemporaryMark(uint32_t ID); // defined as inline at end of this file { temporaryMark[context->getCurrentMarkSlot()] = ID; }
+	virtual void setTemporaryMark_recursive(uint32_t ID);
+	uint32_t getTemporaryMark(); // defined as inline at end of this file { return temporaryMark[context->getCurrentMarkSlot()]; }
 protected:
 	bool extensible;
 	CTinyJS *context;
@@ -822,7 +823,7 @@ protected:
 	CScriptVar *prev;
 public:
 	CScriptVar *next;
-	uint32_t temporaryID;
+	uint32_t temporaryMark[TEMPORARY_MARK_SLOTS];
 
 	friend class CScriptVarPtr;
 };
@@ -1394,6 +1395,8 @@ public:
 	virtual ~CScriptVarObject();
 	virtual CScriptVarPtr clone();
 
+	virtual void removeAllChildren();
+
 	virtual CScriptVarPrimitivePtr getRawPrimitive();
 	virtual bool isObject(); // { return true; }
 
@@ -1403,7 +1406,7 @@ public:
 
 	virtual CScriptVarPtr valueOf_CallBack();
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
-	virtual void setTemporaryID_recursive(uint32_t ID);
+	virtual void setTemporaryMark_recursive(uint32_t ID);
 protected:
 private:
 	CScriptVarPrimitivePtr value;
@@ -1588,7 +1591,7 @@ public:
 	virtual ~CScriptVarFunctionBounded();
 	virtual CScriptVarPtr clone();
 	virtual bool isBounded();	///< is CScriptVarFunctionBounded
-	virtual void setTemporaryID_recursive(uint32_t ID);
+	virtual void setTemporaryMark_recursive(uint32_t ID);
 	CScriptVarPtr callFunction(CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 protected:
 private:
@@ -2133,8 +2136,21 @@ private:
 
 
 	uint32_t uniqueID;
+	int32_t currentMarkSlot;
 public:
-	uint32_t getUniqueID() { return ++uniqueID; }
+	int32_t getCurrentMarkSlot() {
+		ASSERT(currentMarkSlot >= 0); // UniqueID not allocated
+		return currentMarkSlot;
+	}
+	uint32_t allocUniqueID() { 
+		++currentMarkSlot;
+		ASSERT(currentMarkSlot<TEMPORARY_MARK_SLOTS); // no free MarkSlot
+		return ++uniqueID; 
+	}
+	void freeUniqueID() { 
+		ASSERT(currentMarkSlot >= 0); // freeUniqueID without allocUniqueID
+		--currentMarkSlot;
+	}
 	CScriptVar *first;
 	void setTemporaryID_recursive(uint32_t ID);
 	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
@@ -2147,6 +2163,10 @@ inline const CScriptVarPtr &CScriptVar::constScriptVar(T t) { return context->co
 //////////////////////////////////////////////////////////////////////////
 inline CNumber CScriptVarLink::toNumber() { return var->toNumber(); }
 inline CNumber CScriptVarLink::toNumber(CScriptResult &execute) { return var->toNumber(execute); }
+
+inline void CScriptVar::setTemporaryMark(uint32_t ID) { temporaryMark[context->getCurrentMarkSlot()] = ID; }
+inline uint32_t CScriptVar::getTemporaryMark() { return temporaryMark[context->getCurrentMarkSlot()]; }
+
 
 #endif
 

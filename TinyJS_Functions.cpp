@@ -73,9 +73,10 @@ static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
 }
 
 static void scJSONStringify(const CFunctionsScopePtr &c, void *) {
-	uint32_t UniqueID = c->getContext()->getUniqueID();
+	uint32_t UniqueID = c->getContext()->allocUniqueID();
 	bool hasRecursion=false;
 	c->setReturnVar(c->newScriptVar(c->getArgument("obj")->getParsableString("", "   ", UniqueID, hasRecursion)));
+	c->getContext()->freeUniqueID();
 	if(hasRecursion) c->throwError(TypeError, "cyclic object value");
 }
 
