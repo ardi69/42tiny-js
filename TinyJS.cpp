@@ -1978,10 +1978,12 @@ void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
 	if(l->tk == '?') {
 		Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_canLabel); 
 		State.Marks.push_back(pushToken(State.Tokens));
-		tokenizeCondition(State, Flags);
+//		tokenizeCondition(State, Flags);
+		tokenizeAssignment(State, Flags);
 		setTokenSkip(State);
 		State.Marks.push_back(pushToken(State.Tokens, ':'));
-		tokenizeCondition(State, Flags);
+//		tokenizeCondition(State, Flags);
+		tokenizeAssignment(State, Flags);
 		setTokenSkip(State);
 		State.LeftHand = false;
 	}
@@ -5180,14 +5182,16 @@ CScriptVarLinkWorkPtr CTinyJS::execute_condition(CScriptResult &execute) {
 		if(execute) {
 			if(cond) {
 				t->match('?');
-				a = execute_condition(execute);
+//				a = execute_condition(execute);
+				a = execute_assignment(execute);
 				t->check(':');
 				t->skip(t->getToken().Int());
 			} else { 
 				CScriptVarLinkWorkPtr b;
 				t->skip(t->getToken().Int());
 				t->match(':');
-				return execute_condition(execute);
+				return execute_assignment(execute);
+//				return execute_condition(execute);
 			}
 		} else {
 			t->skip(t->getToken().Int());
