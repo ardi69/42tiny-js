@@ -4777,16 +4777,22 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 			CScriptVarLinkWorkPtr parent = execute_literals(execute);
 			CScriptVarLinkWorkPtr objClass = execute_member(parent, execute).getter(execute);
 			if (execute) {
-				if(objClass->getVarPtr()->isFunction()) {
+				CScriptVarPtr Constructor = objClass->getVarPtr();
+				if(Constructor->isFunction()) {
 					CScriptVarPtr obj(newScriptVar(Object));
-					CScriptVarLinkPtr prototype = objClass->getVarPtr()->findChild(TINYJS_PROTOTYPE_CLASS);
+					CScriptVarLinkPtr prototype = Constructor->findChild(TINYJS_PROTOTYPE_CLASS);
 					if(!prototype || prototype->getVarPtr()->isUndefined() || prototype->getVarPtr()->isNull()) {
-						prototype = objClass->getVarPtr()->addChild(TINYJS_PROTOTYPE_CLASS, newScriptVar(Object), SCRIPTVARLINK_WRITABLE);
+						prototype = Constructor->addChild(TINYJS_PROTOTYPE_CLASS, newScriptVar(Object), SCRIPTVARLINK_WRITABLE);
 						obj->addChildOrReplace(TINYJS___PROTO___VAR, prototype, SCRIPTVARLINK_WRITABLE);
 					}
-					CScriptVarLinkPtr constructor = objClass->getVarPtr()->findChild("__constructor__");
-					if(constructor && constructor->getVarPtr()->isFunction())
-						objClass = constructor;
+					CScriptVarLinkPtr __constructor__ = Constructor->findChild("__constructor__");
+					if(__constructor__ && __constructor__->getVarPtr()->isFunction())
+						Constructor = __constructor__;
+					if (stackBase) {
+						int dummy;
+						if(&dummy < stackBase)
+							throwError(execute, Error, "too much recursion");
+					}
 					vector<CScriptVarPtr> arguments;
 					if (t->tk == '(') {
 						t->match('(');
@@ -4799,7 +4805,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 						t->match(')');
 					}
 					if(execute) {
-						CScriptVarPtr returnVar = callFunction(execute, objClass->getVarPtr(), arguments, obj, &obj);
+						CScriptVarPtr returnVar = callFunction(execute, Constructor, arguments, obj, &obj);
 						if(returnVar->isObject())
 							return CScriptVarLinkWorkPtr(returnVar);
 						return CScriptVarLinkWorkPtr(obj);
