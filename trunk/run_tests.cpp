@@ -286,16 +286,16 @@ bool run_test(const char *filename) {
 	 char fn[64];
     sprintf(fn, "%s.fail.txt", filename);
 
-	 /* logging is currently deactivated because stack-overflow by recursive vars
+//	 logging is currently deactivated because stack-overflow by recursive vars
     FILE *f = fopen(fn, "wt");
     if (f) {
 		 
-      std::string symbols = s.getRoot()->getParsableString("", "   ");
+      std::string symbols = s.getRoot()->CScriptVar::getParsableString();
       fprintf(f, "%s", symbols.c_str());
       fclose(f);
     }
-	 */
-    printf("FAIL - symbols written to %s\n", fn);
+
+	 printf("FAIL - symbols written to %s\n", fn);
   }
 
   delete[] buffer;

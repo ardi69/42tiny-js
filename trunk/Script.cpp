@@ -47,6 +47,7 @@
 //#include "TinyJS_MathFunctions.h"
 #include <assert.h>
 #include <stdio.h>
+#include <iostream>
 
 #ifdef _DEBUG
 #	ifndef _MSC_VER
@@ -67,18 +68,6 @@ void js_dump(const CFunctionsScopePtr &v, void *) {
 	v->getContext()->getRoot()->trace(">  ");
 }
 
-class myThread : public CScriptThread {
-public:
-	int ThreadFnc() {
-		printf("Thread started\n");
-		while(isActiv()) {
-			printf("Thread fnc\n");
-		}
-		printf("Thread finish\n");
-		return 55;
-	}
-};
-//#include <windows.h>
 
 char *topOfStack;
 #define sizeOfStack 1*1024*1024 /* for example 1 MB depend of Compiler-Options */
@@ -88,14 +77,8 @@ int main(int , char **)
 {
 	char dummy;
 	topOfStack = &dummy;
-/*
-	CNumber(-0.0);
-	CNumber(CNumber(NaN).toDouble());
-	myThread mT;
-	mT.Run();
-	Sleep(20);
-	printf("retvar %d\n", mT.Stop());
-*/
+//	printf("%i %i\n", __cplusplus, _MSC_VER);
+
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 //	setlocale( LC_ALL, ".858" );
 //	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
@@ -113,14 +96,27 @@ int main(int , char **)
 	try {
 		js->execute("var lets_quit = 0; function quit() { lets_quit = 1; }");
 		js->execute("print(\"Interactive mode... Type quit(); to exit, or print(...); to print something, or dump() to dump the symbol table!\");");
+		js->execute("print(function () {print(\"gen\");yield 5;yield 6;}().next());", "yield-test.js");
+		js->execute("for each(i in function () {print(\"gen\");yield 5;yield 6;}()) print(i);", "yield-test.js");
+		js->execute("function g(){				\n\n"
+			"	throw \"error\"\n"
+			"	try{									\n"
+			"		yield 1; yield 2				\n"
+			"	}finally{							\n"
+			"		print(\"finally\")			\n"
+			"		yield 3;							\n"
+			"		throw StopIteration			\n"
+			"	}										\n"
+			"	print(\"after finally\")		\n"
+			"}t=g()", "test");
 	} catch (CScriptException *e) {
 		printf("%s\n", e->toString().c_str());
 		delete e;
 	}
 	int lineNumber = 0;
 	while (js->evaluate("lets_quit") == "0") {
-		char buffer[2048];
-		fgets ( buffer, sizeof(buffer), stdin );
+		std::string buffer;
+		if(!std::getline(std::cin, buffer)) break;
 		try {
 			js->execute(buffer, "console.input", lineNumber++);
 		} catch (CScriptException *e) {
