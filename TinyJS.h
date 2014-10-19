@@ -44,16 +44,11 @@
 #include <map>
 #include <set>
 #include <stdint.h>
+#include <string.h>
 #include <cassert>
 #include <limits>
 
 #include "config.h"
-
-#if __cplusplus >= 201103L
-#	define MEMBER_DELETE =delete
-#else
-#	define MEMBER_DELETE
-#endif
 
 #ifdef NO_POOL_ALLOCATOR
 	template<typename T, int num_objects=64>
@@ -184,6 +179,9 @@ enum LEX_TYPES {
 
 	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
+
+	LEX_R_YIELD,
+
 };
 #define LEX_TOKEN_DATA_STRING(tk) ((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
 #define LEX_TOKEN_DATA_FLOAT(tk) (tk==LEX_FLOAT)
@@ -234,6 +232,7 @@ extern const char *ERROR_NAME[];
 #define TINYJS_SCOPE_WITH_VAR				"__scope_with__"
 #define TINYJS_ACCESSOR_GET_VAR			"__accessor_get__"
 #define TINYJS_ACCESSOR_SET_VAR			"__accessor_set__"
+#define TINYJS_CONSTRUCTOR_VAR			"constructor"
 #define TINYJS_TEMP_NAME			""
 #define TINYJS_BLANK_DATA			""
 
@@ -297,9 +296,10 @@ public:
 		const char *tokenStart;
 		int currentLine;
 		const char *currentLineStart;
+		int currentColumn() { return tokenStart-currentLineStart; }
 	} pos;
 	int currentLine() { return pos.currentLine; }
-	int currentColumn() { return pos.tokenStart-pos.currentLineStart; }
+	int currentColumn() { return pos.currentColumn(); }
 	bool lineBreakBeforeToken;
 private:
 	const char *data;
@@ -364,12 +364,14 @@ private:
 
 class CScriptTokenDataFnc : public fixed_size_object<CScriptTokenDataFnc>, public CScriptTokenData {
 public:
+	CScriptTokenDataFnc() : line(0),isGenerator(false) {}
 	std::string file;
 	int line;
 	std::string name;
 	TOKEN_VECT arguments;
 	TOKEN_VECT body;
 	std::string getArgumentsString();
+	bool isGenerator;
 };
 
 class CScriptTokenDataForwards : public fixed_size_object<CScriptTokenDataForwards>, public CScriptTokenData {
@@ -545,7 +547,6 @@ public:
 		bool operator ==(const ScriptTokenPosition &eq) { return pos == eq.pos; }
 		ScriptTokenPosition &operator =(const ScriptTokenPosition &copy) { 
 			tokens=copy.tokens; pos=copy.pos; 
-//			currentLine=copy.currentLine; 
 			return *this;
 		}
 		TOKEN_VECT *tokens;
@@ -563,6 +564,8 @@ public:
 		void pushLeftHandState() { States.push_back(LeftHand); }
 		void popLeftHandeState() { LeftHand = States.back(); States.pop_back(); }
 		std::vector<bool> States;
+		bool FunctionIsGenerator;
+		bool HaveReturnValue;
 	};
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
@@ -688,6 +691,7 @@ public:
 	virtual bool isBounded();	///< is CScriptVarFunctionBounded
 
 	virtual bool isIterator();
+	virtual bool isGenerator();
 
 	bool isBasic() { return Childs.empty(); } ///< Is this *not* an array/object/etc
 
@@ -741,6 +745,8 @@ public:
 			setTemporaryMark(uniqueID); \
 		} \
 	} while(0)
+
+	std::string getParsableString(); ///< get Data as a parsable javascript string
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); ///< get Data as a parsable javascript string
 	virtual std::string getVarType()=0;
 
@@ -1385,7 +1391,6 @@ inline define_newScriptVar_NamedFnc(Bool, CTinyJS *Context, bool Obj) { return n
 /// CScriptVarObject
 //////////////////////////////////////////////////////////////////////////
 
-define_dummy_t(StopIteration);
 define_dummy_t(Object);
 define_ScriptVarPtr_Type(Object);
 
@@ -1406,6 +1411,7 @@ public:
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
 	virtual std::string getVarType(); ///< always "object"
+	virtual std::string getVarTypeTagName(); ///< always "Object"
 	virtual CScriptVarPtr toObject();
 
 	virtual CScriptVarPtr valueOf_CallBack();
@@ -1423,6 +1429,32 @@ inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t) { return new 
 inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Prototype); }
 inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Prototype); }
 inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPrimitivePtr &Value, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Value, Prototype); }
+
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarObjectTyped (simple Object with TypeTagName)
+//////////////////////////////////////////////////////////////////////////
+
+define_dummy_t(StopIteration);
+
+class CScriptVarObjectTypeTagged : public CScriptVarObject {
+protected:
+//	CScriptVarObjectTyped(CTinyJS *Context);
+	CScriptVarObjectTypeTagged(CTinyJS *Context, const CScriptVarPtr &Prototype, const std::string &TypeTagName) : CScriptVarObject(Context, Prototype), typeTagName(TypeTagName) {}
+	CScriptVarObjectTypeTagged(const CScriptVarObjectTypeTagged &Copy) : CScriptVarObject(Copy), typeTagName(Copy.typeTagName) {} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarObjectTypeTagged();
+	virtual CScriptVarPtr clone();
+
+	virtual std::string getVarTypeTagName(); 
+protected:
+private:
+	std::string typeTagName;
+	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &, const std::string &);
+	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &, const std::string &);
+};
+inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &Prototype, const std::string &TypeTagName) { return new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName); }
+inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &Prototype, const std::string &TypeTagName) { return new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1524,37 +1556,6 @@ inline define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &Obj,
 
 
 ////////////////////////////////////////////////////////////////////////// 
-/// CScriptVarDefaultIterator
-//////////////////////////////////////////////////////////////////////////
-
-define_dummy_t(DefaultIterator);
-define_ScriptVarPtr_Type(DefaultIterator);
-
-class CScriptVarDefaultIterator : public CScriptVarObject {
-protected:
-	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, int Mode);
-	CScriptVarDefaultIterator(const CScriptVarDefaultIterator &Copy) 
-	: 
-	CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
-	keys(Copy.keys), pos(keys.begin()){} ///< Copy protected -> use clone for public
-public:
-	virtual ~CScriptVarDefaultIterator();
-	virtual CScriptVarPtr clone();
-	virtual bool isIterator();
-
-	void native_next(const CFunctionsScopePtr &c, void *data);
-private:
-	int mode;
-	CScriptVarPtr object;
-	STRING_SET_t keys;
-	STRING_SET_it pos;
-	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, int);
-
-};
-inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, int Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
-
-
-////////////////////////////////////////////////////////////////////////// 
 /// CScriptVarFunction
 //////////////////////////////////////////////////////////////////////////
 
@@ -1616,7 +1617,9 @@ inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr Bound
 define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
-	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata) : CScriptVarFunction(Context, new CScriptTokenDataFnc), jsUserData(Userdata) { }
+	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name) : CScriptVarFunction(Context, new CScriptTokenDataFnc), jsUserData(Userdata) {
+		if(Name) getFunctionData()->name = Name;
+	}
 	CScriptVarFunctionNative(const CScriptVarFunctionNative &Copy) : CScriptVarFunction(Copy), jsUserData(Copy.jsUserData) { } ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarFunctionNative();
@@ -1636,7 +1639,7 @@ protected:
 define_ScriptVarPtr_Type(FunctionNativeCallback);
 class CScriptVarFunctionNativeCallback : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata) : CScriptVarFunctionNative(Context, Userdata), jsCallback(Callback) { }
+	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name) : CScriptVarFunctionNative(Context, Userdata, Name), jsCallback(Callback) { }
 	CScriptVarFunctionNativeCallback(const CScriptVarFunctionNativeCallback &Copy) : CScriptVarFunctionNative(Copy), jsCallback(Copy.jsCallback) { } ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarFunctionNativeCallback();
@@ -1644,9 +1647,9 @@ public:
 	virtual void callFunction(const CFunctionsScopePtr &c);
 private:
 	JSCallback jsCallback; ///< Callback for native functions
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*);
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*, const char*);
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata) { return new CScriptVarFunctionNativeCallback(Context, Callback, Userdata); }
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name=0) { return new CScriptVarFunctionNativeCallback(Context, Callback, Userdata, Name); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1656,7 +1659,7 @@ inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallb
 template<class native>
 class CScriptVarFunctionNativeClass : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata) : CScriptVarFunctionNative(Context, Userdata), classPtr(ClassPtr), classFnc(ClassFnc) { }
+	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name) : CScriptVarFunctionNative(Context, Userdata, Name), classPtr(ClassPtr), classFnc(ClassFnc) { }
 	CScriptVarFunctionNativeClass(const CScriptVarFunctionNativeClass &Copy) : CScriptVarFunctionNative(Copy), classPtr(Copy.classPtr), classFnc(Copy.classFnc) { } ///< Copy protected -> use clone for public
 public:
 	virtual CScriptVarPtr clone() { return new CScriptVarFunctionNativeClass(*this); }
@@ -1666,10 +1669,10 @@ private:
 	native *classPtr;
 	void (native::*classFnc)(const CFunctionsScopePtr &c, void *userdata);
 	template<typename native2>
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *);
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *, const char *);
 };
 template<typename native>
-define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata) { return new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata); }
+define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name=0) { return new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata, Name); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -1829,6 +1832,103 @@ private:
 inline define_newScriptVar_Fnc(ScopeWith, CTinyJS *, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With) { return new CScriptVarScopeWith(Parent, With); }
 
 
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarDefaultIterator
+//////////////////////////////////////////////////////////////////////////
+
+define_dummy_t(DefaultIterator);
+define_ScriptVarPtr_Type(DefaultIterator);
+
+class CScriptVarDefaultIterator : public CScriptVarObject {
+protected:
+	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, int Mode);
+	CScriptVarDefaultIterator(const CScriptVarDefaultIterator &Copy) 
+		: 
+		CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
+		keys(Copy.keys), pos(keys.begin()){} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarDefaultIterator();
+	virtual CScriptVarPtr clone();
+	virtual bool isIterator();
+
+	void native_next(const CFunctionsScopePtr &c, void *data);
+private:
+	int mode;
+	CScriptVarPtr object;
+	STRING_SET_t keys;
+	STRING_SET_it pos;
+	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, int);
+
+};
+inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, int Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
+
+
+////////////////////////////////////////////////////////////////////////// 
+/// CScriptVarGenerator
+//////////////////////////////////////////////////////////////////////////
+
+#ifndef NO_GENERATORS
+
+define_dummy_t(Generator);
+define_ScriptVarPtr_Type(Generator);
+
+class CScriptVarGenerator : public CScriptVarObject {
+protected:
+	CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function);
+	CScriptVarGenerator(const CScriptVarGenerator &Copy) 
+		: 
+		CScriptVarObject(Copy), functionRoot(Copy.functionRoot), function(Copy.function), coroutine(this) {} ///< Copy protected -> use clone for public
+public:
+	virtual ~CScriptVarGenerator();
+	virtual CScriptVarPtr clone();
+	virtual bool isIterator();
+	virtual bool isGenerator();
+	virtual std::string getVarType(); // { return "generator"; }
+	virtual std::string getVarTypeTagName(); // { return "Generator"; }
+
+	CScriptVarPtr getFunctionRoot() { return functionRoot; }
+	CScriptVarFunctionPtr getFunction() { return function; }
+
+	virtual void setTemporaryMark_recursive(uint32_t ID);
+
+	void native_send(const CFunctionsScopePtr &c, void *data);
+	void native_throw(const CFunctionsScopePtr &c, void *data);
+	int Coroutine();
+	void setException(const CScriptVarPtr &YieldVar) {
+		yieldVar = YieldVar;
+		yieldVarIsException = true;
+	}
+	bool isClosed() { return closed; }
+	CScriptVarPtr yield(CScriptResult &execute, CScriptVar *YieldIn);
+private:
+	CScriptVarPtr functionRoot;
+	CScriptVarFunctionPtr function;
+	bool closed;
+	CScriptVarPtr yieldVar;
+	bool yieldVarIsException;
+	class CCooroutine : public CScriptCoroutine {
+		CCooroutine(CScriptVarGenerator* Parent) : parent(Parent) {}
+		int Coroutine() { return parent->Coroutine(); }
+		void yield() { CScriptCoroutine::yield(); }
+		CScriptVarGenerator* parent;
+		friend class CScriptVarGenerator;
+	} coroutine;
+	friend class CCooroutine;
+
+public:
+	void *callersStackBase;
+	int callersScopeSize;
+	CScriptTokenizer *callersTokenizer;
+	bool callersHaveTry;
+	std::vector<CScriptVarScopePtr> generatorScopes;
+
+	friend define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS *, const CScriptVarPtr &, const CScriptVarFunctionPtr &);
+
+};
+inline define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function) { return new CScriptVarGenerator(Context, FunctionRoot, Function); }
+
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 template<typename T>
 inline CScriptVarPtr CScriptVar::newScriptVar(T t) { return ::newScriptVar(context, t); }
@@ -1846,10 +1946,11 @@ public:
 		Continue,
 		Return,
 		Throw,
+		noncatchableThrow,
 		noExecute
 	};
-	CScriptResult() : type(Normal) {}
-	CScriptResult(TYPE Type) : type(Type) {}
+	CScriptResult() : type(Normal), throw_at_line(-1), throw_at_column(-1) {}
+//	CScriptResult(TYPE Type) : type(Type), throw_at_line(-1), throw_at_column(-1) {}
 //		~RESULT() { if(type==Throw) throw value; }
 	bool isNormal() { return type==Normal; }
 	bool isBreak() { return type==Break; }
@@ -1859,18 +1960,24 @@ public:
 	bool isReturnNormal() { return type==Return || type==Normal; }
 	bool isThrow() { return type==Throw; }
 
+
 	operator bool() const { return type==Normal; }
 	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.clear(), target.clear(); }
 	void set(TYPE Type, const CScriptVarPtr &Value) { type=Type; value=Value; }
 	void set(TYPE Type, const std::string &Target) { type=Type; target=Target; }
+	void setThrow(const CScriptVarPtr &Value, const std::string &File, int Line=-1, int Column=-1) { type=Throw; value=Value; throw_at_file=File, throw_at_line=Line; throw_at_column=Column; }
 
 	void cThrow() { if(type==Throw) throw value; }
 
-	CScriptResult &operator()(const CScriptResult &rhs) { if(type!=Normal) *this=rhs; return *this; }
+	CScriptResult &operator()(const CScriptResult &rhs) { if(rhs.type!=Normal) *this=rhs; return *this; }
 
 	enum TYPE type;
 	CScriptVarPtr value;
 	std::string target;
+	std::string throw_at_file;
+	int throw_at_line;
+	int throw_at_column;
+
 };
 
 
@@ -1966,6 +2073,7 @@ public:
 	//CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(this, t); }
 	template<typename T>	CScriptVarPtr newScriptVar(T t) { return ::newScriptVar(this, t); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return ::newScriptVar(this, t1, t2); }
+	template<typename T1, typename T2, typename T3>	CScriptVarPtr newScriptVar(T1 t1, T2 t2, T3 t3) { return ::newScriptVar(this, t1, t2, t3); }
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }
 	const CScriptVarPtr &constScriptVar(Null_t)				{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
@@ -2005,7 +2113,10 @@ public:
 	CScriptVarPtr regexpPrototype; /// Built in string class
 	CScriptVarPtr numberPrototype; /// Built in number class
 	CScriptVarPtr booleanPrototype; /// Built in boolean class
-	CScriptVarPtr iteratorPrototype; /// Built in boolean class
+	CScriptVarPtr iteratorPrototype; /// Built in iterator class
+#ifndef NO_GENERATORS
+	CScriptVarPtr generatorPrototype; /// Built in generator class
+#endif /*NO_GENERATORS*/
 	CScriptVarPtr functionPrototype; /// Built in function class
 	const CScriptVarPtr &getErrorPrototype(ERROR_TYPES Type) { return errorPrototypes[Type]; }
 private:
@@ -2038,6 +2149,13 @@ public:
 	// function call
 	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 	CScriptVarPtr callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	//////////////////////////////////////////////////////////////////////////
+#ifndef NO_GENERATORS
+	std::vector<CScriptVarGenerator *> generatorStack;
+	void generator_start(CScriptVarGenerator *Generator);
+	CScriptVarPtr generator_yield(CScriptResult &execute, CScriptVar *YieldIn);
+#endif
+	//////////////////////////////////////////////////////////////////////////
 
 	// parsing - in order of precedence
 	CScriptVarPtr mathsOp(CScriptResult &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
@@ -2112,6 +2230,9 @@ private:
 	void native_Boolean(const CFunctionsScopePtr &c, void *data);
 
 	void native_Iterator(const CFunctionsScopePtr &c, void *data);
+
+//	void native_Generator(const CFunctionsScopePtr &c, void *data);
+	void native_Generator_prototype_next(const CFunctionsScopePtr &c, void *data);
 
 	void native_Function(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_call(const CFunctionsScopePtr &c, void *data);
