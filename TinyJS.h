@@ -1875,9 +1875,16 @@ define_ScriptVarPtr_Type(Generator);
 class CScriptVarGenerator : public CScriptVarObject {
 protected:
 	CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function);
+#if _MSC_VER == 1600
+#pragma warning(push)
+#pragma warning(disable: 4355) // possible loss of data
+#endif
 	CScriptVarGenerator(const CScriptVarGenerator &Copy) 
 		: 
 		CScriptVarObject(Copy), functionRoot(Copy.functionRoot), function(Copy.function), coroutine(this) {} ///< Copy protected -> use clone for public
+#if _MSC_VER == 1600
+#pragma warning(pop)
+#endif
 public:
 	virtual ~CScriptVarGenerator();
 	virtual CScriptVarPtr clone();
