@@ -1,4 +1,6 @@
 #include "TinyJS_Threading.h"
+#include <exception>
+#include <cstdio>
 
 #undef HAVE_THREADING
 #if !defined(NO_THREADING) && !defined(HAVE_CUSTOM_THREADING_IMPL)

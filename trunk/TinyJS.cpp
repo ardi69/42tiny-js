@@ -3857,6 +3857,10 @@ void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *d
 //////////////////////////////////////////////////////////////////////////
 
 //declare_dummy_t(Generator);
+#if _MSC_VER == 1600
+#pragma warning(push)
+#pragma warning(disable: 4355) // possible loss of data
+#endif
 CScriptVarGenerator::CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function) 
 	: CScriptVarObject(Context, Context->generatorPrototype), functionRoot(FunctionRoot), function(Function), 
 	closed(false), yieldVarIsException(false), coroutine(this) {
@@ -3865,6 +3869,9 @@ CScriptVarGenerator::CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &
 		//addChild("close", ::newScriptVar(context, this, &CScriptVarGenerator::native_throw, (void*)0, "Generator.close"));
 		//addChild("throw", ::newScriptVar(context, this, &CScriptVarGenerator::native_throw, (void*)1, "Generator.throw"));
 }
+#if _MSC_VER == 1600
+#pragma warning(pop)
+#endif
 CScriptVarGenerator::~CScriptVarGenerator() {
 	if(coroutine.isStarted() && coroutine.isRunning()) {
 		coroutine.Stop(false);
