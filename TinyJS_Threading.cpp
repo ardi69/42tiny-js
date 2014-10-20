@@ -172,9 +172,9 @@ public:
 		return This->retvar;
 	}
 	void *retvar;
-	bool activ;
-	bool running;
-	bool started;
+	volatile bool activ;
+	volatile bool running;
+	volatile bool started;
 	CScriptThread *This;
 	pthread_t thread;
 };
