@@ -87,6 +87,7 @@ enum LEX_TYPES {
 	LEX_NEQUAL,
 	LEX_NTYPEEQUAL,
 #define LEX_RELATIONS_1_END LEX_NTYPEEQUAL
+	LEX_ARROW,
 	LEX_LEQUAL,
 	LEX_GEQUAL,
 #define LEX_SHIFTS_BEGIN LEX_LSHIFT
@@ -364,14 +365,15 @@ private:
 
 class CScriptTokenDataFnc : public fixed_size_object<CScriptTokenDataFnc>, public CScriptTokenData {
 public:
-	CScriptTokenDataFnc() : line(0),isGenerator(false) {}
+	CScriptTokenDataFnc() : line(0),isGenerator(false), isArrowFunction(false) {}
 	std::string file;
 	int line;
 	std::string name;
 	TOKEN_VECT arguments;
 	TOKEN_VECT body;
-	std::string getArgumentsString();
+	std::string getArgumentsString(bool forArrowFunction=false);
 	bool isGenerator;
+	bool isArrowFunction;
 };
 
 class CScriptTokenDataForwards : public fixed_size_object<CScriptTokenDataForwards>, public CScriptTokenData {
@@ -440,7 +442,7 @@ typedef DESTRUCTURING_VARS_t::const_iterator DESTRUCTURING_VARS_cit;
 class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDataDestructuringVar>, public CScriptTokenData {
 public:
 	DESTRUCTURING_VARS_t vars;
-	void getVarNames(STRING_VECTOR_t Name);
+	void getVarNames(STRING_VECTOR_t &Names);
 	std::string getParsableString();
 private:
 };
@@ -458,6 +460,7 @@ public:
 	std::vector<ELEMENT> elements;
 	void setMode(bool Destructuring);
 	std::string getParsableString();
+	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar, const std::string &Path="");
 private:
 };
 
@@ -521,7 +524,7 @@ public:
 
 	static std::string getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString="", const std::string &Indent="");
 	static std::string getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString="", const std::string &Indent="");
-	static std::string getTokenStr( int token, bool *need_space=0 );
+	static std::string getTokenStr( int token, const char *tokenStr=0, bool *need_space=0 );
 	static const char *isReservedWord(int Token);
 	static int isReservedWord(const std::string &Str);
 private:
@@ -594,6 +597,7 @@ private:
 	void tokenizeIf(ScriptTokenState &State, int Flags);
 	void tokenizeFor(ScriptTokenState &State, int Flags);
 	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
+	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef=false);
 	void tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef=false);
 	void tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef=false);
 	void tokenizeVarNoConst(ScriptTokenState &State, int Flags);
@@ -2245,6 +2249,7 @@ private:
 	void native_Function_prototype_call(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_bind(const CFunctionsScopePtr &c, void *data);
+	void native_Function_prototype_isGenerator(const CFunctionsScopePtr &c, void *data);
 
 	void native_Error(const CFunctionsScopePtr &c, void *data);
 	void native_EvalError(const CFunctionsScopePtr &c, void *data);

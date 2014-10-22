@@ -278,7 +278,7 @@ void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
 		if(expected_tk == LEX_EOF)
 			errorString << "Got unexpected " << CScriptToken::getTokenStr(tk);
 		else
-			errorString << "Got '" << CScriptToken::getTokenStr(tk) << "' expected '" << CScriptToken::getTokenStr(expected_tk) << "'";
+			errorString << "Got '" << CScriptToken::getTokenStr(tk, tkStr.c_str()) << "' expected '" << CScriptToken::getTokenStr(expected_tk) << "'";
 		if(alternate_tk!=-1) errorString << " or '" << CScriptToken::getTokenStr(alternate_tk) << "'";
 		throw new CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
 	}
@@ -427,11 +427,16 @@ void CScriptLex::getNextToken() {
 		// single chars
 		tk = currCh;
 		if (currCh) getNextCh();
-		if (tk=='=' && currCh=='=') { // ==
-			tk = LEX_EQUAL;
-			getNextCh();
-			if (currCh=='=') { // ===
-				tk = LEX_TYPEEQUAL;
+		if (tk=='=') {
+			if(currCh=='=') { // ==
+				tk = LEX_EQUAL;
+				getNextCh();
+				if (currCh=='=') { // ===
+					tk = LEX_TYPEEQUAL;
+					getNextCh();
+				}
+			} else if(currCh =='>') { // =>
+				tk = LEX_ARROW;
 				getNextCh();
 			}
 		} else if (tk=='!' && currCh=='=') { // !=
@@ -641,10 +646,10 @@ std::string CScriptTokenDataTry::getParsableString( const string &IndentString/*
 // CScriptTokenDataFnc
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataFnc::getArgumentsString()
-{
+string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
 	ostringstream destination;
-	destination << "(";
+	if(!forArrowFunction || arguments.size()!=1)
+		destination << "(";
 	if(arguments.size()) {
 		const char *comma = "";
 		for(TOKEN_VECT_it argument=arguments.begin(); argument!=arguments.end(); ++argument, comma=", ") {
@@ -677,7 +682,10 @@ string CScriptTokenDataFnc::getArgumentsString()
 			}
 		}
 	}
-	destination << ") ";
+	if(!forArrowFunction || arguments.size()!=1)
+		destination << ") ";
+	else
+		destination << " ";
 	return destination.str();
 }
 
@@ -686,7 +694,7 @@ string CScriptTokenDataFnc::getArgumentsString()
 // CScriptTokenDataDestructuringVar
 //////////////////////////////////////////////////////////////////////////
 
-void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t Names) {
+void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t &Names) {
 	for(DESTRUCTURING_VARS_it it = vars.begin(); it != vars.end(); ++it) {
 		if(it->second.size() && it->second.find_first_of("{[]}") == string::npos)
 			Names.push_back(it->second);
@@ -739,8 +747,7 @@ void CScriptTokenDataObjectLiteral::setMode(bool Destructuring) {
 	}
 }
 
-string CScriptTokenDataObjectLiteral::getParsableString()
-{
+string CScriptTokenDataObjectLiteral::getParsableString() {
 	string out = type == OBJECT ? "{ " : "[ ";
 	const char *comma = "";
 	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
@@ -752,6 +759,28 @@ string CScriptTokenDataObjectLiteral::getParsableString()
 	}
 	out.append(type == OBJECT ? " }" : " ]");
 	return out;
+}
+
+bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestructuringVar &DestructuringVar, const std::string &Path/*=""*/ ) {
+	if(!destructuring) return false;
+//	DestructuringVar.vars.clear();
+
+	DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t(Path, type == OBJECT ? "{" : "["));
+	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
+		if(it->value.empty()) {
+			DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t("",""));
+			continue;
+		}
+		if(it->value.front().token == LEX_T_OBJECT_LITERAL) {
+			if(!it->value.front().Object().toDestructuringVar(DestructuringVar, it->id))
+				return false;
+		} else {
+			ASSERT(it->value.size()==1 && it->value.front().token==LEX_ID);
+			DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t(it->id,it->value.front().String()));
+		}
+	}
+	DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t("",type == OBJECT ? "}" : "]"));
+	return true;
 }
 
 
@@ -805,6 +834,7 @@ static token2str_t tokens2str_begin[] = {
 	{ LEX_FLOAT,					"FLOAT",						true  },
 	{ LEX_STR,						"STRING",					true  },
 	{ LEX_REGEXP,					"REGEXP",					true  },
+	{ LEX_ARROW,					"=>",							false },
 	{ LEX_EQUAL,					"==",							false },
 	{ LEX_TYPEEQUAL,				"===",						false },
 	{ LEX_NEQUAL,					"!=",							false },
@@ -969,14 +999,15 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 		else if(it->token == LEX_INT)
 			OutString.append(CNumber(it->Int()).toString()), need_space=true;
 		else if(LEX_TOKEN_DATA_FUNCTION(it->token)) {
-			OutString.append("function ");
+			bool isArrowFunction = it->Fnc().isArrowFunction;
+			if(!isArrowFunction)
+				OutString.append("function ");
 			if(it->Fnc().name.size() )
 				OutString.append(it->Fnc().name);
-			OutString.append(it->Fnc().getArgumentsString());
+			OutString.append(it->Fnc().getArgumentsString(isArrowFunction));
+			if(isArrowFunction)
+				OutString.append("=> ");
 			OutString.append(getParsableString(it->Fnc().body, my_indentString, Indent));
-			if(it->Fnc().body.front().token != '{') {
-				OutString.append(";");
-			}
 		} else if(LEX_TOKEN_DATA_LOOP(it->token)) {
 			OutString.append(it->Loop().getParsableString(my_indentString, Indent));
 		} else if(LEX_TOKEN_DATA_TRY(it->token)) {
@@ -1004,7 +1035,7 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 			OutString.append(CScriptToken::getTokenStr(it->token));
 			skip_collon=2;
 		} else {
-			OutString.append(CScriptToken::getTokenStr(it->token,&need_space));
+			OutString.append(CScriptToken::getTokenStr(it->token, 0, &need_space));
 			if(it->token==';') {
 				if(skip_collon) { --skip_collon; }
 				else add_nl=true; 
@@ -1025,9 +1056,12 @@ void CScriptToken::clear()
 		tokenData->unref();
 	token = 0;
 }
-string CScriptToken::getTokenStr( int token, bool *need_space/*=0*/ )
-{
+string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bool *need_space/*=0 */ ) {
 	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
+	if(token == LEX_ID && tokenStr) {
+		if(need_space) *need_space=true;
+		return tokenStr;
+	}
 	token2str_t *found = lower_bound(reserved_words_begin, reserved_words_end, token, token2str_cmp_t());
 	if(found != reserved_words_end && found->id==token) {
 		if(need_space) *need_space=found->need_space;
@@ -1493,6 +1527,28 @@ CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/
 	return token;
 }
 
+void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef/*=false*/)
+{
+	l->match(LEX_ARROW);
+	CScriptToken FncToken(LEX_T_FUNCTION_OPERATOR);
+	CScriptTokenDataFnc &FncData = FncToken.Fnc();
+	FncData.isArrowFunction = true;
+	FncData.arguments = Arguments;
+	FncData.file = l->currentFile;
+	FncData.line = l->currentLine();
+
+	ScriptTokenState functionState;
+	functionState.HaveReturnValue = functionState.FunctionIsGenerator = false;
+	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
+		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn);
+	else {
+		tokenizeExpression(functionState, 0);
+		functionState.HaveReturnValue = true;
+	}
+	functionState.Tokens.swap(FncData.body);
+	State.Tokens.push_back(FncToken);
+}
+
 void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef/*=false*/) {
 	bool forward = false;
 	bool Statement = (Flags & TOKENIZE_FLAGS_asStatement) != 0;
@@ -1536,7 +1592,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn | TOKENIZE_FLAGS_canYield);
 	else {
 		tokenizeExpression(functionState, TOKENIZE_FLAGS_canYield);
-		l->match(';');
+		if(Statement) l->match(';');
 		functionState.HaveReturnValue = true;
 	}
 	if(functionState.HaveReturnValue == true && functionState.FunctionIsGenerator == true)
@@ -1717,7 +1773,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 				if(Objc.destructuring && (l->tk == ',' || l->tk == '}')) {
 					if(!msg.size()) {
 						Objc.structuring = false;
-						msg.append("Got '").append(CScriptToken::getTokenStr(l->tk)).append("' expected ':'");
+						msg.append("Got '").append(CScriptToken::getTokenStr(l->tk, l->tkStr.c_str())).append("' expected ':'");
 						msgFile = l->currentFile;
 						msgLine = l->currentLine();
 						msgColumn = l->currentColumn();
@@ -1760,11 +1816,11 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 	l->match('}');
 	if(Objc.destructuring && Objc.structuring) {
 		if(nestedObject) {
-			if(l->tk!=',' && l->tk!='}' && l->tk!='=')
+			if(l->tk!=',' && l->tk!='}' && l->tk!=']' /* && l->tk!='=' ??? */)
 				Objc.destructuring = false;
 		}
 		else 
-			Objc.setMode(l->tk=='=' || (forFor && (l->tk==LEX_R_IN ||(l->tk==LEX_ID && l->tkStr=="of"))));
+			Objc.setMode(l->tk=='=' || l->tk==LEX_ARROW || (forFor && (l->tk==LEX_R_IN ||(l->tk==LEX_ID && l->tkStr=="of"))));
 	} else {
 		if(!Objc.destructuring && msg.size())
 			throw new CScriptException(SyntaxError, msg, msgFile, msgLine, msgColumn);
@@ -1805,11 +1861,11 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 	l->match(']');
 	if(Objc.destructuring && Objc.structuring) {
 		if(nestedObject) {
-			if(l->tk!=',' && l->tk!=']' && l->tk!='=')
+			if(l->tk!=',' && l->tk!=']' && l->tk!='}' /* && l->tk!='=' ??? */)
 				Objc.destructuring = false;
 		}
 		else 
-			Objc.setMode(l->tk=='=' || (forFor && (l->tk==LEX_R_IN ||(l->tk==LEX_ID && l->tkStr=="of"))));
+			Objc.setMode(l->tk=='=' || l->tk==LEX_ARROW || (forFor && (l->tk==LEX_R_IN || (l->tk==LEX_ID && l->tkStr=="of"))));
 	} else 
 		if(!nestedObject) Objc.setMode(Objc.destructuring);
 	if(Objc.destructuring)
@@ -1818,7 +1874,7 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 }
 
 void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
-	State.LeftHand = 0;
+	State.LeftHand = false;
 	bool canLabel = Flags & TOKENIZE_FLAGS_canLabel; Flags &= ~TOKENIZE_FLAGS_canLabel;
 	int ObjectLiteralFlags = Flags;
 	Flags &= ~TOKENIZE_FLAGS_noIn;
@@ -1826,19 +1882,30 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	case LEX_ID:
 		{
 			string label = l->tkStr;
-			pushToken(State.Tokens);
-			if(l->tk==':' && canLabel) {
-				if(find(State.Labels.begin(), State.Labels.end(), label) != State.Labels.end()) 
-					throw new CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
-				State.Tokens[State.Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
-				State.Labels.push_back(label);
-			} else if(label=="this") {
-				if( l->tk == '=' || (l->tk >= LEX_ASSIGNMENTS_BEGIN && l->tk <= LEX_ASSIGNMENTS_END) )
-					throw new CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
-				if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
-					throw new CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
-			} else
-				State.LeftHand = true;
+			l->match(LEX_ID);
+			if(label != "this" && l->tk == LEX_ARROW) { // Arrow-Function
+				TOKEN_VECT arguments; 
+				CScriptToken token(LEX_T_DESTRUCTURING_VAR);
+				token.DestructuringVar().vars.push_back(DESTRUCTURING_VAR_t("", label));
+				token.column = l->currentColumn();
+				token.line = l->currentLine();
+				arguments.push_back(token);
+				tokenizeArrowFunction(arguments, State, Flags);
+			} else {
+				pushToken(State.Tokens, CScriptToken(LEX_ID, label));
+				if(l->tk==':' && canLabel) {
+					if(find(State.Labels.begin(), State.Labels.end(), label) != State.Labels.end()) 
+						throw new CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+					State.Tokens[State.Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
+					State.Labels.push_back(label);
+				} else if(label=="this") {
+					if( l->tk == '=' || (l->tk >= LEX_ASSIGNMENTS_BEGIN && l->tk <= LEX_ASSIGNMENTS_END) )
+						throw new CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+					if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
+						throw new CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+				} else
+					State.LeftHand = true;
+			}
 		}
 		break;
 	case LEX_INT:
@@ -1851,10 +1918,22 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		pushToken(State.Tokens);
 		break;
 	case '{':
-		_tokenizeLiteralObject(State, ObjectLiteralFlags);
-		break;
 	case '[':
-		_tokenizeLiteralArray(State, ObjectLiteralFlags);
+		if(l->tk == '{')
+			_tokenizeLiteralObject(State, ObjectLiteralFlags);
+		else
+			_tokenizeLiteralArray(State, ObjectLiteralFlags);
+		if(State.LeftHand && l->tk==LEX_ARROW) {
+			TOKEN_VECT arguments; 
+			CScriptToken token(LEX_T_DESTRUCTURING_VAR);
+			State.Tokens.back().Object().toDestructuringVar(token.DestructuringVar());
+//			token.DestructuringVar().vars.push_back(DESTRUCTURING_VAR_t("", label));
+
+			arguments.push_back(token);
+			State.Tokens.pop_back();
+			tokenizeArrowFunction(arguments, State, Flags);
+			State.LeftHand = false;
+		}
 		break;
 	case LEX_R_LET: // let as expression
 		tokenizeLet(State, Flags);
@@ -1866,7 +1945,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 		{
 			tokenizeFunctionCall(State, (Flags | TOKENIZE_FLAGS_callForNew) & ~TOKENIZE_FLAGS_noIn);
-			State.LeftHand = 0;
+			State.LeftHand = false;
 		}
 		setTokenSkip(State);
 		break;
@@ -1882,11 +1961,31 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		break;
 #endif
 	case '(':
-		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
-		tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
-		State.LeftHand = 0;
-		pushToken(State.Tokens, ')');
-		setTokenSkip(State);
+		{
+			CScriptLex::POS prev_pos = l->pos;
+			l->match('(');
+			try {
+				TOKEN_VECT arguments;
+				bool arguments_ok = true;
+				while(arguments_ok && l->tk != ')') {
+						arguments.push_back(tokenizeVarIdentifier());
+						if(l->tk == ',') l->match(',');
+						else if (l->tk!=')') arguments_ok = false;
+				}
+				if((arguments_ok = arguments_ok && l->tk == ')')) l->match(')');
+				if(arguments_ok && l->tk == LEX_ARROW) {
+					tokenizeArrowFunction(arguments, State, Flags);
+					break;
+				}
+			} catch(...) {}
+
+			l->reset(prev_pos);
+			State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
+			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
+			State.LeftHand = false;
+			pushToken(State.Tokens, ')');
+			setTokenSkip(State);
+		}
 		break;
 	default:
 		l->check(LEX_EOF);
@@ -2180,7 +2279,7 @@ void CScriptTokenizer::removeEmptyForwarder( TOKEN_VECT &Tokens, FORWARDER_VECTO
 	Marks.pop_back();
 }
 void CScriptTokenizer::throwTokenNotExpected() {
-	throw new CScriptException(SyntaxError, "'"+CScriptToken::getTokenStr(l->tk)+"' was not expected", l->currentFile, l->currentLine(), l->currentColumn());
+	throw new CScriptException(SyntaxError, "'"+CScriptToken::getTokenStr(l->tk, l->tkStr.c_str())+"' was not expected", l->currentFile, l->currentLine(), l->currentColumn());
 }
 
 
@@ -3987,16 +4086,17 @@ string CScriptVarFunction::getVarType() { return "function"; }
 string CScriptVarFunction::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheck();
 	string destination;
-	destination.append("function ").append(data->name);
+	if(!data->isArrowFunction)
+		destination.append("function ").append(data->name);
 	// get list of arguments
-	destination.append(data->getArgumentsString()); 
+	destination.append(data->getArgumentsString(data->isArrowFunction)); 
+	if(data->isArrowFunction)
+		destination.append("=> ");
 
 	if(isNative() || isBounded())
 		destination.append("{ [native code] }");
 	else {
 		destination.append(CScriptToken::getParsableString(data->body, indentString, indent));
-		if(!data->body.size() || data->body.front().token != '{')
-			destination.append(";");
 	}
 	return destination;
 }
@@ -4367,6 +4467,7 @@ CTinyJS::CTinyJS() {
 	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_prototype_call); 
 	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_prototype_apply); 
 	addNative("function Function.prototype.bind(objc, args)", this, &CTinyJS::native_Function_prototype_bind); 
+	addNative("function Function.prototype.isGenerator()", this, &CTinyJS::native_Function_prototype_isGenerator); 
 	functionPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	functionPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
 	pseudo_refered.push_back(&functionPrototype);
@@ -4630,7 +4731,8 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	CScriptTokenDataFnc *Fnc = Function->getFunctionData();
 	CScriptVarScopeFncPtr functionRoot(::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
 	if(Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
-	functionRoot->addChild("this", This);
+	if(!Fnc->isArrowFunction)
+		functionRoot->addChild("this", This);
 	CScriptVarPtr arguments = functionRoot->addChild(TINYJS_ARGUMENTS_VAR, newScriptVar(Object));
 
 	CScriptResult function_execute;
@@ -6397,6 +6499,9 @@ void CTinyJS::native_Function_prototype_bind(const CFunctionsScopePtr &c, void *
 	vector<CScriptVarPtr> Args;
 	for(int i=1; i<length; i++) Args.push_back(c->getArgument(i));
 	c->setReturnVar(newScriptVarFunctionBounded(Fnc, This, Args));
+}
+void CTinyJS::native_Function_prototype_isGenerator(const CFunctionsScopePtr &c, void *data) {
+	c->setReturnVar(constScriptVar(c->getArgument("this")->isGenerator()));
 }
 
 
