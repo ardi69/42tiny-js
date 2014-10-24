@@ -442,6 +442,7 @@ typedef DESTRUCTURING_VARS_t::const_iterator DESTRUCTURING_VARS_cit;
 class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDataDestructuringVar>, public CScriptTokenData {
 public:
 	DESTRUCTURING_VARS_t vars;
+	TOKEN_VECT assignment;
 	void getVarNames(STRING_VECTOR_t &Names);
 	std::string getParsableString();
 private:
@@ -460,7 +461,7 @@ public:
 	std::vector<ELEMENT> elements;
 	void setMode(bool Destructuring);
 	std::string getParsableString();
-	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar, const std::string &Path="");
+	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar);
 private:
 };
 
@@ -558,6 +559,7 @@ public:
 		int currentColumn()	{ return pos->column; }
 	};
 	struct ScriptTokenState {
+		ScriptTokenState() : LeftHand(false), FunctionIsGenerator(false), HaveReturnValue(false) {}
 		TOKEN_VECT Tokens;
 		FORWARDER_VECTOR_t Forwarders;
 		std::vector<int> Marks;
@@ -597,6 +599,7 @@ private:
 	void tokenizeIf(ScriptTokenState &State, int Flags);
 	void tokenizeFor(ScriptTokenState &State, int Flags);
 	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
+	CScriptToken tokenizeFunctionArgument();
 	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef=false);
 	void tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef=false);
 	void tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef=false);
@@ -679,6 +682,7 @@ public:
 	virtual bool isAccessor();	///< is an Accessor
 	virtual bool isNull();		///< is Null
 	virtual bool isUndefined();///< is Undefined
+	bool isNullOrUndefined();	///< is Null or Undefined 
 	virtual bool isNaN();		///< is NaN
 	virtual bool isString();	///< is String
 	virtual bool isInt();		///< is Integer
@@ -2106,7 +2110,8 @@ private:
 		CScopeControl& operator =(const CScopeControl& Copy) MEMBER_DELETE;
 	public:
 		CScopeControl(CTinyJS *Context) : context(Context), count(0) {} 
-		~CScopeControl() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} } 
+		~CScopeControl() { clear(); }
+		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; } 
 		void addFncScope(const CScriptVarScopePtr &Scope) { context->scopes.push_back(Scope); count++; }
 		CScriptVarScopeLetPtr addLetScope() {	count++; return context->scopes.back() = ::newScriptVar(context, ScopeLet, context->scopes.back()); }
 		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = ::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }  
@@ -2171,9 +2176,9 @@ public:
 	// parsing - in order of precedence
 	CScriptVarPtr mathsOp(CScriptResult &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
 private:
-	void assign_destructuring_var(const CScriptVarPtr &Scope, const CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, CScriptResult &execute);
-	void execute_var_init(bool hideLetScope, CScriptResult &execute);
-	void execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, CScriptResult &execute);
+	void assign_destructuring_var(CScriptResult &execute, const CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, const CScriptVarPtr &Scope);
+	void execute_var_init(CScriptResult &execute, bool hideLetScope);
+	void execute_destructuring(CScriptResult &execute, CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, const std::string &Path);
 	CScriptVarLinkWorkPtr execute_literals(CScriptResult &execute);
 	CScriptVarLinkWorkPtr execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute);
 	CScriptVarLinkWorkPtr execute_function_call(CScriptResult &execute);

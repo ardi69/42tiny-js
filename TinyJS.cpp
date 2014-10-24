@@ -655,6 +655,11 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 		for(TOKEN_VECT_it argument=arguments.begin(); argument!=arguments.end(); ++argument, comma=", ") {
 			if(argument->token == LEX_ID)
 				destination << comma << argument->String();
+			else
+				destination << comma << argument->DestructuringVar().getParsableString();
+#if 0
+			if(argument->token == LEX_ID)
+				destination << comma << argument->String();
 			else {
 				vector<bool> isObject(1, false);
 				for(DESTRUCTURING_VARS_it it=argument->DestructuringVar().vars.begin(); it!=argument->DestructuringVar().vars.end(); ++it) {
@@ -679,7 +684,10 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 						}
 					}
 				}
+				if(argument->DestructuringVar().assignment.size())
+					destination << "=" << CScriptToken::getParsableString(argument->DestructuringVar().assignment);
 			}
+#endif
 		}
 	}
 	if(!forArrowFunction || arguments.size()!=1)
@@ -728,6 +736,8 @@ std::string CScriptTokenDataDestructuringVar::getParsableString()
 			}
 		}
 	}
+	if(assignment.size())
+		out.append("=").append(CScriptToken::getParsableString(assignment));
 	return out;
 }
 
@@ -761,19 +771,21 @@ string CScriptTokenDataObjectLiteral::getParsableString() {
 	return out;
 }
 
-bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestructuringVar &DestructuringVar, const std::string &Path/*=""*/ ) {
+bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestructuringVar &DestructuringVar ) {
 	if(!destructuring) return false;
 //	DestructuringVar.vars.clear();
 
-	DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t(Path, type == OBJECT ? "{" : "["));
+	DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t("", type == OBJECT ? "{" : "["));
 	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
 		if(it->value.empty()) {
 			DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t("",""));
 			continue;
 		}
 		if(it->value.front().token == LEX_T_OBJECT_LITERAL) {
-			if(!it->value.front().Object().toDestructuringVar(DestructuringVar, it->id))
+			DESTRUCTURING_VARS_t::size_type pos = DestructuringVar.vars.size();
+			if(!it->value.front().Object().toDestructuringVar(DestructuringVar))
 				return false;
+			DestructuringVar.vars[pos].first = it->id;
 		} else {
 			ASSERT(it->value.size()==1 && it->value.front().token==LEX_ID);
 			DestructuringVar.vars.push_back(DESTRUCTURING_VAR_t(it->id,it->value.front().String()));
@@ -949,8 +961,15 @@ CScriptToken::CScriptToken(uint16_t Tk, int IntData) : line(0), column(0), token
 }
 
 CScriptToken::CScriptToken(uint16_t Tk, const string &TkStr) : line(0), column(0), token(Tk), intData(0) {
-	ASSERT(LEX_TOKEN_DATA_STRING(token));
-	(tokenData = new CScriptTokenDataString(TkStr))->ref();
+	if(LEX_TOKEN_DATA_STRING(token))
+		(tokenData = new CScriptTokenDataString(TkStr))->ref();
+	else if (LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)) {
+		CScriptTokenDataDestructuringVar *tmp = new CScriptTokenDataDestructuringVar;
+		tmp->vars.push_back(DESTRUCTURING_VAR_t("", TkStr));
+		(tokenData = tmp)->ref();
+	} else
+		ASSERT(0);
+
 #ifdef _DEBUG
 	token_str = getTokenStr(token);
 #endif
@@ -1520,11 +1539,22 @@ static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_
 }
 CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/*=0*/, bool *NeedAssignment/*=0*/ ) {
 	CScriptToken token(LEX_T_DESTRUCTURING_VAR);
+	bool withAssignment = NeedAssignment && *NeedAssignment;
 	if(NeedAssignment) *NeedAssignment=(l->tk == '[' || l->tk=='{');
 	token.column = l->currentColumn();
 	token.line = l->currentLine();
 	tokenizeVarIdentifierDestructuring(l, token.DestructuringVar().vars, "", VarNames);
+	if(withAssignment && l->tk=='=') {
+		l->match('=');
+		ScriptTokenState assignmentState;
+		tokenizeCondition(assignmentState, 0);
+		token.DestructuringVar().assignment.swap(assignmentState.Tokens);
+	}
 	return token;
+}
+CScriptToken CScriptTokenizer::tokenizeFunctionArgument() {
+	bool withAssignment = true;
+	return tokenizeVarIdentifier(0, &withAssignment);
 }
 
 void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef/*=false*/)
@@ -1576,7 +1606,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 		throw new CScriptException(SyntaxError, "Function statement requires a name.", l->currentFile, l->currentLine(), l->currentColumn());
 	l->match('(');
 	while(l->tk != ')') {
-		FncData.arguments.push_back(tokenizeVarIdentifier());
+		FncData.arguments.push_back(tokenizeFunctionArgument());
 		if (l->tk!=')') l->match(',',')'); 
 	}
 	// l->match(')');
@@ -1587,7 +1617,6 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 	FncData.line = l->currentLine();
 
 	ScriptTokenState functionState;
-	functionState.HaveReturnValue = functionState.FunctionIsGenerator = false;
 	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
 		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn | TOKENIZE_FLAGS_canYield);
 	else {
@@ -1745,6 +1774,8 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 	bool nestedObject = 	(Flags & TOKENIZE_FLAGS_nestedObject) != 0; 
 	Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_nestedObject);
 	CScriptToken ObjectToken(LEX_T_OBJECT_LITERAL);
+	ObjectToken.line = l->currentLine();
+	ObjectToken.column = l->currentColumn();
 	CScriptTokenDataObjectLiteral &Objc = ObjectToken.Object();
 
 	Objc.type = CScriptTokenDataObjectLiteral::OBJECT;
@@ -1836,6 +1867,8 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 	bool nestedObject = 	(Flags & TOKENIZE_FLAGS_nestedObject) != 0; 
 	Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_nestedObject);
 	CScriptToken ObjectToken(LEX_T_OBJECT_LITERAL);
+	ObjectToken.line = l->currentLine();
+	ObjectToken.column = l->currentColumn();
 	CScriptTokenDataObjectLiteral &Objc = ObjectToken.Object();
 
 	Objc.type = CScriptTokenDataObjectLiteral::ARRAY;
@@ -1964,22 +1997,24 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		{
 			CScriptLex::POS prev_pos = l->pos;
 			l->match('(');
-			try {
-				TOKEN_VECT arguments;
-				bool arguments_ok = true;
-				while(arguments_ok && l->tk != ')') {
-						arguments.push_back(tokenizeVarIdentifier());
+			if(l->tk==LEX_ID || l->tk=='[' || l->tk=='{') {
+				try {
+					TOKEN_VECT arguments;
+					bool arguments_ok = true;
+					while(arguments_ok && l->tk != ')') {
+						arguments.push_back(tokenizeFunctionArgument());
 						if(l->tk == ',') l->match(',');
 						else if (l->tk!=')') arguments_ok = false;
-				}
-				if((arguments_ok = arguments_ok && l->tk == ')')) l->match(')');
-				if(arguments_ok && l->tk == LEX_ARROW) {
-					tokenizeArrowFunction(arguments, State, Flags);
-					break;
-				}
-			} catch(...) {}
+					}
+					if((arguments_ok = arguments_ok && l->tk == ')')) l->match(')');
+					if(arguments_ok && l->tk == LEX_ARROW) {
+						tokenizeArrowFunction(arguments, State, Flags);
+						break;
+					}
+				} catch(...) { /* ignore Error -> try regular (...)-expression */ }
 
-			l->reset(prev_pos);
+				l->reset(prev_pos);
+			}
 			State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
 			State.LeftHand = false;
@@ -2352,6 +2387,7 @@ bool CScriptVar::isRegExp()		{return false;}
 bool CScriptVar::isAccessor()		{return false;}
 bool CScriptVar::isNull()			{return false;}
 bool CScriptVar::isUndefined()	{return false;}
+bool CScriptVar::isNullOrUndefined() { return isNull() || isUndefined(); }
 bool CScriptVar::isNaN()			{return false;}
 bool CScriptVar::isString()		{return false;}
 bool CScriptVar::isInt()			{return false;}
@@ -4688,7 +4724,7 @@ CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, CScriptVa
 	pFunctionData->name = funcName;
 	lex.match('(');
 	while (lex.tk!=')') {
-		pFunctionData->arguments.push_back(CScriptToken(LEX_ID, lex.tkStr));
+		pFunctionData->arguments.push_back(CScriptToken(LEX_T_DESTRUCTURING_VAR, lex.tkStr));
 		lex.match(LEX_ID);
 		if (lex.tk!=')') lex.match(',',')');
 	}
@@ -4735,25 +4771,46 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 		functionRoot->addChild("this", This);
 	CScriptVarPtr arguments = functionRoot->addChild(TINYJS_ARGUMENTS_VAR, newScriptVar(Object));
 
+	CScopeControl ScopeControl(this);
+	CScriptVarPtr tmpArgsScope = ScopeControl.addLetScope();
+
 	CScriptResult function_execute;
 	int length_proto = Fnc->arguments.size();
 	int length_arguments = Arguments.size();
 	int length = max(length_proto, length_arguments);
-	for(int arguments_idx = 0; arguments_idx<length; ++arguments_idx) {
+
+	STRING_VECTOR_t arg_names;
+	for(int arguments_idx = 0; arguments_idx<length_proto; ++arguments_idx) {
+		ASSERT(Fnc->arguments[arguments_idx].token == LEX_T_DESTRUCTURING_VAR);
+		Fnc->arguments[arguments_idx].DestructuringVar().getVarNames(arg_names);
+	}
+	for(STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it)
+		tmpArgsScope->addChildOrReplace(*it, constUndefined);
+
+	for(int arguments_idx = 0; execute && arguments_idx<length; ++arguments_idx) {
 		string arguments_idx_str = int2string(arguments_idx);
 		CScriptVarLinkWorkPtr value;
-		if(arguments_idx < length_arguments) {
+		if(arguments_idx < length_arguments)
 			value = arguments->addChild(arguments_idx_str, Arguments[arguments_idx]);
-		} else {
-			value = constScriptVar(Undefined);
-		}
+		else
+			value = constUndefined;
+
 		if(arguments_idx < length_proto) {
-			CScriptToken &FncArguments = Fnc->arguments[arguments_idx];
-			if(FncArguments.token == LEX_ID)
-				functionRoot->addChildOrReplace(FncArguments.String(), value);
-			else
-				assign_destructuring_var(functionRoot, FncArguments.DestructuringVar(), value, function_execute);
+			CScriptTokenDataDestructuringVar &DestructuringVar = Fnc->arguments[arguments_idx].DestructuringVar();
+			if(value->getVarPtr()->isUndefined()) {
+				if(DestructuringVar.assignment.size()) {
+					t->pushTokenScope(DestructuringVar.assignment);
+					assign_destructuring_var(execute, DestructuringVar, execute_assignment(execute), tmpArgsScope);
+				}
+			} else {
+				assign_destructuring_var(execute, DestructuringVar, value, tmpArgsScope);
+			}
 		}
+	}
+	if(!execute) return constUndefined;
+	// copy args from tmpArgsScope to functionRoot
+	for(STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it) {
+		functionRoot->addChildOrReplace(*it, tmpArgsScope->findChild(*it));
 	}
 	arguments->addChild("length", newScriptVar(length_arguments));
 
@@ -4763,8 +4820,8 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	} 
 #endif /*NO_GENERATORS*/
 	// execute function!
+	ScopeControl.clear(); 	// remove tmpArgsScope from scope-chain
 	// add the function's execute space to the symbol table so we can recurse
-	CScopeControl ScopeControl(this);
 	ScopeControl.addFncScope(functionRoot);
 	if (Function->isNative()) {
 		try {
@@ -5056,7 +5113,8 @@ CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPtr &A, c
 	}	
 }
 
-void CTinyJS::assign_destructuring_var(const CScriptVarPtr &Scope, const CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, CScriptResult &execute) {
+void CTinyJS::assign_destructuring_var(CScriptResult &execute, const CScriptTokenDataDestructuringVar &Objc, const CScriptVarPtr &Val, const CScriptVarPtr &Scope)
+{
 	if(!execute) return;
 	if(Objc.vars.size() == 1) {
 		if(Scope)
@@ -5067,16 +5125,33 @@ void CTinyJS::assign_destructuring_var(const CScriptVarPtr &Scope, const CScript
 			if(v) v->setVarPtr(Val);
 		}
 	} else {
+		DESTRUCTURING_VARS_cit it=Objc.vars.begin();
 		vector<CScriptVarPtr> Path(1, Val);
-		for(DESTRUCTURING_VARS_cit it=Objc.vars.begin()+1; it!=Objc.vars.end(); ++it) {
-			if(it->second == "}" || it->second == "]")
+		STRING_VECTOR_t PathStr(1,(it++)->second == "{" ? "." : "["); 
+
+		if(Val->isNullOrUndefined() && it->second != "}" && it->second != "]") {
+			throwError(execute, TypeError, (Val->isNull()?"null has no properties":"undefined has no properties"));
+			return;
+		}
+
+
+		for(; it!=Objc.vars.end(); ++it) {
+			if(it->second == "}" || it->second == "]") {
+				PathStr.pop_back();
 				Path.pop_back();
-			else {
+			} else {
 				if(it->second.empty()) continue; // skip empty entries
 				CScriptVarLinkWorkPtr var = Path.back()->findChildWithStringChars(it->first);
 				if(var) var = var.getter(execute); else var = constUndefined;
 				if(!execute) return;
 				if(it->second == "{" || it->second == "[") {
+					string newPathStr = PathStr.back() +  it->first;
+					if(PathStr.back().back() == '[') newPathStr += "]";
+					if(var->getVarPtr()->isNullOrUndefined() && (it+1)->second != "}" && (it+1)->second != "]") {
+						throwError(execute, TypeError, newPathStr+" is "+(var->getVarPtr()->isNull() ? "null" : "undefined"));
+						return;
+					}
+					PathStr.push_back(newPathStr + (it->second == "{" ? "." : "["));
 					Path.push_back(var);
 				} else if(Scope)
 					Scope->addChildOrReplace(it->second, var);
@@ -5090,8 +5165,7 @@ void CTinyJS::assign_destructuring_var(const CScriptVarPtr &Scope, const CScript
 	}
 }
 
-void CTinyJS::execute_var_init( bool hideLetScope, CScriptResult &execute )
-{
+void CTinyJS::execute_var_init( CScriptResult &execute, bool hideLetScope ) {
 	for(;;) {
 		t->check(LEX_T_DESTRUCTURING_VAR);
 		CScriptTokenDataDestructuringVar &Objc = t->getToken().DestructuringVar();
@@ -5101,7 +5175,7 @@ void CTinyJS::execute_var_init( bool hideLetScope, CScriptResult &execute )
 			if(hideLetScope) CScriptVarScopeLetPtr(scope())->setletExpressionInitMode(true);
 			CScriptVarPtr Val = execute_assignment(execute);
 			if(hideLetScope) CScriptVarScopeLetPtr(scope())->setletExpressionInitMode(false);
-			assign_destructuring_var(0, Objc, Val, execute);
+			assign_destructuring_var(execute, Objc, Val, 0);
 		}
 		if (t->tk == ',') 
 			t->match(',');
@@ -5109,13 +5183,27 @@ void CTinyJS::execute_var_init( bool hideLetScope, CScriptResult &execute )
 			break;
 	}
 }
-void CTinyJS::execute_destructuring(CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, CScriptResult &execute) {
+void CTinyJS::execute_destructuring(CScriptResult &execute, CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, const std::string &Path)
+{
+	if(Val->isNullOrUndefined() && Objc.elements.size()) {
+		throwError(execute, TypeError, (Val->isNull()?"null has no properties":"undefined has no properties"));
+		return;
+	}
+	const char *ObjcOpener = (Objc.type==CScriptTokenDataObjectLiteral::OBJECT ? ".":"[");
+	const char *ObjcCloser = (Objc.type==CScriptTokenDataObjectLiteral::OBJECT ? "":"]");
 	for(vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc.elements.begin(); execute && it!=Objc.elements.end(); ++it) {
 		if(it->value.empty()) continue;
+		CScriptToken &token = it->value.front();
 		CScriptVarPtr rhs = Val->findChildWithStringChars(it->id).getter(execute);
 		if(!rhs) rhs=constUndefined;
-		if(it->value.front().token == LEX_T_OBJECT_LITERAL && it->value.front().Object().destructuring) {
-			execute_destructuring(it->value.front().Object(), rhs, execute);
+		if(token.token == LEX_T_OBJECT_LITERAL && token.Object().destructuring) {
+			CScriptTokenDataObjectLiteral &Objc = token.Object();
+			string newPath = Path;
+			if(newPath.empty()) newPath += "(intermediate value)";
+			newPath += ObjcOpener + it->id + ObjcCloser;
+			if(rhs->isNullOrUndefined() && Objc.elements.size())
+				throwError(execute, TypeError, newPath + (rhs->isNull() ? " is null" : " is undefined"));
+			execute_destructuring(execute, Objc, rhs, newPath);
 		} else {
 			t->pushTokenScope(it->value);
 			CScriptVarLinkWorkPtr lhs = execute_condition(execute);
@@ -5198,8 +5286,8 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 			t->match(LEX_T_OBJECT_LITERAL);
 			if(Objc.destructuring) {
 				t->match('=');
-				CScriptVarPtr a = execute_assignment(execute);
-				if(execute) execute_destructuring(Objc, a, execute);
+				CScriptVarLinkPtr a = execute_assignment(execute);
+				if(execute) execute_destructuring(execute, Objc, a, a->getName());
 				return a;
 			} else {
 				CScriptVarPtr a = Objc.type==CScriptTokenDataObjectLiteral::OBJECT ? newScriptVar(Object) : newScriptVar(Array);
@@ -5234,7 +5322,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 			t->check(LEX_T_FORWARD);
 			ScopeControl.addLetScope();
 			execute_statement(execute); // execute forwarder
-			execute_var_init(true, execute);
+			execute_var_init(execute, true);
 			t->match(')');
 			return execute_assignment(execute);
 		} else {
@@ -5809,7 +5897,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				ScopeControl.addLetScope();
 				execute_statement(execute); // forwarder
 			}
-			execute_var_init(let_ext, execute);
+			execute_var_init(execute, let_ext);
 			if(let_ext) {
 				t->match(')');
 				execute_statement(execute);
@@ -6016,7 +6104,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 					ScopeControl.addLetScope();
 					t->pushTokenScope(catchBlock->condition); // condition;
 					execute_statement(catch_execute); // forwarder
-					assign_destructuring_var(0, *catchBlock->indentifiers, execute.value, catch_execute);
+					assign_destructuring_var(catch_execute, *catchBlock->indentifiers, execute.value, 0);
 					bool condition = true;
 					if(catchBlock->condition.size()>1)
 						condition = execute_base(catch_execute)->toBoolean();
