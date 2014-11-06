@@ -1995,8 +1995,8 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 #endif
 	case '(':
 		{
-			CScriptLex::POS prev_pos = l->pos;
 			l->match('(');
+			CScriptLex::POS prev_pos = l->pos;
 			if(l->tk==LEX_ID || l->tk=='[' || l->tk=='{') {
 				try {
 					TOKEN_VECT arguments;
@@ -2015,7 +2015,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 
 				l->reset(prev_pos);
 			}
-			State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
+			State.Marks.push_back(pushToken(State.Tokens, , CScriptToken('('))); // push Token & push BeginIdx
 			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
 			State.LeftHand = false;
 			pushToken(State.Tokens, ')');
