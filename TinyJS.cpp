@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2014 ardisoft
+ * Copyright (C) 2010-2015 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -3641,7 +3641,7 @@ string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(radix
 string CScriptVarNumber::getVarType() { return "number"; }
 
 CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->numberPrototype); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) { 
+define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) { 
 	if(!Obj.isInt32() && !Obj.isDouble()) {
 		if(Obj.isNaN()) return Context->constScriptVar(NaN);
 		if(Obj.isInfinity()) return Context->constScriptVar(Infinity(Obj.sign()));
