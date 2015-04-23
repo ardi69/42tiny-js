@@ -74,6 +74,7 @@
   <ItemGroup>
     <ClCompile Include="pool_allocator.cpp" />
     <ClCompile Include="TinyJS.cpp" />
+    <ClCompile Include="TinyJS_DateFunctions.cpp" />
     <ClCompile Include="TinyJS_Functions.cpp" />
     <ClCompile Include="TinyJS_MathFunctions.cpp" />
     <ClCompile Include="TinyJS_StringFunctions.cpp" />

@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2015 ardisoft
+ * Copyright (C) 2010-2014 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -2383,6 +2383,7 @@ CScriptVar::~CScriptVar(void) {
 bool CScriptVar::isObject()		{return false;}
 bool CScriptVar::isError()			{return false;}
 bool CScriptVar::isArray()			{return false;}
+bool CScriptVar::isDate()			{return false;}
 bool CScriptVar::isRegExp()		{return false;}
 bool CScriptVar::isAccessor()		{return false;}
 bool CScriptVar::isNull()			{return false;}
@@ -3641,7 +3642,7 @@ string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(radix
 string CScriptVarNumber::getVarType() { return "number"; }
 
 CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->numberPrototype); }
-define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) { 
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) { 
 	if(!Obj.isInt32() && !Obj.isDouble()) {
 		if(Obj.isNaN()) return Context->constScriptVar(NaN);
 		if(Obj.isInfinity()) return Context->constScriptVar(Infinity(Obj.sign()));
@@ -4355,6 +4356,7 @@ CScriptVarLinkWorkPtr CScriptVarScopeWith::findInScopes(const string &childName)
 extern "C" void _registerFunctions(CTinyJS *tinyJS);
 extern "C" void _registerStringFunctions(CTinyJS *tinyJS);
 extern "C" void _registerMathFunctions(CTinyJS *tinyJS);
+extern "C" void _registerDateFunctions(CTinyJS *tinyJS);
 
 CTinyJS::CTinyJS() {
 	CScriptVarPtr var;
@@ -4508,6 +4510,7 @@ CTinyJS::CTinyJS() {
 	functionPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
 	pseudo_refered.push_back(&functionPrototype);
 
+
 	//////////////////////////////////////////////////////////////////////////
 	// Error
 	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error, 0, SCRIPTVARLINK_CONSTANT); 
@@ -4583,6 +4586,7 @@ CTinyJS::CTinyJS() {
 	_registerFunctions(this);
 	_registerStringFunctions(this);
 	_registerMathFunctions(this);
+	_registerDateFunctions(this);
 }
 
 CTinyJS::~CTinyJS() {
@@ -5051,8 +5055,8 @@ CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPtr &A, c
 		}
 	}
 
-	CScriptVarPtr a = A->toPrimitive_hintNumber(execute);
-	CScriptVarPtr b = B->toPrimitive_hintNumber(execute);
+	CScriptVarPtr a = A->toPrimitive(execute);
+	CScriptVarPtr b = B->toPrimitive(execute);
 	if(!execute) return constUndefined;
 	// do maths...
 	bool a_isString = a->isString();

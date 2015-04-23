@@ -8,7 +8,7 @@
  *
  * Authored By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2015 ardisoft
+ * Copyright (C) 2010-2014 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -124,6 +124,16 @@
  * to prevent the using of the win- or pthread-API define HAVE_CUSTOM_THREADING_IMPL
  */
 //#define HAVE_CUSTOM_THREADING_IMPL
+
+
+
+/* for Date we need the time in a resolution of 1 ms
+ * on Windows the function "GetSystemTimeAsFileTime" is used
+ * on non-Windows (WIN32 is not defined) it is tried to use "gettimeofday"
+ * unset HAVE_GETTIMEOFDAY to use a simple time()*1000 
+ */ 
+#define HAVE_GETTIMEOFDAY
+
 
 ////////////////////////////////////////////////
 // DO NOT MAKE CHANGES OF THE FOLLOWING STUFF //

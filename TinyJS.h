@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2015 ardisoft
+ * Copyright (C) 2010-2014 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -43,9 +43,10 @@
 #include <vector>
 #include <map>
 #include <set>
-#include <stdint.h>
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 #include <cassert>
+#include <ctime>
 #include <limits>
 
 #include "config.h"
@@ -677,6 +678,7 @@ public:
 	/// Type
 	virtual bool isObject();	///< is an Object
 	virtual bool isArray();		///< is an Array
+	virtual bool isDate();		///< is a Date-Object
 	virtual bool isError();		///< is an ErrorObject
 	virtual bool isRegExp();	///< is a RegExpObject
 	virtual bool isAccessor();	///< is an Accessor
@@ -2255,6 +2257,8 @@ private:
 	void native_Function_prototype_apply(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_bind(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_isGenerator(const CFunctionsScopePtr &c, void *data);
+
+	void native_Date(const CFunctionsScopePtr &c, void *data);
 
 	void native_Error(const CFunctionsScopePtr &c, void *data);
 	void native_EvalError(const CFunctionsScopePtr &c, void *data);

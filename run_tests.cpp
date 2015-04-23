@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2015 ardisoft
+ * Copyright (C) 2010-2014 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -54,7 +54,7 @@
 #endif
 #define _CRT_SECURE_NO_WARNINGS
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <process.h>
 #endif
 
@@ -226,7 +226,7 @@ public:
  	~end()
 	{
 		if(active) {
-#ifdef WIN32
+#ifdef _WIN32
 			system("pause");
 #else
 			printf("press Enter (end)");
