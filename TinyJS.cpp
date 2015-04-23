@@ -349,7 +349,7 @@ void CScriptLex::getNextToken() {
 			tkStr += currCh;
 			getNextCh();
 		}
-		if(!isIDChar(currCh) || (tkStr.empty() && !isIDStartChar(currCh))) {
+		if(!isIDChar(currCh)) {
 			tk = CScriptToken::isReservedWord(tkStr);
 #ifdef NO_GENERATORS
 			if(tk == LEX_R_YIELD)
