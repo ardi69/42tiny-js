@@ -147,15 +147,18 @@ inline bool isHexadecimal(char ch) {
 inline bool isOctal(char ch) {
 	return ((ch>='0') && (ch<='7'));
 }
-inline bool isAlpha(char ch) {
+inline bool isIDStartChar(char ch) {
 	return ((ch>='a') && (ch<='z')) || ((ch>='A') && (ch<='Z')) || ch=='_' || ch=='$';
+}
+inline bool isIDChar(char ch) {
+	return ((ch>='a') && (ch<='z')) || ((ch>='A') && (ch<='Z')) || ch=='_' || ch=='$' || isNumeric(ch);
 }
 
 bool isIDString(const char *s) {
-	if (!isAlpha(*s))
+	if (!isIDStartChar(*s))
 		return false;
 	while (*s) {
-		if (!(isAlpha(*s) || isNumeric(*s)))
+		if (!isIDChar(*s))
 			return false;
 		s++;
 	}
@@ -311,18 +314,28 @@ void CScriptLex::getNextToken() {
 	while (currCh && isWhitespace(currCh)) getNextCh();
 	// newline comments
 	if (currCh=='/' && nextCh=='/') {
-			while (currCh && currCh!='\n') getNextCh();
-			getNextCh();
-			getNextToken();
-			return;
+		while (currCh && currCh!='\n') getNextCh();
+		getNextCh();
+		getNextToken();
+		return;
 	}
 	// block comments
 	if (currCh=='/' && nextCh=='*') {
-			while (currCh && (currCh!='*' || nextCh!='/')) getNextCh();
-			getNextCh();
-			getNextCh();
-			getNextToken();
-			return;
+		int nested=0;
+		do {
+			if (currCh=='/' && nextCh=='*') {
+				getNextCh(); // skip '/'
+				getNextCh(); // skip '*'
+				++nested;
+			} else if (currCh=='*' && nextCh=='/') {
+				getNextCh(); // skip '*'
+				getNextCh(); // skip '/'
+				--nested;
+			} else
+				getNextCh();
+		} while (currCh && nested);
+		getNextToken();
+		return;
 	}
 	last_tk = tk;
 	tk = LEX_EOF;
@@ -330,16 +343,25 @@ void CScriptLex::getNextToken() {
 	// record beginning of this token
 	pos.tokenStart = dataPos - (nextCh == LEX_EOF ? (currCh == LEX_EOF ? 0 : 1) : 2);
 	// tokens
-	if (isAlpha(currCh)) { //  IDs
-		while (isAlpha(currCh) || isNumeric(currCh)) {
+
+	if (isIDStartChar(currCh)) { //  IDs
+		while (currCh >= 'a' && currCh <= 'z') {
 			tkStr += currCh;
 			getNextCh();
 		}
-		tk = CScriptToken::isReservedWord(tkStr);
+		if(!isIDChar(currCh) || (tkStr.empty() && !isIDStartChar(currCh))) {
+			tk = CScriptToken::isReservedWord(tkStr);
 #ifdef NO_GENERATORS
-		if(tk == LEX_R_YIELD)
-			throw new CScriptException(Error, "42TinyJS was built without support of generators (yield expression)", currentFile, pos.currentLine, currentColumn());
+			if(tk == LEX_R_YIELD)
+				throw new CScriptException(Error, "42TinyJS was built without support of generators (yield expression)", currentFile, pos.currentLine, currentColumn());
 #endif
+		} else {
+			while (isIDStartChar(currCh) || isNumeric(currCh)) {
+				tkStr += currCh;
+				getNextCh();
+			}
+			tk = LEX_ID;
+		}
 
 	} else if (isNumeric(currCh) || (currCh=='.' && isNumeric(nextCh))) { // Numbers
 		if(currCh=='.') tkStr+='0';
@@ -801,6 +823,8 @@ bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestruct
 //////////////////////////////////////////////////////////////////////////
 
 typedef struct { int id; const char *str; bool need_space; } token2str_t;
+static uint32_t reserved_words_min_len = 2;
+static uint32_t reserved_words_max_len = 10;
 static token2str_t reserved_words_begin[] ={
 	// reserved words
 	{ LEX_R_IF,						"if",							true  },
@@ -836,9 +860,10 @@ static token2str_t reserved_words_begin[] ={
 };
 #define ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
 #define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
-static token2str_t *reserved_words_end = ARRAY_END(reserved_words_begin);//&reserved_words_begin[ARRAY_LENGTH(reserved_words_begin)];
-static token2str_t *str2reserved_begin[sizeof(reserved_words_begin)/sizeof(reserved_words_begin[0])];
-static token2str_t **str2reserved_end = &str2reserved_begin[sizeof(str2reserved_begin)/sizeof(str2reserved_begin[0])];
+static token2str_t *reserved_words_end = ARRAY_END(reserved_words_begin);
+static token2str_t *str2reserved_begin[ARRAY_LENGTH(reserved_words_begin)];
+static token2str_t **str2reserved_end = ARRAY_END(str2reserved_begin);
+
 static token2str_t tokens2str_begin[] = {
 	{ LEX_EOF,						"EOF",						false },
 	{ LEX_ID,						"ID",							true  },
@@ -1112,11 +1137,14 @@ const char *CScriptToken::isReservedWord(int Token) {
 	return 0;
 }
 int CScriptToken::isReservedWord(const string &Str) {
-	const char *str = Str.c_str();
-	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
-	token2str_t **found = lower_bound(str2reserved_begin, str2reserved_end, str, token2str_cmp_t());
-	if(found != str2reserved_end && strcmp((*found)->str, str)==0) {
-		return (*found)->id;
+	uint32_t len = Str.length();
+	if(len >= reserved_words_min_len && len <= reserved_words_max_len) { 
+		const char *str = Str.c_str();
+		if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
+		token2str_t **found = lower_bound(str2reserved_begin, str2reserved_end, str, token2str_cmp_t());
+		if(found != str2reserved_end && strcmp((*found)->str, str)==0) {
+			return (*found)->id;
+		}
 	}
 	return LEX_ID;
 }
@@ -1223,7 +1251,7 @@ enum {
 	TOKENIZE_FLAGS_canReturn		= 1<<3,
 	TOKENIZE_FLAGS_canYield			= 1<<4,
 	TOKENIZE_FLAGS_asStatement		= 1<<5,
-	TOKENIZE_FLAGS_noIn				= 1<<6,
+	TOKENIZE_FLAGS_noIn				= 1<<6,	///> expression without 'in' or 'of'
 	TOKENIZE_FLAGS_isAccessor		= 1<<7,
 	TOKENIZE_FLAGS_callForNew		= 1<<8,
 	TOKENIZE_FLAGS_noBlockStart	= 1<<9,
@@ -1954,9 +1982,13 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	case '[':
 		if(l->tk == '{')
 			_tokenizeLiteralObject(State, ObjectLiteralFlags);
-		else
+		else {
+			CScriptLex::POS prev_pos = l->pos;
+			l->match('[');
+			l->reset(prev_pos);
 			_tokenizeLiteralArray(State, ObjectLiteralFlags);
-		if(State.LeftHand && l->tk==LEX_ARROW) {
+		}
+		if(State.LeftHand && l->tk==LEX_ARROW) { // [,] => ... or {} => ...
 			TOKEN_VECT arguments; 
 			CScriptToken token(LEX_T_DESTRUCTURING_VAR);
 			State.Tokens.back().Object().toDestructuringVar(token.DestructuringVar());
