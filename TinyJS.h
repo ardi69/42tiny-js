@@ -173,26 +173,31 @@ enum LEX_TYPES {
 	LEX_T_GET,
 	LEX_T_SET,
 #define LEX_TOKEN_FUNCTION_END LEX_T_SET
+	LEX_T_IF,
 	LEX_T_TRY,
 	LEX_T_OBJECT_LITERAL,
 	LEX_T_DESTRUCTURING_VAR,
+	LEX_T_ARRAY_COMPREHENSIONS_BODY,
 	LEX_T_FORWARD,
 #define LEX_TOKEN_NONSIMPLE_2_END LEX_T_FORWARD
 
 	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
+	LEX_T_END_EXPRESSION,
 
 	LEX_R_YIELD,
 
 };
-#define LEX_TOKEN_DATA_STRING(tk) ((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
-#define LEX_TOKEN_DATA_FLOAT(tk) (tk==LEX_FLOAT)
-#define LEX_TOKEN_DATA_LOOP(tk) (LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
-#define LEX_TOKEN_DATA_FUNCTION(tk) (LEX_TOKEN_FUNCTION_BEGIN <= tk && tk <= LEX_TOKEN_FUNCTION_END)
-#define LEX_TOKEN_DATA_TRY(tk) (tk == LEX_T_TRY)
-#define LEX_TOKEN_DATA_OBJECT_LITERAL(tk) (tk==LEX_T_OBJECT_LITERAL)
-#define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk) (tk==LEX_T_DESTRUCTURING_VAR)
-#define LEX_TOKEN_DATA_FORWARDER(tk) (tk==LEX_T_FORWARD)
+#define LEX_TOKEN_DATA_STRING(tk)							((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
+#define LEX_TOKEN_DATA_FLOAT(tk)								(tk==LEX_FLOAT)
+#define LEX_TOKEN_DATA_LOOP(tk)								(LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
+#define LEX_TOKEN_DATA_FUNCTION(tk)							(LEX_TOKEN_FUNCTION_BEGIN <= tk && tk <= LEX_TOKEN_FUNCTION_END)
+#define LEX_TOKEN_DATA_IF(tk)									(tk==LEX_T_IF)
+#define LEX_TOKEN_DATA_TRY(tk)								(tk==LEX_T_TRY)
+#define LEX_TOKEN_DATA_OBJECT_LITERAL(tk)					(tk==LEX_T_OBJECT_LITERAL)
+#define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR)
+#define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)	(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
+#define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
 
 #define LEX_TOKEN_DATA_SIMPLE(tk) (!((LEX_TOKEN_NONSIMPLE_1_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_1_END) || (LEX_TOKEN_NONSIMPLE_2_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_2_END)))
 
@@ -436,6 +441,14 @@ public:
 	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
+class CScriptTokenDataIf : public fixed_size_object<CScriptTokenDataIf>, public CScriptTokenData {
+public:
+	TOKEN_VECT condition;
+	TOKEN_VECT if_body;
+	TOKEN_VECT else_body;
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
+};
+
 typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
 typedef std::vector<DESTRUCTURING_VAR_t> DESTRUCTURING_VARS_t;
 typedef DESTRUCTURING_VARS_t::iterator DESTRUCTURING_VARS_it;
@@ -451,7 +464,7 @@ private:
 
 class CScriptTokenDataObjectLiteral : public fixed_size_object<CScriptTokenDataObjectLiteral>, public CScriptTokenData {
 public:
-	enum {ARRAY, OBJECT} type;
+	enum {OBJECT, ARRAY, ARRAY_COMPREHENSIONS, ARRAY_COMPREHENSIONS_OLD} type;
 	int flags;
 	struct ELEMENT {
 		std::string id;
@@ -465,6 +478,12 @@ public:
 	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar);
 private:
 };
+
+class CScriptTokenDataArrayComprehensionsBody : public fixed_size_object<CScriptTokenDataArrayComprehensionsBody>, public CScriptTokenData {
+public:
+	TOKEN_VECT body;
+};
+
 
 class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry>, public CScriptTokenData {
 public:
@@ -514,7 +533,9 @@ public:
 	const CScriptTokenDataFnc &Fnc() const { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return *dynamic_cast<CScriptTokenDataFnc*>(tokenData); }
 	CScriptTokenDataObjectLiteral &Object() { ASSERT(LEX_TOKEN_DATA_OBJECT_LITERAL(token)); return *dynamic_cast<CScriptTokenDataObjectLiteral*>(tokenData); }
 	CScriptTokenDataDestructuringVar &DestructuringVar() { ASSERT(LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)); return *dynamic_cast<CScriptTokenDataDestructuringVar*>(tokenData); }
+	CScriptTokenDataArrayComprehensionsBody &ArrayComprehensionsBody() { ASSERT(LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(token)); return *dynamic_cast<CScriptTokenDataArrayComprehensionsBody*>(tokenData); }
 	CScriptTokenDataLoop &Loop() { ASSERT(LEX_TOKEN_DATA_LOOP(token)); return *dynamic_cast<CScriptTokenDataLoop*>(tokenData); }
+	CScriptTokenDataIf &If() { ASSERT(LEX_TOKEN_DATA_IF(token)); return *dynamic_cast<CScriptTokenDataIf*>(tokenData); }
 	CScriptTokenDataTry &Try() { ASSERT(LEX_TOKEN_DATA_TRY(token)); return *dynamic_cast<CScriptTokenDataTry*>(tokenData); }
 	CScriptTokenDataForwards &Forwarder() { ASSERT(LEX_TOKEN_DATA_FORWARDER(token)); return *dynamic_cast<CScriptTokenDataForwards*>(tokenData); }
 #ifdef _DEBUG
@@ -597,7 +618,9 @@ private:
 	void tokenizeSwitch(ScriptTokenState &State, int Flags);
 	void tokenizeWith(ScriptTokenState &State, int Flags);
 	void tokenizeWhileAndDo(ScriptTokenState &State, int Flags);
+	void tokenizeIf_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign);
 	void tokenizeIf(ScriptTokenState &State, int Flags);
+	void tokenizeFor_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign);
 	void tokenizeFor(ScriptTokenState &State, int Flags);
 	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
 	CScriptToken tokenizeFunctionArgument();
@@ -608,6 +631,7 @@ private:
 	void tokenizeVarAndConst(ScriptTokenState &State, int Flags);
 	void _tokenizeLiteralObject(ScriptTokenState &State, int Flags);
 	void _tokenizeLiteralArray(ScriptTokenState &State, int Flags);
+	bool _tokenizeArrayComprehensions(ScriptTokenState &State, int Flags);
 
 	void tokenizeLiteral(ScriptTokenState &State, int Flags);
 	void tokenizeMember(ScriptTokenState &State, int Flags);

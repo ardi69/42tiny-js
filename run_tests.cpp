@@ -241,6 +241,11 @@ void js_print(const CFunctionsScopePtr &v, void *) {
 }
 bool run_test(const char *filename) {
   printf("TEST %s ", filename);
+#ifdef _WIN32
+  char out[256];
+  sprintf_s(out, "TEST %s \n", filename);
+  OutputDebugString(out);
+#endif
   struct stat results;
   if (!stat(filename, &results) == 0) {
     printf("Cannot stat file! '%s'\n", filename);

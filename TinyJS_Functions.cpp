@@ -145,6 +145,18 @@ static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(c->newScriptVar(sstr.str()));
 }
 
+static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr arr = c->getArgument("this");
+	int l = arr->getArrayLength();
+	int args = c->getArgumentsLength();
+	for (int i=0;i<args;i++) {
+//		arr->addChildNoDup()
+//		arr->getArrayIndex(i)->toString();
+	}
+
+//	c->setReturnVar(c->newScriptVar(sstr.str()));
+}
+
 // ----------------------------------------------- Register Functions
 void registerFunctions(CTinyJS *tinyJS) {
 }
@@ -158,5 +170,6 @@ extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function Array.prototype.contains(obj)", scArrayContains, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.remove(obj)", scArrayRemove, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.join(separator)", scArrayJoin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.push()", scArrayPush, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 
