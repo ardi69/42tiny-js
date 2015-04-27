@@ -1509,7 +1509,7 @@ public:
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
 
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
-	CScriptException *toCScriptException();
+	CScriptException toCScriptException();
 private:
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, const CScriptException &Exception);

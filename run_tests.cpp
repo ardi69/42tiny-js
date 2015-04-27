@@ -276,9 +276,8 @@ bool run_test(const char *filename) {
 #endif
   try {
     s.execute(buffer, filename);
-  } catch (CScriptException *e) {
-    printf("%s\n", e->toString().c_str());
-	delete e;
+  } catch (CScriptException &e) {
+    printf("%s\n", e.toString().c_str());
   }
   bool pass = s.getRoot()->findChild("result")->toBoolean();
 #ifdef WITH_TIME_LOGGER

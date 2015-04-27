@@ -109,9 +109,8 @@ int main(int , char **)
 			"	}										\n"
 			"	print(\"after finally\")		\n"
 			"}t=g()", "test");
-	} catch (CScriptException *e) {
-		printf("%s\n", e->toString().c_str());
-		delete e;
+	} catch (CScriptException &e) {
+		printf("%s\n", e.toString().c_str());
 	}
 	int lineNumber = 0;
 	while (js->evaluate("lets_quit") == "0") {
@@ -119,9 +118,8 @@ int main(int , char **)
 		if(!std::getline(std::cin, buffer)) break;
 		try {
 			js->execute(buffer, "console.input", lineNumber++);
-		} catch (CScriptException *e) {
-			printf("%s\n", e->toString().c_str());
-			delete e;
+		} catch (CScriptException &e) {
+			printf("%s\n", e.toString().c_str());
 		}
 	}
 	delete js;

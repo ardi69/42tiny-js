@@ -283,7 +283,7 @@ void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
 		else
 			errorString << "Got '" << CScriptToken::getTokenStr(tk, tkStr.c_str()) << "' expected '" << CScriptToken::getTokenStr(expected_tk) << "'";
 		if(alternate_tk!=-1) errorString << " or '" << CScriptToken::getTokenStr(alternate_tk) << "'";
-		throw new CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
+		throw CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
 	}
 }
 void CScriptLex::match(int expected_tk1, int alternate_tk/*=-1*/) {
@@ -353,7 +353,7 @@ void CScriptLex::getNextToken() {
 			tk = CScriptToken::isReservedWord(tkStr);
 #ifdef NO_GENERATORS
 			if(tk == LEX_R_YIELD)
-				throw new CScriptException(Error, "42TinyJS was built without support of generators (yield expression)", currentFile, pos.currentLine, currentColumn());
+				throw CScriptException(Error, "42TinyJS was built without support of generators (yield expression)", currentFile, pos.currentLine, currentColumn());
 #endif
 		} else {
 			while (isIDChar(currCh)) {
@@ -422,7 +422,7 @@ void CScriptLex::getNextToken() {
 							}
 							tkStr += (char)strtol(buf, 0, 16);
 						} else
-							throw new CScriptException(SyntaxError, "malformed hexadezimal character escape sequence", currentFile, pos.currentLine, currentColumn());	
+							throw CScriptException(SyntaxError, "malformed hexadezimal character escape sequence", currentFile, pos.currentLine, currentColumn());	
 					}
 					default: {
 						if(isOctal(currCh)) {
@@ -442,7 +442,7 @@ void CScriptLex::getNextToken() {
 			getNextCh();
 		}
 		if(currCh != endCh)
-			throw new CScriptException(SyntaxError, "unterminated string literal", currentFile, pos.currentLine, currentColumn());
+			throw CScriptException(SyntaxError, "unterminated string literal", currentFile, pos.currentLine, currentColumn());
 		getNextCh();
 		tk = LEX_STR;
 	} else {
@@ -545,7 +545,7 @@ void CScriptLex::getNextToken() {
 			}
 			if(tk == LEX_REGEXP) {
 #ifdef NO_REGEXP
-				throw new CScriptException(Error, "42TinyJS was built without support of regular expressions", currentFile, pos.currentLine, currentColumn());
+				throw CScriptException(Error, "42TinyJS was built without support of regular expressions", currentFile, pos.currentLine, currentColumn());
 #endif
 				tkStr = "/";
 				while (currCh && currCh!='/' && currCh!='\n') {
@@ -559,7 +559,7 @@ void CScriptLex::getNextToken() {
 				if(currCh == '/') {
 #ifndef NO_REGEXP
 					try { regex(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
-						throw new CScriptException(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
+						throw CScriptException(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
 					}
 #endif /* NO_REGEXP */
 					do {
@@ -567,7 +567,7 @@ void CScriptLex::getNextToken() {
 						getNextCh();
 					} while (currCh=='g' || currCh=='i' || currCh=='m' || currCh=='y');
 				} else
-					throw new CScriptException(SyntaxError, "unterminated regular expression literal", currentFile, pos.currentLine, currentColumn());
+					throw CScriptException(SyntaxError, "unterminated regular expression literal", currentFile, pos.currentLine, currentColumn());
 			} else if(currCh=='=') {
 				tk = LEX_SLASHEQUAL;
 				getNextCh();
@@ -1252,7 +1252,7 @@ bool CScriptTokenizer::check(int ExpectedToken, int AlternateToken/*=-1*/) {
 			errorString << "Got '" << CScriptToken::getTokenStr(currentToken) << "' expected '" << CScriptToken::getTokenStr(ExpectedToken) << "'";
 			if(AlternateToken!=-1) errorString << " or '" << CScriptToken::getTokenStr(AlternateToken) << "'";
 		}
-		throw new CScriptException(SyntaxError, errorString.str(), currentFile, currentLine(), currentColumn());
+		throw CScriptException(SyntaxError, errorString.str(), currentFile, currentLine(), currentColumn());
 	}
 	return true;
 }
@@ -1308,7 +1308,7 @@ void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, int Flags) {
 	l->check(LEX_R_CATCH, LEX_R_FINALLY);
 	bool unconditionalCatch = false;
 	while(l->tk == LEX_R_CATCH) {
-		if(unconditionalCatch) throw new CScriptException(SyntaxError, "catch after unconditional catch", l->currentFile, l->currentLine(), l->currentColumn());
+		if(unconditionalCatch) throw CScriptException(SyntaxError, "catch after unconditional catch", l->currentFile, l->currentLine(), l->currentColumn());
 
 		// vars & condition
 		l->match(LEX_R_CATCH);
@@ -1362,7 +1362,7 @@ void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
 				setTokenSkip(State);
 			} else { // default
 				State.Marks.push_back(pushToken(State.Tokens)); // push Token & push caseBeginIdx
-				if(hasDefault) throw new CScriptException(SyntaxError, "more than one switch default", l->currentFile, l->currentLine(), l->currentColumn());
+				if(hasDefault) throw CScriptException(SyntaxError, "more than one switch default", l->currentFile, l->currentLine(), l->currentColumn());
 				hasDefault = true;
 			}
 
@@ -1373,7 +1373,7 @@ void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
 		} else if(l->tk == '}')
 			break;
 		else
-			throw new CScriptException(SyntaxError, "invalid switch statement", l->currentFile, l->currentLine(), l->currentColumn());
+			throw CScriptException(SyntaxError, "invalid switch statement", l->currentFile, l->currentLine(), l->currentColumn());
 	}
 	while(MarksSize < State.Marks.size()) setTokenSkip(State);
 	removeEmptyForwarder(State); // remove Forwarder if empty
@@ -1604,7 +1604,7 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 	}
 	if((for_in=(l->tk==LEX_R_IN || (l->tk==LEX_ID && l->tkStr=="of")))) {
 		if(!State.LeftHand)
-			throw new CScriptException(ReferenceError, "invalid for/in left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
+			throw CScriptException(ReferenceError, "invalid for/in left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
 		if(l->tk==LEX_ID && l->tkStr=="of") l->tk = LEX_T_OF; // fake token
 		if((for_of = (!for_each_in && l->tk==LEX_T_OF))) {
 			l->match(LEX_T_OF);
@@ -1766,7 +1766,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 		FncData.name = l->tkStr;
 		l->match(LEX_ID, LEX_STR);
 	} else if(Statement)
-		throw new CScriptException(SyntaxError, "Function statement requires a name.", l->currentFile, l->currentLine(), l->currentColumn());
+		throw CScriptException(SyntaxError, "Function statement requires a name.", l->currentFile, l->currentLine(), l->currentColumn());
 	l->match('(');
 	while(l->tk != ')') {
 		FncData.arguments.push_back(tokenizeFunctionArgument());
@@ -1788,7 +1788,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 		functionState.HaveReturnValue = true;
 	}
 	if(functionState.HaveReturnValue == true && functionState.FunctionIsGenerator == true)
-		throw new CScriptException(TypeError, "generator function returns a value.", l->currentFile, functionPos.currentLine, functionPos.currentColumn());
+		throw CScriptException(TypeError, "generator function returns a value.", l->currentFile, functionPos.currentLine, functionPos.currentColumn());
 	FncData.isGenerator = functionState.FunctionIsGenerator;
 
 	functionState.Tokens.swap(FncData.body);
@@ -1819,7 +1819,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 		pushToken(State.Tokens, '(');
 		pushForwarder(State);
 	} else if(noLetDef)
-		throw new CScriptException(SyntaxError, "let declaration not directly within block", l->currentFile, currLine, currColumn);
+		throw CScriptException(SyntaxError, "let declaration not directly within block", l->currentFile, currLine, currColumn);
 	STRING_VECTOR_t vars;
 	for(;;) {
 		bool needAssignment = false;
@@ -1843,7 +1843,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 	if(Expression) {
 		string redeclared = State.Forwarders.back()->addLets(vars);
 		if(redeclared.size())
-			throw new CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
+			throw CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
 		if(!foundIN) {
 			pushToken(State.Tokens, ')');
 			if(Statement) { 
@@ -1873,7 +1873,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 		} else
 			redeclared = State.Forwarders.back()->addLets(vars);
 		if(redeclared.size())
-			throw new CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
+			throw CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
 	}
 	setTokenSkip(State);
 	if(leftHand) State.LeftHand = true;
@@ -1928,7 +1928,7 @@ void CScriptTokenizer::tokenizeVarAndConst( ScriptTokenState &State, int Flags) 
 		redeclared = State.Forwarders.front()->addVarsInLetscope(vars);
 #endif
 	if(redeclared.size())
-		throw new CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
+		throw CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
 	if(leftHand) State.LeftHand = true;
 }
 
@@ -2004,7 +2004,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 		}
 		
 		if(!Objc.destructuring && msg.size())
-			throw new CScriptException(SyntaxError, msg, msgFile, msgLine, msgColumn);
+			throw CScriptException(SyntaxError, msg, msgFile, msgLine, msgColumn);
 		Objc.elements.push_back(element);
 		if (l->tk != '}') l->match(',', '}');
 	}
@@ -2018,7 +2018,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 			Objc.setMode(l->tk=='=' || l->tk==LEX_ARROW || (forFor && (l->tk==LEX_R_IN ||(l->tk==LEX_ID && l->tkStr=="of"))));
 	} else {
 		if(!Objc.destructuring && msg.size())
-			throw new CScriptException(SyntaxError, msg, msgFile, msgLine, msgColumn);
+			throw CScriptException(SyntaxError, msg, msgFile, msgLine, msgColumn);
 		if(!nestedObject) Objc.setMode(Objc.destructuring);
 	}
 
@@ -2126,14 +2126,14 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 				pushToken(State.Tokens, CScriptToken(LEX_ID, label));
 				if(l->tk==':' && canLabel) {
 					if(find(State.Labels.begin(), State.Labels.end(), label) != State.Labels.end()) 
-						throw new CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
 					State.Tokens[State.Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
 					State.Labels.push_back(label);
 				} else if(label=="this") {
 					if( l->tk == '=' || (l->tk >= LEX_ASSIGNMENTS_BEGIN && l->tk <= LEX_ASSIGNMENTS_END) )
-						throw new CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
 					if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
-						throw new CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
 				} else
 					State.LeftHand = true;
 			}
@@ -2190,7 +2190,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 #ifndef NO_GENERATORS
 	case LEX_R_YIELD:
 		if( (Flags & TOKENIZE_FLAGS_canYield)==0) 
-			throw new CScriptException(SyntaxError, "'yield' expression, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
+			throw CScriptException(SyntaxError, "'yield' expression, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
 		pushToken(State.Tokens);
 		if(l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
 			tokenizeExpression(State, Flags);
@@ -2216,9 +2216,6 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 						tokenizeArrowFunction(arguments, State, Flags);
 						break;
 					}
-				} catch (CScriptException *e) {
-					/* ignore Error -> try regular (...)-expression */
-					delete e;
 				} catch(...) { 
 					/* ignore Error -> try regular (...)-expression */ 
 				}
@@ -2309,7 +2306,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 					noLeftHand = true;
 					pushToken(State.Tokens); // Precedence 4
 					if(l->tk == LEX_ID && l->tkStr == "this")
-						throw new CScriptException(SyntaxError, tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn());
+						throw CScriptException(SyntaxError, tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn());
 				}
 			default:
 				right2left_end = true;
@@ -2364,7 +2361,7 @@ void CScriptTokenizer::tokenizeAssignment(ScriptTokenState &State, int Flags) {
 	tokenizeCondition(State, Flags);
 	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) ) {
 		if(!State.LeftHand)
-			throw new CScriptException(ReferenceError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
+			throw CScriptException(ReferenceError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
 		pushToken(State.Tokens);
 		tokenizeAssignment(State, Flags);
 		State.LeftHand = false;
@@ -2420,7 +2417,7 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 	case LEX_R_TRY:		tokenizeTry(State, Flags); break;
 	case LEX_R_RETURN:
 			if( (Flags & TOKENIZE_FLAGS_canReturn)==0) 
-				throw new CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
+				throw CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
 	case LEX_R_THROW:	
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 		if(l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
@@ -2440,10 +2437,10 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 				l->check(LEX_ID);
 				STRING_VECTOR_t &L = isBreak ? State.Labels : State.LoopLabels;
 				if(find(L.begin(), L.end(), l->tkStr) == L.end())
-					throw new CScriptException(SyntaxError, "label '"+l->tkStr+"' not found", l->currentFile, l->currentLine(), l->currentColumn());
+					throw CScriptException(SyntaxError, "label '"+l->tkStr+"' not found", l->currentFile, l->currentLine(), l->currentColumn());
 				pushToken(State.Tokens); // push 'Label'
 			} else if((Flags & (isBreak ? TOKENIZE_FLAGS_canBreak : TOKENIZE_FLAGS_canContinue) )==0) 
-				throw new CScriptException(SyntaxError, 
+				throw CScriptException(SyntaxError, 
 											isBreak ? "'break' must be inside loop, switch or labeled statement" : "'continue' must be inside loop", 
 											l->currentFile, l->currentLine(), l->currentColumn());
 			pushToken(State.Tokens, ';'); // push ';'
@@ -2523,7 +2520,7 @@ void CScriptTokenizer::removeEmptyForwarder( TOKEN_VECT &Tokens, FORWARDER_VECTO
 	Marks.pop_back();
 }
 void CScriptTokenizer::throwTokenNotExpected() {
-	throw new CScriptException(SyntaxError, "'"+CScriptToken::getTokenStr(l->tk, l->tkStr.c_str())+"' was not expected", l->currentFile, l->currentLine(), l->currentColumn());
+	throw CScriptException(SyntaxError, "'"+CScriptToken::getTokenStr(l->tk, l->tkStr.c_str())+"' was not expected", l->currentFile, l->currentLine(), l->currentColumn());
 }
 
 
@@ -3982,7 +3979,7 @@ CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int rad
 	return newScriptVar(msg.str());
 }
 
-CScriptException *CScriptVarError::toCScriptException()
+CScriptException CScriptVarError::toCScriptException()
 {
 	CScriptVarLinkPtr link;
 	string name = ERROR_NAME[Error];
@@ -3995,7 +3992,7 @@ CScriptException *CScriptVarError::toCScriptException()
 	string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = link->toString();
 	int lineNumber=-1; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = link->toNumber().toInt32()-1;
 	int column=-1; link = findChildWithPrototypeChain("column"); if(link) column = link->toNumber().toInt32()-1;
-	return new CScriptException((enum ERROR_TYPES)ErrorCode, message, fileName, lineNumber, column); 
+	return CScriptException((enum ERROR_TYPES)ErrorCode, message, fileName, lineNumber, column); 
 }
 
 
@@ -4826,10 +4823,10 @@ void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const st
 		execute.set(CScriptResult::Throw, newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), t->currentLine(), t->currentColumn()));
 		return;
 	}
-	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
+	throw CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
 void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message ) {
-	throw new CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
+	throw CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
 
 void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
@@ -4837,10 +4834,10 @@ void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const st
 		execute.set(CScriptResult::Throw, newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), Pos.currentLine(), Pos.currentColumn()));
 		return;
 	}
-	throw new CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
+	throw CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
 void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
-	throw new CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
+	throw CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5045,12 +5042,12 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 			if(haveTry) {
 				function_execute.setThrow(v, "native function '"+Fnc->name+"'");
 			} else if(v->isError()) {
-				CScriptException *err = CScriptVarErrorPtr(v)->toCScriptException();
-				if(err->fileName.empty()) err->fileName = "native function '"+Fnc->name+"'";
+				CScriptException err = CScriptVarErrorPtr(v)->toCScriptException();
+				if(err.fileName.empty()) err.fileName = "native function '"+Fnc->name+"'";
 				throw err;
 			}
 			else
-				throw new CScriptException(Error, "uncaught exception: '"+v->toString(function_execute)+"' in native function '"+Fnc->name+"'");
+				throw CScriptException(Error, "uncaught exception: '"+v->toString(function_execute)+"' in native function '"+Fnc->name+"'");
 		}
 	} else {
 		/* we just want to execute the block, but something could
@@ -5122,12 +5119,8 @@ void CTinyJS::generator_start(CScriptVarGenerator *Generator)
 			Generator->setException(function_execute.value);
 		else
 			Generator->setException(constStopIteration);
-//	} catch(CScriptVarPtr &e) {
-//		Generator->setException(e);
 	} catch(CScriptCoroutine::StopIteration_t &) {
 		Generator->setException(CScriptVarPtr());
-//	} catch(CScriptException *e) {
-//		Generator->setException(newScriptVarError(this, *e));
 	} catch(...) {
 		// pop current Generator
 		generatorStack.pop_back();
@@ -5322,7 +5315,7 @@ CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPtr &A, c
 	case LEX_LEQUAL:	return a->constScriptVar(da<=db);
 	case '>':			return a->constScriptVar(da>db);
 	case LEX_GEQUAL:	return a->constScriptVar(da>=db);
-	default: throw new CScriptException("This operation not supported on the int datatype");
+	default: throw CScriptException("This operation not supported on the int datatype");
 	}	
 }
 
@@ -6016,7 +6009,7 @@ CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, CScript
 		CScriptVarLinkWorkPtr rhs = execute_assignment(execute).getter(execute); // L<-R
 		if (execute) {
 			if (!lhs->isOwned() && !lhs.hasReferencedOwner() && lhs->getName().empty()) {
-				throw new CScriptException(ReferenceError, "invalid assignment left-hand side (at runtime)", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
+				throw CScriptException(ReferenceError, "invalid assignment left-hand side (at runtime)", t->currentFile, leftHandPos.currentLine(), leftHandPos.currentColumn());
 			} else if (op != '=' && !lhs->isOwned()) {
 				throwError(execute, ReferenceError, lhs->getName() + " is not defined");
 			}
@@ -6207,7 +6200,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				if(tmp_execute.isThrow()){
 					if(tmp_execute.value != constStopIteration) {
 						if(!haveTry) 
-							throw new CScriptException("uncaught exception: '"+tmp_execute.value->toString(CScriptResult())+"'", t->currentFile, t->currentLine(), t->currentColumn());
+							throw CScriptException("uncaught exception: '"+tmp_execute.value->toString(CScriptResult())+"'", t->currentFile, t->currentLine(), t->currentColumn());
 						else
 							execute = tmp_execute;
 					}
@@ -6361,7 +6354,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 			if(execute.isThrow() && !haveTry) { // (exception in catch or finally or no catch-clause found) and no parent try-block 
 				if(execute.value->isError())
 					throw CScriptVarErrorPtr(execute.value)->toCScriptException();
-				throw new CScriptException("uncaught exception: '"+execute.value->toString()+"'", execute.throw_at_file, execute.throw_at_line, execute.throw_at_column);
+				throw CScriptException("uncaught exception: '"+execute.value->toString()+"'", execute.throw_at_file, execute.throw_at_line, execute.throw_at_column);
 			}
 
 		}
@@ -6377,7 +6370,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				if(haveTry)
 					execute.setThrow(a, t->currentFile, tokenPos.currentLine(), tokenPos.currentColumn());
 				else
-					throw new CScriptException("uncaught exception: '"+a->toString(execute)+"'", t->currentFile, tokenPos.currentLine(), tokenPos.currentColumn());
+					throw CScriptException("uncaught exception: '"+a->toString(execute)+"'", t->currentFile, tokenPos.currentLine(), tokenPos.currentColumn());
 			}
 		} else
 			t->skip(t->getToken().Int());
@@ -6861,15 +6854,14 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 			execute_statement(execute);
 			while (t->tk==';') t->match(';'); // skip empty statements
 		} while (t->tk!=LEX_EOF);
-	} catch (CScriptException *e) { // script exceptions
+	} catch (CScriptException &e) { // script exceptions
 		t = oldTokenizer; // restore tokenizer
 		scopes.push_back(scEvalScope); // restore Scopes;
 		if(haveTry) { // an Error in eval is always catchable
-			CScriptVarPtr E = newScriptVarError(this, e->errorType, e->message.c_str(), e->fileName.c_str(), e->lineNumber, e->column);
-			delete e;
+			CScriptVarPtr E = newScriptVarError(this, e.errorType, e.message.c_str(), e.fileName.c_str(), e.lineNumber, e.column);
 			throw E;
 		} else
-			throw e;
+			throw; // rethrow
 	} catch (...) { // all other exceptions
 		t = oldTokenizer; // restore tokenizer
 		scopes.push_back(scEvalScope); // restore Scopes;
@@ -6943,9 +6935,9 @@ void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
 		CScriptResult execute;
 		returnVar = execute_literals(execute);
 		t->match(LEX_EOF);
-	} catch (CScriptException *e) {
+	} catch (CScriptException &) {
 		t = oldTokenizer;
-		throw e;
+		throw; // rethrow
 	}
 	t = oldTokenizer;
 

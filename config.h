@@ -158,33 +158,31 @@
 ***********************************************************************\n")
 #endif
 
-#if defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L
+#define isCXX0x(version, minor) (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ > version || __GNUC__ == version && __GNUC_MINOR__ >= version))
 
+#if __cplusplus >= 201103L || isCXX0x(4,3) || _MSC_VER >= 1600 // Visual Studio 2010
 #	define HAVE_CXX11_RVALUE_REFERENCE 1
-#	define HAVE_MEMBER_DELETE
-#	define HAVE_MEMBER_DEFAULT
-#	define MEMBER_DELETE =delete
-#	define MEMBER_DEFAULT =default
+#endif
 
-#	if !defined(NO_CXX_THREADS) && !defined(NO_THREADING)
-#		define HAVE_CXX_THREADS 1
-#	endif
-#else
-#	if _MSC_VER >= 1600 // Visual Studio 2010
-#		define HAVE_CXX11_RVALUE_REFERENCE 1
-#	endif
-#	if _MSC_VER >= 1700 // Visual Studio 2012
+#if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || _MSC_VER >= 1700 // Visual Studio 2012
 #		if !defined(NO_CXX_THREADS) && !defined(NO_THREADING)
 #			define HAVE_CXX_THREADS 1
 #		endif
-#	endif
-#	if _MSC_VER >= 1800 // Visual Studio 2013
-#		define HAVE_MEMBER_DELETE
-#		define HAVE_MEMBER_DEFAULT
-#		define MEMBER_DELETE =delete
-#		define MEMBER_DEFAULT =default
-#	endif
 #endif
+
+#if __cplusplus >= 201103L || isCXX0x(4,4) || _MSC_VER >= 1800 // Visual Studio 2013
+#	define HAVE_MEMBER_DELETE 1
+#	define HAVE_MEMBER_DEFAULT 1
+#	define MEMBER_DELETE =delete
+#	define MEMBER_DEFAULT =default
+#endif
+
+#if __cplusplus >= 201103L || isCXX0x(4,6) ||  _MSC_VER > 1800 // > Visual Studio 2013
+#	define NOEXPECT noexpect
+#else
+#	define NOEXPECT throw()
+#endif
+
 
 #ifndef MEMBER_DELETE
 #	define MEMBER_DELETE
