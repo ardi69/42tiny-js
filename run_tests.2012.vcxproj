@@ -86,7 +86,7 @@
     <ClCompile Include="run_tests.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="lib-tiny-js.vcxproj">
+    <ProjectReference Include="lib-tiny-js.2012.vcxproj">
       <Project>{9751c465-0294-43cd-a5d9-bd038aba3961}</Project>
     </ProjectReference>
   </ItemGroup>
