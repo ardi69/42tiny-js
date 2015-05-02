@@ -2202,7 +2202,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		{
 			l->match('(');
 			CScriptLex::POS prev_pos = l->pos;
-			if(l->tk==LEX_ID || l->tk=='[' || l->tk=='{') {
+			if(l->tk==LEX_ID || l->tk=='[' || l->tk=='{' || l->tk==')') {
 				try {
 					TOKEN_VECT arguments;
 					bool arguments_ok = true;
