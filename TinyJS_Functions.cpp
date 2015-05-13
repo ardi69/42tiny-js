@@ -149,12 +149,8 @@ static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
 	int l = arr->getArrayLength();
 	int args = c->getArgumentsLength();
-	for (int i=0;i<args;i++) {
-//		arr->addChildNoDup()
-//		arr->getArrayIndex(i)->toString();
-	}
-
-//	c->setReturnVar(c->newScriptVar(sstr.str()));
+	for (int i=0;i<args;i++)
+		arr->setArrayIndex(l+i, c->getArgument(i));
 }
 
 // ----------------------------------------------- Register Functions

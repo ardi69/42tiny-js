@@ -44,6 +44,7 @@
 #include <errno.h>
 #include <sstream>
 #include <fstream>
+#include <iterator>
 
 #include "TinyJS.h"
 
@@ -61,11 +62,11 @@
 #	else
 #		include <regex>
 #	endif
-#else
-#	include <algorithm>
-#	include <cmath>
-#	include <memory>
 #endif
+
+#include <algorithm>
+#include <cmath>
+#include <memory>
 
 using namespace std;
 
@@ -585,6 +586,40 @@ void CScriptLex::getNextToken() {
 // CScriptTokenDataForwards
 //////////////////////////////////////////////////////////////////////////
 
+CScriptTokenDataForwards::CScriptTokenDataForwards(istream &in)
+{
+	STRING_SET_t::size_type size;
+	for(int i=LETS; i<END; ++i) {
+		CScriptToken::unserialize(size, in);
+		while(size--) {
+			string str;
+			varNames[i].insert(CScriptToken::unserialize(str, in));
+		}
+	}
+	CScriptToken::unserialize(size, in);
+	while(size--) {
+		string str;
+		vars_in_letscope.insert(CScriptToken::unserialize(str, in));
+	}
+	CScriptToken::unserialize(size, in);
+	while(size--) functions.insert(CScriptToken(in));
+}
+
+void CScriptTokenDataForwards::serialize(ostream &out) const
+{
+	for(int i=LETS; i<END; ++i) {
+		CScriptToken::serialize(varNames[i].size(), out);
+		for(STRING_SET_it it=varNames[i].begin(); it != varNames[i].end(); ++it)
+			CScriptToken::serialize(*it, out);
+	}
+	CScriptToken::serialize(vars_in_letscope.size(), out);
+	for(STRING_SET_it it=vars_in_letscope.begin(); it != vars_in_letscope.end(); ++it)
+		CScriptToken::serialize(*it, out);
+	CScriptToken::serialize(functions.size(), out);
+	for(FNC_SET_it it=functions.begin(); it != functions.end(); ++it)
+		it->serialize(out);
+}
+
 bool CScriptTokenDataForwards::compare_fnc_token_by_name::operator()(const CScriptToken& lhs, const CScriptToken& rhs) const {
 	return lhs.Fnc().name < rhs.Fnc().name;
 }
@@ -604,7 +639,7 @@ void CScriptTokenDataForwards::addVars( STRING_VECTOR_t &Vars ) {
 void CScriptTokenDataForwards::addConsts( STRING_VECTOR_t &Vars ) {
 	varNames[CONSTS].insert(Vars.begin(), Vars.end());
 }
-std::string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
+string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
 {
 	for(STRING_VECTOR_it it=Vars.begin(); it!=Vars.end(); ++it) {
 		if(!checkRedefinition(*it, false)) return *it;
@@ -613,7 +648,7 @@ std::string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
 	return "";
 }
 
-std::string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
+string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 {
 	for(STRING_VECTOR_it it=Lets.begin(); it!=Lets.end(); ++it) {
 		if(!checkRedefinition(*it, true)) return *it;
@@ -627,7 +662,25 @@ std::string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 // CScriptTokenDataLoop
 //////////////////////////////////////////////////////////////////////////
 
-std::string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
+CScriptTokenDataLoop::CScriptTokenDataLoop(istream &in) {
+	CScriptToken::unserialize(type, in);
+	CScriptToken::unserialize(labels, in);
+	CScriptToken::unserialize(init, in);
+	CScriptToken::unserialize(condition, in);
+	CScriptToken::unserialize(iter, in);
+	CScriptToken::unserialize(body, in);
+}
+
+void CScriptTokenDataLoop::serialize(ostream &out) const {
+	CScriptToken::serialize(type, out);
+	CScriptToken::serialize(labels, out);
+	CScriptToken::serialize(init, out);
+	CScriptToken::serialize(condition, out);
+	CScriptToken::serialize(iter, out);
+	CScriptToken::serialize(body, out);
+}
+
+string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
 	static const char *heads[] = {"for each(", "for(", "for(", "for(", "while(", "do "};
 	static const char *ops[] = {" in ", " in ", " of ", "; "};
 	string out = heads[type];
@@ -647,14 +700,27 @@ std::string CScriptTokenDataLoop::getParsableString(const string &IndentString/*
 // CScriptTokenDataIf
 //////////////////////////////////////////////////////////////////////////
 
-std::string CScriptTokenDataIf::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
+CScriptTokenDataIf::CScriptTokenDataIf(istream &in) {
+	CScriptToken::unserialize(condition, in);
+	CScriptToken::unserialize(if_body, in);
+	CScriptToken::unserialize(else_body, in);
+}
+
+void CScriptTokenDataIf::serialize(ostream &out) const {
+	CScriptToken::serialize(condition, out);
+	CScriptToken::serialize(if_body, out);
+	CScriptToken::serialize(else_body, out);
+}
+
+string CScriptTokenDataIf::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
 	string out = "if(";
 	string nl = Indent.size() ? "\n"+IndentString : " ";
 	out.append(CScriptToken::getParsableString(condition)).append(")");
 	if(if_body.size()!=1 || if_body.front().token != LEX_T_ARRAY_COMPREHENSIONS_BODY)
 		out.append(" ").append(CScriptToken::getParsableString(if_body, IndentString, Indent));
 	if(else_body.size()) {
-		if(out.back() != ' ' && out.back() != '\n' && out.back() != '\r') out.append(" ");
+		char back = *out.rbegin();
+		if(back != ' ' && back != '\n') out.append(" ");
 		out.append("else ").append(CScriptToken::getParsableString(else_body, IndentString, Indent));
 	}
 	return out;
@@ -662,15 +728,53 @@ std::string CScriptTokenDataIf::getParsableString(const string &IndentString/*="
 
 
 //////////////////////////////////////////////////////////////////////////
+// CScriptTokenDataArrayComprehensionsBody
+//////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataArrayComprehensionsBody::CScriptTokenDataArrayComprehensionsBody(istream &in) { 
+	CScriptToken::unserialize(body, in); 
+} 
+
+void CScriptTokenDataArrayComprehensionsBody::serialize(ostream &out) const { 
+	CScriptToken::serialize(body, out); 
+} 
+
+
+//////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataTry
 //////////////////////////////////////////////////////////////////////////
 
-std::string CScriptTokenDataTry::getParsableString( const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
+CScriptTokenDataTry::CScriptTokenDataTry(istream &in) {
+	CScriptToken::unserialize(tryBlock, in);
+	CATCHBLOCKS_t::size_type size;
+	CScriptToken::unserialize(size, in);
+	catchBlocks.resize(size);
+	for(CATCHBLOCKS_it it = catchBlocks.begin(); it != catchBlocks.end(); ++it) {
+		it->indentifiers = *(new CScriptTokenDataDestructuringVar(in));
+		CScriptToken::unserialize(it->condition, in);
+		CScriptToken::unserialize(it->block, in);
+	}
+	CScriptToken::unserialize(finallyBlock, in);
+
+}
+
+void CScriptTokenDataTry::serialize(ostream &out) const {
+	CScriptToken::serialize(tryBlock, out);
+	CScriptToken::serialize(catchBlocks.size(), out);
+	for(CATCHBLOCKS_cit it = catchBlocks.begin(); it != catchBlocks.end(); ++it) {
+		it->indentifiers->serialize(out);
+		CScriptToken::serialize(it->condition, out);
+		CScriptToken::serialize(it->block, out);
+	}
+	CScriptToken::serialize(finallyBlock, out);
+}
+
+string CScriptTokenDataTry::getParsableString( const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
 	string out = "try ";
 	string nl = Indent.size() ? "\n"+IndentString : " ";
 
 	out.append(CScriptToken::getParsableString(tryBlock, IndentString, Indent));
-	for(CScriptTokenDataTry::CatchBlock_it catchBlock = catchBlocks.begin(); catchBlock!=catchBlocks.end(); catchBlock++) {
+	for(CScriptTokenDataTry::CATCHBLOCKS_it catchBlock = catchBlocks.begin(); catchBlock!=catchBlocks.end(); catchBlock++) {
 		out.append(nl).append("catch(").append(catchBlock->indentifiers->getParsableString());
 		if(catchBlock->condition.size()>1) {
 			out.append(" if ").append(CScriptToken::getParsableString(catchBlock->condition.begin()+1, catchBlock->condition.end()));
@@ -684,8 +788,43 @@ std::string CScriptTokenDataTry::getParsableString( const string &IndentString/*
 
 
 //////////////////////////////////////////////////////////////////////////
+// CScriptTokenDataString
+//////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataString::CScriptTokenDataString(istream &in) {
+	CScriptToken::unserialize(tokenStr, in);
+}
+
+void CScriptTokenDataString::serialize(ostream &out) const {
+	CScriptToken::serialize(tokenStr, out);
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataFnc
 //////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataFnc::CScriptTokenDataFnc(std::istream &in)
+{
+	CScriptToken::unserialize(file, in);
+	CScriptToken::unserialize(line, in);
+	CScriptToken::unserialize(name, in);
+	CScriptToken::unserialize(arguments, in);
+	CScriptToken::unserialize(body, in);
+	CScriptToken::unserialize(isGenerator, in);
+	CScriptToken::unserialize(isArrowFunction, in);
+}
+
+void CScriptTokenDataFnc::serialize(ostream &out) const {
+	CScriptToken::serialize(file, out);
+	CScriptToken::serialize(line, out);
+	CScriptToken::serialize(name, out);
+	CScriptToken::serialize(arguments, out);
+	CScriptToken::serialize(body, out);
+	CScriptToken::serialize(isGenerator, out);
+	CScriptToken::serialize(isArrowFunction, out);
+}
 
 string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
 	ostringstream destination;
@@ -698,37 +837,6 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 				destination << comma << argument->String();
 			else
 				destination << comma << argument->DestructuringVar().getParsableString();
-#if 0
-			if(argument->token == LEX_ID)
-				destination << comma << argument->String();
-			else {
-				vector<bool> isObject(1, false);
-				for(DESTRUCTURING_VARS_it it=argument->DestructuringVar().vars.begin(); it!=argument->DestructuringVar().vars.end(); ++it) {
-					if(it->second == "}" || it->second == "]") {
-						destination << it->second;
-						isObject.pop_back();
-					} else {
-						destination << comma;
-						if(it->second == "[" || it->second == "{") {
-							comma = "";
-							if(isObject.back() && it->first.length())
-								destination << getIDString(it->first) << ":";
-							destination << it->second;
-							isObject.push_back(it->second == "{");
-						} else {
-							comma = ", ";
-							if(it->second.empty())
-								continue; // skip empty entries
-							if(isObject.back() && it->first!=it->second)
-								destination << getIDString(it->first) << ":";
-							destination << it->second;
-						}
-					}
-				}
-				if(argument->DestructuringVar().assignment.size())
-					destination << "=" << CScriptToken::getParsableString(argument->DestructuringVar().assignment);
-			}
-#endif
 		}
 	}
 	if(!forArrowFunction || arguments.size()!=1)
@@ -743,14 +851,28 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 // CScriptTokenDataDestructuringVar
 //////////////////////////////////////////////////////////////////////////
 
-void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t &Names) {
-	for(DESTRUCTURING_VARS_it it = vars.begin(); it != vars.end(); ++it) {
-		if(it->second.size() && it->second.find_first_of("{[]}") == string::npos)
-			Names.push_back(it->second);
+CScriptTokenDataDestructuringVar::CScriptTokenDataDestructuringVar(istream &in) {
+	DESTRUCTURING_VARS_t::size_type size;
+	CScriptToken::unserialize(size, in);
+	while(size--) {
+		string first, second;
+		CScriptToken::unserialize(first, in);
+		CScriptToken::unserialize(second, in);
+		vars.push_back(DESTRUCTURING_VAR_t(first, second));
 	}
+	CScriptToken::unserialize(assignment, in);
 }
 
-std::string CScriptTokenDataDestructuringVar::getParsableString()
+void CScriptTokenDataDestructuringVar::serialize(ostream &out) const {
+	CScriptToken::serialize(vars.size(), out);
+	for(DESTRUCTURING_VARS_cit it = vars.begin(); it != vars.end(); ++it) {
+		CScriptToken::serialize(it->first, out);
+		CScriptToken::serialize(it->second, out);
+	}
+	CScriptToken::serialize(assignment, out);
+}
+
+string CScriptTokenDataDestructuringVar::getParsableString()
 {
 	string out;
 	const char *comma = "";
@@ -782,19 +904,40 @@ std::string CScriptTokenDataDestructuringVar::getParsableString()
 	return out;
 }
 
+void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t &Names) {
+	for(DESTRUCTURING_VARS_it it = vars.begin(); it != vars.end(); ++it) {
+		if(it->second.size() && it->second.find_first_of("{[]}") == string::npos)
+			Names.push_back(it->second);
+	}
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataObjectLiteral
 //////////////////////////////////////////////////////////////////////////
 
-void CScriptTokenDataObjectLiteral::setMode(bool Destructuring) {
-	structuring = !(destructuring = Destructuring);
-	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
-		if(it->value.size() && it->value.front().token == LEX_T_OBJECT_LITERAL) { 
-			CScriptTokenDataObjectLiteral& e = it->value.front().Object();
-			if(e.destructuring && e.structuring)
-				e.setMode(Destructuring);
-		}
+CScriptTokenDataObjectLiteral::CScriptTokenDataObjectLiteral(istream &in) {
+	CScriptToken::unserialize(type, in);
+	CScriptToken::unserialize(destructuring, in);
+	CScriptToken::unserialize(structuring, in);
+	ELEMENTS_t::size_type size;
+	CScriptToken::unserialize(size, in);
+	while(size--) {
+		ELEMENT e;
+		CScriptToken::unserialize(e.id, in);
+		CScriptToken::unserialize(e.value, in);
+		elements.push_back(e);
+	}
+}
+
+void CScriptTokenDataObjectLiteral::serialize(ostream &out) const {
+	CScriptToken::serialize(type, out);
+	CScriptToken::serialize(destructuring, out);
+	CScriptToken::serialize(structuring, out);
+	CScriptToken::serialize(elements.size(), out);
+	for(ELEMENTS_cit it = elements.begin(); it != elements.end(); ++it) {
+		CScriptToken::serialize(it->id, out);
+		CScriptToken::serialize(it->value, out);
 	}
 }
 
@@ -810,6 +953,17 @@ string CScriptTokenDataObjectLiteral::getParsableString() {
 	}
 	out.append(type == OBJECT ? " }" : "]");
 	return out;
+}
+
+void CScriptTokenDataObjectLiteral::setMode(bool Destructuring) {
+	structuring = !(destructuring = Destructuring);
+	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
+		if(it->value.size() && it->value.front().token == LEX_T_OBJECT_LITERAL) { 
+			CScriptTokenDataObjectLiteral& e = it->value.front().Object();
+			if(e.destructuring && e.structuring)
+				e.setMode(Destructuring);
+		}
+	}
 }
 
 bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestructuringVar &DestructuringVar ) {
@@ -987,7 +1141,7 @@ CScriptToken::CScriptToken(CScriptLex *l, int Match, int Alternate) : line(l->cu
 	token_str = getTokenStr(token);
 #endif
 }
-CScriptToken::CScriptToken(uint16_t Tk, int IntData) : line(0), column(0), token(Tk), intData(0) {
+CScriptToken::CScriptToken(uint16_t Tk, int32_t IntData) : line(0), column(0), token(Tk), intData(0) {
 	if (LEX_TOKEN_DATA_SIMPLE(token))
 		intData = IntData;
 	else if (LEX_TOKEN_DATA_FUNCTION(token))
@@ -1013,6 +1167,16 @@ CScriptToken::CScriptToken(uint16_t Tk, int IntData) : line(0), column(0), token
 #endif
 }
 
+CScriptToken::CScriptToken(uint16_t Tk, double FloatData) : line(0), column(0), token(Tk), intData(0) {
+	if (token == LEX_FLOAT)
+		floatData=new double(FloatData);
+	else 
+		ASSERT(0);
+#ifdef _DEBUG
+	token_str = getTokenStr(token);
+#endif
+}
+
 CScriptToken::CScriptToken(uint16_t Tk, const string &TkStr) : line(0), column(0), token(Tk), intData(0) {
 	if(LEX_TOKEN_DATA_STRING(token))
 		(tokenData = new CScriptTokenDataString(TkStr))->ref();
@@ -1028,6 +1192,42 @@ CScriptToken::CScriptToken(uint16_t Tk, const string &TkStr) : line(0), column(0
 #endif
 }
 
+CScriptToken::CScriptToken(istream &in)
+{
+	unserialize(token, in);
+	unserialize(line, in);
+	unserialize(column, in);
+	if(LEX_TOKEN_DATA_SIMPLE(token)) {
+		unserialize(intData, in);
+	} else if(LEX_TOKEN_DATA_FLOAT(token)) {
+		floatData = new double;
+		unserialize(*floatData, in);
+	} 	else if (LEX_TOKEN_DATA_STRING(token))
+		(tokenData = new CScriptTokenDataString(in))->ref();
+	else if (LEX_TOKEN_DATA_FUNCTION(token))
+		(tokenData = new CScriptTokenDataFnc(in))->ref();
+	else if (LEX_TOKEN_DATA_DESTRUCTURING_VAR(token))
+		(tokenData = new CScriptTokenDataDestructuringVar)->ref();
+	else if (LEX_TOKEN_DATA_OBJECT_LITERAL(token))
+		(tokenData = new CScriptTokenDataObjectLiteral(in))->ref();
+	else if (LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(token))
+		(tokenData = new CScriptTokenDataArrayComprehensionsBody(in))->ref();
+	else if (LEX_TOKEN_DATA_LOOP(token))
+		(tokenData = new CScriptTokenDataLoop(in))->ref();
+	else if (LEX_TOKEN_DATA_IF(token))
+		(tokenData = new CScriptTokenDataIf(in))->ref();
+	else if (LEX_TOKEN_DATA_TRY(token))
+		(tokenData = new CScriptTokenDataTry(in))->ref();
+	else if (LEX_TOKEN_DATA_FORWARDER(token))
+		(tokenData = new CScriptTokenDataForwards(in))->ref();
+	else 
+		ASSERT(0);
+
+#ifdef _DEBUG
+	token_str = getTokenStr(token);
+#endif
+}
+
 CScriptToken &CScriptToken::operator =(const CScriptToken &Copy)
 {
 	if(this == &Copy) return *this;
@@ -1035,9 +1235,9 @@ CScriptToken &CScriptToken::operator =(const CScriptToken &Copy)
 #ifdef _DEBUG
 	token_str	= Copy.token_str;
 #endif
-	line			= Copy.line;
+	line		= Copy.line;
 	column		= Copy.column; 
-	token			= Copy.token;
+	token		= Copy.token;
 	if(LEX_TOKEN_DATA_FLOAT(token))
 		floatData = new double(*Copy.floatData);
 	else if(!LEX_TOKEN_DATA_SIMPLE(token))
@@ -1046,6 +1246,20 @@ CScriptToken &CScriptToken::operator =(const CScriptToken &Copy)
 		intData	= Copy.intData;
 	return *this;
 }
+
+void CScriptToken::serialize(ostream &out) const
+{
+	serialize(token, out);
+	serialize(line, out);
+	serialize(column, out);
+	if(LEX_TOKEN_DATA_SIMPLE(token))
+		serialize(intData, out);
+	else if(LEX_TOKEN_DATA_FLOAT(token))
+		serialize(*floatData, out);
+	else
+		TokenData().serialize(out);
+}
+
 string CScriptToken::getParsableString(TOKEN_VECT &Tokens, const string &IndentString, const string &Indent) {
 	return getParsableString(Tokens.begin(), Tokens.end(), IndentString, Indent);
 }
@@ -1181,6 +1395,60 @@ int CScriptToken::isReservedWord(const string &Str) {
 		}
 	}
 	return LEX_ID;
+}
+void  CScriptToken::serialize(const string &value, ostream &out) {
+	string::size_type size = value.size();
+	out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+	out.write(value.c_str(), size);
+}
+
+string &CScriptToken::unserialize(string &value, istream &in) {
+	string::size_type size;
+	in.read(reinterpret_cast<char*>(&size), sizeof(size));
+	value.reserve(size);
+	istreambuf_iterator<char> ii(in);
+	back_insert_iterator<string> bi = back_inserter(value);
+	while (size--) *bi++ = *ii++;
+	return value;
+}
+
+
+void CScriptToken::serialize(const STRING_VECTOR_t &value, ostream &out) {
+	serialize(value.size(), out);
+	for(STRING_VECTOR_cit it=value.begin(); it != value.end(); ++it)
+		serialize(*it, out);
+}
+
+STRING_VECTOR_t &CScriptToken::unserialize(STRING_VECTOR_t &value, istream &in)
+{
+	STRING_VECTOR_t::size_type size;
+	unserialize(size, in);
+	while(size--) {
+		string str;
+		value.push_back(unserialize(str, in));
+	}
+	return value;
+}
+
+void CScriptToken::serialize(const TOKEN_VECT &Tokens, ostream &out) {
+	serialize(Tokens.size(), out);
+	for(TOKEN_VECT_cit it=Tokens.begin(); it != Tokens.end(); ++it)
+		it->serialize(out);
+}
+
+void CScriptToken::unserialize(TOKEN_VECT &Tokens, istream &in) 
+{
+	TOKEN_VECT::size_type size;
+	unserialize(size, in);
+	while(size--) {
+		int16_t token, line, column;
+		unserialize(token, in);
+		unserialize(line, in);
+		unserialize(column, in);
+		Tokens.push_back(CScriptToken(in));
+		Tokens.back().line   = line;
+		Tokens.back().column = column;
+	}
 }
 
 
@@ -1511,7 +1779,6 @@ void CScriptTokenizer::tokenizeIf(ScriptTokenState &State, int Flags) {
 
 void CScriptTokenizer::tokenizeFor_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign) {
 
-	bool for_in=false, for_of=false, for_each_in=false;
 	CScriptToken LoopToken(LEX_T_FOR_IN);
 	CScriptTokenDataLoop &LoopData = LoopToken.Loop();
 	LoopData.type = CScriptTokenDataLoop::FOR_OF;
@@ -1529,7 +1796,8 @@ void CScriptTokenizer::tokenizeFor_inArrayComprehensions(ScriptTokenState &State
 
 	// tokenize init
 	pushForwarder(State, true); // no clean up empty tokenizer
-	State.Forwarders.back()->addLets(STRING_VECTOR_t(1, l->tkStr));
+	STRING_VECTOR_t tmp(1, l->tkStr);
+	State.Forwarders.back()->addLets(tmp);
 	State.Tokens.swap(LoopData.init);
 
 	// tokenize condition
@@ -1652,7 +1920,7 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 	PopLoopLabels(label_count, State.LoopLabels);
 }
 
-static void tokenizeVarIdentifierDestructuring( CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t *VarNames );
+static void tokenizeVarIdentifierDestructuring( CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const string &Path, STRING_VECTOR_t *VarNames );
 static void tokenizeVarIdentifierDestructuringObject(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, STRING_VECTOR_t *VarNames) {
 	Lexer->match('{');
 	while(Lexer->tk != '}') {
@@ -1685,7 +1953,7 @@ static void tokenizeVarIdentifierDestructuringArray(CScriptLex *Lexer, DESTRUCTU
 	}
 	Lexer->match(']');
 }
-static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t *VarNames ) {
+static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const string &Path, STRING_VECTOR_t *VarNames ) {
 	if(Lexer->tk == '[') {
 		Vars.push_back(DESTRUCTURING_VAR_t(Path, "[")); // marks array begin
 		tokenizeVarIdentifierDestructuringArray(Lexer, Vars, VarNames);
@@ -2152,15 +2420,8 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	case '[':
 		if(l->tk == '{')
 			_tokenizeLiteralObject(State, ObjectLiteralFlags);
-		else {
-			// try tokenize Array Comprehensions
-//			CScriptLex::POS prev_pos = l->pos;
-//			if(_tokenizeArrayComprehensions(State, ObjectLiteralFlags))
-//				break;
-			// if no Array Comprehensions tokenize normal Array
-//			l->reset(prev_pos);
+		else
 			_tokenizeLiteralArray(State, ObjectLiteralFlags);
-		}
 		if(State.LeftHand && l->tk==LEX_ARROW) { // [,] => ... or {} => ...
 			TOKEN_VECT arguments; 
 			CScriptToken token(LEX_T_DESTRUCTURING_VAR);
@@ -3141,7 +3402,7 @@ void CScriptVarLink::unref() {
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const std::string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
+CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
 	if(link && link->refs == 1) { // the link is only refered by this
 		link->name = name;
 		link->owner = 0;
@@ -3348,6 +3609,13 @@ inline bool isNegZero(double d) {
 	return memcmp(&d, &x, sizeof(double))==0;
 }
 
+CNumber &CNumber::operator=(int64_t Value) { 
+	if(numeric_limits<int32_t>::min()<=Value && Value<=numeric_limits<int32_t>::max()) 
+		type=tInt32, Int32=int32_t(Value);
+	else 
+		type=tDouble, Double=(double)Value; 
+	return *this; 
+}
 CNumber &CNumber::operator=(double Value) { 
 	double integral;
 	if(isNegZero(Value))
@@ -3356,7 +3624,7 @@ CNumber &CNumber::operator=(double Value) {
 		type=tInfinity, Int32=1; 
 	else if(numeric_limits<double>::has_infinity && Value == -numeric_limits<double>::infinity())
 		type=tInfinity, Int32=-1; 
-	else if(::isNaN(Value) || Value == numeric_limits<double>::quiet_NaN() || Value == std::numeric_limits<double>::signaling_NaN())
+	else if(::isNaN(Value) || Value == numeric_limits<double>::quiet_NaN() || Value == numeric_limits<double>::signaling_NaN())
 		type=tNaN, Int32=0; 
 	else if(modf(Value, &integral)==0.0 && numeric_limits<int32_t>::min()<=integral && integral<=numeric_limits<int32_t>::max()) 
 		type=tInt32, Int32=int32_t(integral);
@@ -3770,7 +4038,7 @@ static char *tiny_dtoa(double val, unsigned radix) {
 	*p = '\0';
 	return buf;
 }
-std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
+string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 	char *str;
 	if(2 > Radix || Radix > 36)
 		Radix = 10; // todo error;
@@ -3817,9 +4085,9 @@ double CNumber::toDouble() const
 	case tDouble:
 		return Double;
 	case tNaN:
-		return std::numeric_limits<double>::quiet_NaN();
+		return numeric_limits<double>::quiet_NaN();
 	case tInfinity:
-		return Int32<0 ? -std::numeric_limits<double>::infinity():std::numeric_limits<double>::infinity();
+		return Int32<0 ? -numeric_limits<double>::infinity():numeric_limits<double>::infinity();
 	}
 	return 0.0;
 }
@@ -3943,7 +4211,7 @@ void CScriptVarObject::setTemporaryMark_recursive( uint32_t ID) {
 declare_dummy_t(StopIteration);
 CScriptVarObjectTypeTagged::~CScriptVarObjectTypeTagged() {}
 CScriptVarPtr CScriptVarObjectTypeTagged::clone() { return new CScriptVarObjectTypeTagged(*this); }
-std::string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
+string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
 	
 	
 ////////////////////////////////////////////////////////////////////////// 
@@ -4233,7 +4501,7 @@ void CScriptVarGenerator::setTemporaryMark_recursive( uint32_t ID ) {
 	functionRoot->setTemporaryMark_recursive(ID);
 	function->setTemporaryMark_recursive(ID);
 	if(yieldVar) yieldVar->setTemporaryMark_recursive(ID);
-	for(std::vector<CScriptVarScopePtr>::iterator it=generatorScopes.begin(); it != generatorScopes.end(); ++it)
+	for(vector<CScriptVarScopePtr>::iterator it=generatorScopes.begin(); it != generatorScopes.end(); ++it)
 		(*it)->setTemporaryMark_recursive(ID);
 }
 void CScriptVarGenerator::native_send(const CFunctionsScopePtr &c, void *data) {
@@ -4367,7 +4635,7 @@ void CScriptVarFunction::setFunctionData(CScriptTokenDataFnc *Data) {
 /// CScriptVarFunctionBounded
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments) 
+CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const vector<CScriptVarPtr> &BoundedArguments) 
 	: CScriptVarFunction(BoundedFunction->getContext(), new CScriptTokenDataFnc) ,
 	boundedFunction(BoundedFunction),
 	boundedThis(BoundedThis),
@@ -5352,7 +5620,7 @@ void CTinyJS::assign_destructuring_var(CScriptResult &execute, const CScriptToke
 				if(!execute) return;
 				if(it->second == "{" || it->second == "[") {
 					string newPathStr = PathStr.back() +  it->first;
-					if(PathStr.back().back() == '[') newPathStr += "]";
+					if(*PathStr.back().rbegin() == '[') newPathStr += "]";
 					if(var->getVarPtr()->isNullOrUndefined() && (it+1)->second != "}" && (it+1)->second != "]") {
 						throwError(execute, TypeError, newPathStr+" is "+(var->getVarPtr()->isNull() ? "null" : "undefined"));
 						return;
@@ -5389,7 +5657,7 @@ void CTinyJS::execute_var_init( CScriptResult &execute, bool hideLetScope ) {
 			break;
 	}
 }
-void CTinyJS::execute_destructuring(CScriptResult &execute, CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, const std::string &Path)
+void CTinyJS::execute_destructuring(CScriptResult &execute, CScriptTokenDataObjectLiteral &Objc, const CScriptVarPtr &Val, const string &Path)
 {
 	if(Val->isNullOrUndefined() && Objc.elements.size()) {
 		throwError(execute, TypeError, (Val->isNull()?"null has no properties":"undefined has no properties"));
@@ -6322,7 +6590,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 
 			if(isThrow && execute.value) {
 				// execute catch-blocks only if value set (spezial case Generator.close() -> only finally-blocks are executed)
-				for(CScriptTokenDataTry::CatchBlock_it catchBlock = TryData.catchBlocks.begin(); catchBlock!=TryData.catchBlocks.end(); catchBlock++) {
+				for(CScriptTokenDataTry::CATCHBLOCKS_it catchBlock = TryData.catchBlocks.begin(); catchBlock!=TryData.catchBlocks.end(); catchBlock++) {
 					CScriptResult catch_execute;
 					CScopeControl ScopeControl(this);
 					ScopeControl.addLetScope();
@@ -6873,12 +7141,12 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 		c->setReturnVar(execute.value);
 }
 
-static int _native_require_read(const string &Fname, std::string &Data) {
-	std::ifstream in(Fname.c_str(), std::ios::in | std::ios::binary);
+static int _native_require_read(const string &Fname, string &Data) {
+	ifstream in(Fname.c_str(), ios::in | ios::binary);
 	if (in) {
-		in.seekg(0, std::ios::end);
+		in.seekg(0, ios::end);
 		Data.resize((string::size_type)in.tellg());
-		in.seekg(0, std::ios::beg);
+		in.seekg(0, ios::beg);
 		in.read(&Data[0], Data.size());
 		in.close();
 		return(0);
@@ -6972,4 +7240,5 @@ void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/)
 	}
 	freeUniqueID();
 }
+
 

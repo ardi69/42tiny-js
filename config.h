@@ -57,7 +57,7 @@
 
 /* REGEXP-SUPPORT
  * ==============
- * The RegExp-support needs boost-regex or TR1-regex
+ * The RegExp-support needs c++11, boost-regex or TR1-regex
  * To deactivate this stuff define NO_REGEXP 
  */
 //#define NO_REGEXP
@@ -70,6 +70,10 @@
 /* or you can define HAVE_TR1_REGEX and <tr1/regex> is included and std::tr1::regex is used
  */
 //#define HAVE_TR1_REGEX
+
+/* or you can define HAVE_CXX_REGEX and <regex> is included and std::regex is used
+ */
+//#define HAVE_CXX_REGEX
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -187,6 +191,24 @@
 #ifndef MEMBER_DELETE
 #	define MEMBER_DELETE
 #	define MEMBER_DEFAULT
+#endif
+
+#if !defined(NO_REGEXP) && !defined(HAVE_BOOST_REGEX) && !defined(HAVE_TR1_REGEX) && !defined(HAVE_CXX_REGEX) && __cplusplus < 201103L
+#	define NO_REGEXP
+#	if _MSC_VER > 1500 // Visual Studio 2010 and above
+#		undef NO_REGEXP
+#	elif _MSC_VER == 1500 && _MSC_FULL_VER >= 150030729 // Visual Studio 2008 SP1
+#		undef NO_REGEXP
+#		define HAVE_TR1_REGEX // untested
+#	elif isCXX0x(4,6) // a better idea?? testet with libstdc++ chipped with GCC 4.6.3
+#		undef NO_REGEXP
+#	endif
+#endif
+#if defined(NO_REGEXP)
+#pragma message("\n***********************************************************************\n\
+* tiny-js is compiled without support for regular expessions\n\
+* try make WITH_BOOST=1
+***********************************************************************\n")
 #endif
 
 

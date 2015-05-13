@@ -43,11 +43,12 @@
 #include <vector>
 #include <map>
 #include <set>
-#include <cstdint>
+#include <stdint.h> // <cstdint> is C++11
 #include <cstring>
 #include <cassert>
 #include <ctime>
 #include <limits>
+#include <iostream>
 
 #include "config.h"
 
@@ -189,14 +190,14 @@ enum LEX_TYPES {
 
 };
 #define LEX_TOKEN_DATA_STRING(tk)							((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
-#define LEX_TOKEN_DATA_FLOAT(tk)								(tk==LEX_FLOAT)
+#define LEX_TOKEN_DATA_FLOAT(tk)							(tk==LEX_FLOAT)
 #define LEX_TOKEN_DATA_LOOP(tk)								(LEX_TOKEN_FOR_BEGIN <= tk && tk <= LEX_TOKEN_FOR_END)
 #define LEX_TOKEN_DATA_FUNCTION(tk)							(LEX_TOKEN_FUNCTION_BEGIN <= tk && tk <= LEX_TOKEN_FUNCTION_END)
-#define LEX_TOKEN_DATA_IF(tk)									(tk==LEX_T_IF)
+#define LEX_TOKEN_DATA_IF(tk)								(tk==LEX_T_IF)
 #define LEX_TOKEN_DATA_TRY(tk)								(tk==LEX_T_TRY)
 #define LEX_TOKEN_DATA_OBJECT_LITERAL(tk)					(tk==LEX_T_OBJECT_LITERAL)
 #define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR)
-#define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)	(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
+#define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)		(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
 #define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
 
 #define LEX_TOKEN_DATA_SIMPLE(tk) (!((LEX_TOKEN_NONSIMPLE_1_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_1_END) || (LEX_TOKEN_NONSIMPLE_2_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_2_END)))
@@ -245,6 +246,7 @@ extern const char *ERROR_NAME[];
 
 typedef std::vector<std::string> STRING_VECTOR_t;
 typedef STRING_VECTOR_t::iterator STRING_VECTOR_it;
+typedef STRING_VECTOR_t::const_iterator STRING_VECTOR_cit;
 
 typedef std::set<std::string> STRING_SET_t;
 typedef STRING_SET_t::iterator STRING_SET_it;
@@ -301,12 +303,12 @@ public:
 	std::string currentFile;
 	struct POS {
 		const char *tokenStart;
-		int currentLine;
+		int32_t currentLine;
 		const char *currentLineStart;
-		int currentColumn() { return tokenStart-currentLineStart; }
+		int32_t currentColumn() { return tokenStart-currentLineStart; }
 	} pos;
-	int currentLine() { return pos.currentLine; }
-	int currentColumn() { return pos.currentColumn(); }
+	int32_t currentLine() { return pos.currentLine; }
+	int32_t currentColumn() { return pos.currentColumn(); }
 	bool lineBreakBeforeToken;
 private:
 	const char *data;
@@ -337,6 +339,7 @@ private:
 public:
 	void ref() { refs++; }
 	void unref() { if(--refs == 0) delete this; }
+	virtual void serialize(std::ostream &) const=0; 
 private:
 	int refs;
 };
@@ -355,6 +358,7 @@ public:
 	CScriptTokenDataPtr(C &Init) { (ptr=&Init)->ref(); }
 	~CScriptTokenDataPtr() { if(ptr) ptr->unref(); }
 	C *operator->() { return ptr; }
+	const C *operator->() const { return ptr; }
 	C &operator*() { return *ptr; }
 	operator bool() { return ptr!=0; }
 	bool operator==(const CScriptTokenDataPtr& rhs) { return ptr==rhs.ptr; }
@@ -364,7 +368,10 @@ private:
 
 class CScriptTokenDataString : public fixed_size_object<CScriptTokenDataString>, public CScriptTokenData {
 public:
+	CScriptTokenDataString() {}
 	CScriptTokenDataString(const std::string &String) : tokenStr(String) {}
+	CScriptTokenDataString(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
 	std::string tokenStr;
 private:
 };
@@ -372,19 +379,33 @@ private:
 class CScriptTokenDataFnc : public fixed_size_object<CScriptTokenDataFnc>, public CScriptTokenData {
 public:
 	CScriptTokenDataFnc() : line(0),isGenerator(false), isArrowFunction(false) {}
+	CScriptTokenDataFnc(std::istream &in);
+	virtual void serialize(std::ostream &out) const; 
+	std::string getArgumentsString(bool forArrowFunction=false);
+
 	std::string file;
-	int line;
+	int32_t line;
 	std::string name;
 	TOKEN_VECT arguments;
 	TOKEN_VECT body;
-	std::string getArgumentsString(bool forArrowFunction=false);
 	bool isGenerator;
 	bool isArrowFunction;
+
 };
 
 class CScriptTokenDataForwards : public fixed_size_object<CScriptTokenDataForwards>, public CScriptTokenData {
 public:
 	CScriptTokenDataForwards() {}
+	CScriptTokenDataForwards(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+
+	bool checkRedefinition(const std::string &Str, bool checkVars);
+	void addVars( STRING_VECTOR_t &Vars );
+	void addConsts( STRING_VECTOR_t &Vars );
+	std::string addVarsInLetscope(STRING_VECTOR_t &Vars);
+	std::string addLets(STRING_VECTOR_t &Lets);
+	bool empty() { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
+
 	enum { 
 		LETS = 0,
 		VARS,
@@ -400,14 +421,11 @@ public:
 	typedef std::set<CScriptToken, compare_fnc_token_by_name> FNC_SET_t;
 	typedef FNC_SET_t::iterator FNC_SET_it;
 	FNC_SET_t functions;
-	bool checkRedefinition(const std::string &Str, bool checkVars);
-	void addVars( STRING_VECTOR_t &Vars );
-	void addConsts( STRING_VECTOR_t &Vars );
-	std::string addVarsInLetscope(STRING_VECTOR_t &Vars);
-	std::string addLets(STRING_VECTOR_t &Lets);
-	bool empty() { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
+
 private:
 };
+
+#ifdef old
 class CScriptTokenDataForwardsPtr {
 public:
 	CScriptTokenDataForwardsPtr() : ptr(0) {}
@@ -424,29 +442,41 @@ public:
 	CScriptTokenDataForwards *operator->() { return ptr; }
 	operator bool() { return ptr!=0; }
 	bool operator==(const CScriptTokenDataForwardsPtr& rhs) { return ptr==rhs.ptr; }
+
 private:
 	CScriptTokenDataForwards *ptr;
 };
+#else
+typedef CScriptTokenDataPtr<CScriptTokenDataForwards> CScriptTokenDataForwardsPtr;
+#endif
+
 typedef std::vector<CScriptTokenDataForwardsPtr> FORWARDER_VECTOR_t;
 
 class CScriptTokenDataLoop : public fixed_size_object<CScriptTokenDataLoop>, public CScriptTokenData {
 public:
 	CScriptTokenDataLoop() { type=FOR; }
+	CScriptTokenDataLoop(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
+
 	enum {FOR_EACH=0, FOR_IN, FOR_OF, FOR, WHILE, DO} type; // do not change the order
 	STRING_VECTOR_t labels;
 	TOKEN_VECT init;
 	TOKEN_VECT condition;
 	TOKEN_VECT iter;
 	TOKEN_VECT body;
-	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
 class CScriptTokenDataIf : public fixed_size_object<CScriptTokenDataIf>, public CScriptTokenData {
 public:
+	CScriptTokenDataIf() {} 
+	CScriptTokenDataIf(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 	TOKEN_VECT condition;
 	TOKEN_VECT if_body;
 	TOKEN_VECT else_body;
-	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
 typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
@@ -455,48 +485,73 @@ typedef DESTRUCTURING_VARS_t::iterator DESTRUCTURING_VARS_it;
 typedef DESTRUCTURING_VARS_t::const_iterator DESTRUCTURING_VARS_cit;
 class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDataDestructuringVar>, public CScriptTokenData {
 public:
+	CScriptTokenDataDestructuringVar() {} 
+	CScriptTokenDataDestructuringVar(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+	std::string getParsableString();
+
+	void getVarNames(STRING_VECTOR_t &Names);
+
 	DESTRUCTURING_VARS_t vars;
 	TOKEN_VECT assignment;
-	void getVarNames(STRING_VECTOR_t &Names);
-	std::string getParsableString();
 private:
 };
 
 class CScriptTokenDataObjectLiteral : public fixed_size_object<CScriptTokenDataObjectLiteral>, public CScriptTokenData {
 public:
+	CScriptTokenDataObjectLiteral() {} 
+	CScriptTokenDataObjectLiteral(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+
+	std::string getParsableString();
+
+	void setMode(bool Destructuring);
+	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar);
+
 	enum {OBJECT, ARRAY, ARRAY_COMPREHENSIONS, ARRAY_COMPREHENSIONS_OLD} type;
-	int flags;
 	struct ELEMENT {
 		std::string id;
 		TOKEN_VECT value;
 	};
 	bool destructuring;
 	bool structuring;
-	std::vector<ELEMENT> elements;
-	void setMode(bool Destructuring);
-	std::string getParsableString();
-	bool toDestructuringVar(CScriptTokenDataDestructuringVar &DestructuringVar);
+	typedef std::vector<ELEMENT> ELEMENTS_t;
+	typedef ELEMENTS_t::iterator ELEMENTS_it;
+	typedef ELEMENTS_t::const_iterator ELEMENTS_cit;
+	ELEMENTS_t elements;
+
 private:
 };
 
 class CScriptTokenDataArrayComprehensionsBody : public fixed_size_object<CScriptTokenDataArrayComprehensionsBody>, public CScriptTokenData {
 public:
+	CScriptTokenDataArrayComprehensionsBody() {}
+	CScriptTokenDataArrayComprehensionsBody(std::istream &in);
+	virtual void serialize(std::ostream &out) const;
+
 	TOKEN_VECT body;
 };
 
 
 class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry>, public CScriptTokenData {
 public:
+	CScriptTokenDataTry() {} 
+	CScriptTokenDataTry(std::istream &in); 
+	virtual void serialize(std::ostream &out) const; 
+
+	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
+
 	TOKEN_VECT tryBlock;
 	struct CatchBlock {
 		CScriptTokenDataPtr<CScriptTokenDataDestructuringVar> indentifiers;
 		TOKEN_VECT condition;
 		TOKEN_VECT block;
 	};
-	std::vector<CatchBlock> catchBlocks;
-	typedef std::vector<CatchBlock>::iterator CatchBlock_it;
+	typedef std::vector<CatchBlock> CATCHBLOCKS_t;
+	typedef CATCHBLOCKS_t::iterator CATCHBLOCKS_it;
+	typedef CATCHBLOCKS_t::const_iterator CATCHBLOCKS_cit;
+	CATCHBLOCKS_t catchBlocks;
 	TOKEN_VECT finallyBlock;
-	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 };
 
 
@@ -520,13 +575,17 @@ class CScriptToken : public fixed_size_object<CScriptToken>
 public:
 	CScriptToken() : line(0), column(0), token(0), intData(0) {}
 	CScriptToken(CScriptLex *l, int Match=-1, int Alternate=-1);
-	CScriptToken(uint16_t Tk, int IntData=0);
+	CScriptToken(uint16_t Tk, int32_t IntData=0);
+	CScriptToken(uint16_t Tk, double FloatData);
 	CScriptToken(uint16_t Tk, const std::string &TkStr);
 	CScriptToken(const  CScriptToken &Copy) : token(0) { *this = Copy; }
 	CScriptToken &operator =(const CScriptToken &Copy);
+	CScriptToken(std::istream &in);
 	~CScriptToken() { clear(); }
 
-	int &Int() { ASSERT(LEX_TOKEN_DATA_SIMPLE(token)); return intData; }
+	void serialize(std::ostream &out) const;
+
+	int32_t &Int() { ASSERT(LEX_TOKEN_DATA_SIMPLE(token)); return intData; }
 	std::string &String() { ASSERT(LEX_TOKEN_DATA_STRING(token)); return dynamic_cast<CScriptTokenDataString*>(tokenData)->tokenStr; }
 	double &Float() { ASSERT(LEX_TOKEN_DATA_FLOAT(token)); return *floatData; }
 	CScriptTokenDataFnc &Fnc() { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return *dynamic_cast<CScriptTokenDataFnc*>(tokenData); }
@@ -538,6 +597,8 @@ public:
 	CScriptTokenDataIf &If() { ASSERT(LEX_TOKEN_DATA_IF(token)); return *dynamic_cast<CScriptTokenDataIf*>(tokenData); }
 	CScriptTokenDataTry &Try() { ASSERT(LEX_TOKEN_DATA_TRY(token)); return *dynamic_cast<CScriptTokenDataTry*>(tokenData); }
 	CScriptTokenDataForwards &Forwarder() { ASSERT(LEX_TOKEN_DATA_FORWARDER(token)); return *dynamic_cast<CScriptTokenDataForwards*>(tokenData); }
+	CScriptTokenData &TokenData() { CScriptTokenData *data = dynamic_cast<CScriptTokenData*>(tokenData); ASSERT(data); return *data; }
+	const CScriptTokenData &TokenData() const { CScriptTokenData *data = dynamic_cast<CScriptTokenData*>(tokenData); ASSERT(data); return *data; }
 #ifdef _DEBUG
 	std::string token_str;
 #endif
@@ -550,11 +611,27 @@ public:
 	static std::string getTokenStr( int token, const char *tokenStr=0, bool *need_space=0 );
 	static const char *isReservedWord(int Token);
 	static int isReservedWord(const std::string &Str);
-private:
 
+	template<typename T> static void serialize(const T &value, std::ostream &out) {
+		out.write(reinterpret_cast<const char*>(&value), sizeof(value));
+	}
+	template<typename T> static T &unserialize(T &value, std::istream &in) {
+		in.read(reinterpret_cast<char*>(&value), sizeof(value));
+		return value;
+	}
+	static void serialize(const std::string &value, std::ostream &out);
+	static std::string &unserialize(std::string &value, std::istream &in);
+
+	static void serialize(const STRING_VECTOR_t &value, std::ostream &out);
+	static STRING_VECTOR_t &unserialize(STRING_VECTOR_t &value, std::istream &in);
+
+	static void serialize(const TOKEN_VECT &Tokens, std::ostream &out);
+	static void unserialize(TOKEN_VECT &Tokens, std::istream &in);
+
+private:
 	void clear();
 	union {
-		int										intData;
+		int32_t									intData;
 		double									*floatData;
 		CScriptTokenData						*tokenData;
 	};
@@ -1255,6 +1332,7 @@ public:
 			type=tDouble, Double=Value; 
 		return *this; 
 	}
+	CNumber &operator=(int64_t Value);
 	CNumber &operator=(double Value);
 	CNumber &operator=(unsigned char Value) { type=tInt32; Int32=Value; return *this; }
 	CNumber &operator=(const char *Value);
@@ -1385,6 +1463,7 @@ inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned int Obj) { ret
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned long Obj) { return newScriptVarNumber(Context, CNumber((uint32_t)Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, long Obj) { return newScriptVarNumber(Context, CNumber((int32_t)Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int64_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, double Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_DEPRECATED_newScriptVar_Fnc(NaN, CTinyJS *Context, NaN_t) { return newScriptVarNumber(Context, CNumber(NaN)); }
 inline define_DEPRECATED_newScriptVar_Fnc(Infinity, CTinyJS *Context, Infinity Obj) { return newScriptVarNumber(Context, CNumber(Obj)); } 

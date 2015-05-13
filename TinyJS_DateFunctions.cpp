@@ -29,7 +29,7 @@
 
 #include <cstdlib>
 #include <sstream>
-//#include <iostream>
+#include <cstdio>
 #include <iomanip>
 
 #include <ctime>
@@ -50,7 +50,7 @@ using namespace std;
 #define gmtime_s(tm, time) gmtime_r(time, tm)
 #define asctime_s(buf, bufsize, tm) asctime_r(tm, buf)
 #define _get_timezone(pTimezone) do{*pTimezone=timezone;}while(0)
-#define sprintf_s snprintf
+#define sprintf_s sprintf
 
 #endif
 
@@ -585,7 +585,7 @@ static const char *day_names[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
 static const char *month_names[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
 string CScriptTime::toDateString() const {
 	char buffer[100];
-	sprintf_s(buffer, sizeof(buffer), "%s %s %02d %04d", day_names[tm_wday], month_names[tm_mon], tm_mday, tm_year);
+	sprintf_s(buffer, "%s %s %02d %04d", day_names[tm_wday], month_names[tm_mon], tm_mday, tm_year);
 	return buffer;
 }
 string CScriptTime::toTimeString() const {
@@ -595,7 +595,7 @@ string CScriptTime::toTimeString() const {
 	if(tm_offset < 0) { sign = "+"; offset = -tm_offset/60; } 
 	else { sign = "-"; offset = tm_offset/60; }
 	offset =	(tm_offset/60)*100+tm_offset%60;
-	sprintf_s(buffer, sizeof(buffer), "%02d:%02d:%02d GMT%s%04ld", tm_hour, tm_min, tm_sec, sign, offset);
+	sprintf_s(buffer, "%02d:%02d:%02d GMT%s%04ld", tm_hour, tm_min, tm_sec, sign, offset);
 	return buffer;
 }
 string CScriptTime::castToString() const {
@@ -606,15 +606,15 @@ string CScriptTime::castToString() const {
 	else { sign = "-"; offset = tm_offset/60; }
 	offset =	(offset/60)*100+offset%60;
 	if(tm_islocal)
-		sprintf_s(buffer, sizeof(buffer), "%s %s %02d %04d %02d:%02d:%02d GMT%s%04ld", day_names[tm_wday], month_names[tm_mon], tm_mday, tm_year, tm_hour, tm_min, tm_sec, sign, offset);
+		sprintf_s(buffer, "%s %s %02d %04d %02d:%02d:%02d GMT%s%04ld", day_names[tm_wday], month_names[tm_mon], tm_mday, tm_year, tm_hour, tm_min, tm_sec, sign, offset);
 	else
-		sprintf_s(buffer, sizeof(buffer), "%s, %02d %s %04d %02d:%02d:%02d GMT", day_names[tm_wday], tm_mday, month_names[tm_mon], tm_year, tm_hour, tm_min, tm_sec);
+		sprintf_s(buffer, "%s, %02d %s %04d %02d:%02d:%02d GMT", day_names[tm_wday], tm_mday, month_names[tm_mon], tm_year, tm_hour, tm_min, tm_sec);
 	return buffer;
 }
 string CScriptTime::toISOString() const {
 	char buffer[100];
 	CScriptTime utc(*this, false);
-	sprintf_s(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.tm_year, utc.tm_mon+1, utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec, utc.tm_msec);
+	sprintf_s(buffer, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.tm_year, utc.tm_mon+1, utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec, utc.tm_msec);
 	return buffer;
 }
 
@@ -755,7 +755,6 @@ recalc:
 /// CScriptVarDate
 //////////////////////////////////////////////////////////////////////////
 
-define_dummy_t(Date);
 define_ScriptVarPtr_Type(Date);
 class CScriptVarDate : public CScriptVarObject, public CScriptTime {
 protected:
@@ -770,20 +769,16 @@ public:
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 	virtual CScriptVarPtr valueOf_CallBack();
 
-	friend define_newScriptVar_Fnc(Date, CTinyJS *Context, Date_t);
+	friend inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context);
 private:
 };
-inline define_newScriptVar_Fnc(Date, CTinyJS *Context, Date_t) { return new CScriptVarDate(Context); } 
-
+inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context) { return new CScriptVarDate(Context); }
 
 ////////////////////////////////////////////////////////////////////////// 
 // CScriptVarDate
 //////////////////////////////////////////////////////////////////////////
 
 
-
-
-declare_dummy_t(Date);
 CScriptVarDate::CScriptVarDate(CTinyJS *Context) : CScriptVarObject(Context, Context->getRoot()->findChildByPath("Date.prototype")) {
 	
 }
@@ -858,7 +853,7 @@ static void scDate(const CFunctionsScopePtr &c, void *data) {
 }
 
 static void scDate_Constructor(const CFunctionsScopePtr &c, void *data) {
-	CScriptVarDatePtr returnVar = c->newScriptVar(Date);
+	CScriptVarDatePtr returnVar = ::newScriptVarDate(c->getContext());
 	c->setReturnVar(returnVar);
 	int ArgumentsLength = c->getArgumentsLength();
 	if(ArgumentsLength == 1) {
@@ -887,7 +882,6 @@ static void scDate_Constructor(const CFunctionsScopePtr &c, void *data) {
 		returnVar->setTime(args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
 	} else
 		returnVar->setTime(CScriptTime::now());
-
 }
 static void scDate_UTC(const CFunctionsScopePtr &c, void *data) {
 	int ArgumentsLength = c->getArgumentsLength();
@@ -975,27 +969,27 @@ invalid:
 
 DATE_PROTOTYPE_GET(getFullYear)
 
-	static void scDate_prototype_setUTCFullYear(const CFunctionsScopePtr &c, void *data) {
-		CScriptVarDatePtr Date(c->getArgument("this"));
-		if(!Date) scDateThrowTypeError(c, "setUTCFullYear");
-		int ArgumentsLength = c->getArgumentsLength();
-		int32_t args[3] = { 0, Date->getUTCMonth(), Date->getUTCDate() };
-		double value;
-		for(int i=0; i<max(min(ArgumentsLength,3),1); ++i) {
-			CNumber v = c->getArgument(i)->toNumber().floor();
-			if(v.isInt32() || v.isNegativeZero())
-				args[i] = v.toInt32();
-			else
-				goto invalid;
-		}
-		value = (double)Date->setUTCFullYear(args[0], args[1], args[2]);
-		if(Date->isValid()) {
-			c->setReturnVar(c->newScriptVar(value));
-			return;
-		}
+static void scDate_prototype_setUTCFullYear(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarDatePtr Date(c->getArgument("this"));
+	if(!Date) scDateThrowTypeError(c, "setUTCFullYear");
+	int ArgumentsLength = c->getArgumentsLength();
+	int32_t args[3] = { 0, Date->getUTCMonth(), Date->getUTCDate() };
+	double value;
+	for(int i=0; i<max(min(ArgumentsLength,3),1); ++i) {
+		CNumber v = c->getArgument(i)->toNumber().floor();
+		if(v.isInt32() || v.isNegativeZero())
+			args[i] = v.toInt32();
+		else
+			goto invalid;
+	}
+	value = (double)Date->setUTCFullYear(args[0], args[1], args[2]);
+	if(Date->isValid()) {
+		c->setReturnVar(c->newScriptVar(value));
+		return;
+	}
 invalid:
-		Date->setInvalide();
-		c->setReturnVar(c->constScriptVar(NaN));
+	Date->setInvalide();
+	c->setReturnVar(c->constScriptVar(NaN));
 }
 
 DATE_PROTOTYPE_GET(getUTCFullYear)
@@ -1021,6 +1015,8 @@ DATE_PROTOTYPE_SET(setSeconds)
 DATE_PROTOTYPE_GET(getSeconds)
 DATE_PROTOTYPE_SET(setUTCSeconds)
 DATE_PROTOTYPE_GET(getUTCSeconds)
+DATE_PROTOTYPE_SET(setTime)
+DATE_PROTOTYPE_GET(getTime)
 DATE_PROTOTYPE_GET(getTimezoneOffset)
 
 // ----------------------------------------------- Register Functions
@@ -1066,6 +1062,8 @@ extern "C" void _registerDateFunctions(CTinyJS *tinyJS) {
 	DATE_PROTOTYPE_NATIVE(getSeconds);
 	DATE_PROTOTYPE_NATIVE(setUTCSeconds);
 	DATE_PROTOTYPE_NATIVE(getUTCSeconds);
+	DATE_PROTOTYPE_NATIVE(setTime);
+	DATE_PROTOTYPE_NATIVE(getTime);
 	DATE_PROTOTYPE_NATIVE(getTimezoneOffset);
 
 }
