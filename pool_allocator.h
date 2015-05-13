@@ -35,8 +35,13 @@
 #include <stdint.h>
 #include <string>
 #include "config.h"
-#include "TinyJS_Threading.h"
-
+#ifndef NO_THREADING
+#	if SPINLOCK_IN_POOL_ALLOCATOR
+#		include <atomic>
+#	else
+#		include "TinyJS_Threading.h"
+#	endif
+#endif
 /************************************************************************
  * TinyJS must many many times allocates and frees objects
  * To prevent memory fragmentation and speed ups allocates & frees, i have
@@ -57,7 +62,11 @@ public:
 	static void free(void *, size_t);
 	size_t objectSize() { return object_size; }
 #ifndef NO_THREADING
-	static CScriptMutex locker;
+#	if SPINLOCK_IN_POOL_ALLOCATOR
+		static std::atomic_flag locker;
+#	else
+		static CScriptMutex locker;
+#	endif
 #endif
 private:
 	fixed_size_allocator(size_t num_objects, size_t object_size, const char* for_class); 

@@ -201,13 +201,22 @@ public:
 #endif
 }allocator_pool;
 
-//#define WITH_TIME_LOGGER
+#define WITH_TIME_LOGGER
 #include "time_logger.h"
 
 TimeLoggerCreate(alloc, false);
 TimeLoggerCreate(free, false);
 #ifdef NO_THREADING
 #	define LOCK do{}while(0)
+#elif SPINLOCK_IN_POOL_ALLOCATOR
+#	include <thread>
+class lock_help {
+public:
+	lock_help() { while (fixed_size_allocator::locker.test_and_set(std::memory_order_acquire)) { std::this_thread::yield(); } }
+	~lock_help() { fixed_size_allocator::locker.clear(std::memory_order_release); }
+};
+std::atomic_flag fixed_size_allocator::locker = ATOMIC_FLAG_INIT;
+#define LOCK lock_help lock
 #else
 CScriptMutex fixed_size_allocator::locker;
 class lock_help {

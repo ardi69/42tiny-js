@@ -58,6 +58,8 @@
 #else
 #	include "pool_allocator.h"
 #endif
+#include "TinyJS_Threading.h"
+
 
 #ifdef _MSC_VER
 #	if defined(_DEBUG) && defined(_DEBUG_NEW)

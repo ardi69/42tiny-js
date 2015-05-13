@@ -45,6 +45,7 @@
  * if a memory-leak detected the allocator usage is printed to stderr
  */
 //#define DEBUG_POOL_ALLOCATOR
+
 /*
  * with define LOG_POOL_ALLOCATOR_MEMORY_USAGE
  * the allocator usage is always printed to stderr
@@ -52,6 +53,13 @@
 //#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
 
 // NOTE: _DEBUG or LOG_POOL_ALLOCATOR_MEMORY_USAGE implies DEBUG_POOL_ALLOCATOR
+
+/*
+ * to increasing of speed a spin lock is used, if available 
+ * if c++11 <atomic> not available or NO_SPINLOCK_IN_POOL_ALLOCATOR is defined
+ * a normal mutex lock is used or noting if NO_THREADING defined
+ */
+//#define NO_SPINLOCK_IN_POOL_ALLOCATOR
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -94,6 +102,7 @@
  * functions with "yield" in it is detected as Generator.
  * Generator-support needs threading-stuff
  * To disable Generators define NO_GENERATORS
+ * NOTE NO_THREADING implies NO_GENERATORS
  */
 //#define NO_GENERATORS
 
@@ -107,7 +116,7 @@
  * >>> NOTE: You can NOT run more threads on the SAME instance of class TinyJS <<<
  * The threading-stuff is needed by the pool-allocator (locking) and the generator-/yield-stuff
  * to deactivate threading define NO_THREADING
- * NOTE: if NO_POOL_ALLOCATOR not defined you can not run JS-code simultaneously
+ * NOTE: if NO_THREADING defined and NO_POOL_ALLOCATOR is undefined you can not run JS-code simultaneously
  */
 //#define NO_THREADING
 
@@ -117,8 +126,8 @@
 //#define NO_CXX_THREADS 
 
 /* if C++ 2011 STL-Threading-API not available
- * on Windows the windows-threading-API is used by default.
- * on non-Windows (WIN32 is not defined) it is tried to use the POSIX pthread-API
+ * - on Windows the windows-threading-API is used by default.
+ * - on non-Windows (WIN32 is not defined) it is tried to use the POSIX pthread-API
  * to force the pthread-API define HAVE_PTHREAD (windows needs in this case 
  *   a pthread-lib e.g http://http://sourceware.org/pthreads-win32/)
  */
@@ -181,6 +190,10 @@
 #	define MEMBER_DEFAULT =default
 #endif
 
+#if !defined(NO_SPINLOCK_IN_POOL_ALLOCATOR) && (__cplusplus >= 201103L || isCXX0x(4,5) || _MSC_VER >= 1700 /* Visual Studio 2012 */)
+#	define SPINLOCK_IN_POOL_ALLOCATOR 1
+#endif
+
 #if __cplusplus >= 201103L || isCXX0x(4,6) ||  _MSC_VER > 1800 // > Visual Studio 2013
 #	define NOEXPECT noexpect
 #else
@@ -200,7 +213,7 @@
 #	elif _MSC_VER == 1500 && _MSC_FULL_VER >= 150030729 // Visual Studio 2008 SP1
 #		undef NO_REGEXP
 #		define HAVE_TR1_REGEX // untested
-#	elif isCXX0x(4,6) // a better idea?? testet with libstdc++ chipped with GCC 4.6.3
+#	elif isCXX0x(4,6) // a better idea?? testet with libstdc++ shipped with GCC 4.6.3
 #		undef NO_REGEXP
 #	endif
 #endif

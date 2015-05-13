@@ -97,7 +97,7 @@ CScriptMutex::~CScriptMutex() {
 	delete mutex;
 }
 
-#endif /*HAVE_CXX_THREADS*/
+#endif /* !HAVE_CXX_THREADS */
 
 //////////////////////////////////////////////////////////////////////////
 // CondVar

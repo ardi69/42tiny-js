@@ -44,6 +44,7 @@
 #include <errno.h>
 #include <sstream>
 #include <fstream>
+#include <iomanip>
 #include <iterator>
 
 #include "TinyJS.h"
@@ -1000,36 +1001,36 @@ static uint32_t reserved_words_min_len = 2;
 static uint32_t reserved_words_max_len = 10;
 static token2str_t reserved_words_begin[] ={
 	// reserved words
-	{ LEX_R_IF,						"if",							true  },
-	{ LEX_R_ELSE,					"else",						true  },
-	{ LEX_R_DO,						"do",							true  },
-	{ LEX_R_WHILE,					"while",						true  },
-	{ LEX_R_FOR,					"for",						true  },
-	{ LEX_R_IN,						"in",							true  },
-	{ LEX_R_BREAK,					"break",						true  },
-	{ LEX_R_CONTINUE,				"continue",					true  },
-	{ LEX_R_FUNCTION,				"function",					true  },
+	{ LEX_R_IF,					"if",						true  },
+	{ LEX_R_ELSE,				"else",						true  },
+	{ LEX_R_DO,					"do",						true  },
+	{ LEX_R_WHILE,				"while",					true  },
+	{ LEX_R_FOR,				"for",						true  },
+	{ LEX_R_IN,					"in",						true  },
+	{ LEX_R_BREAK,				"break",					true  },
+	{ LEX_R_CONTINUE,			"continue",					true  },
+	{ LEX_R_FUNCTION,			"function",					true  },
 	{ LEX_R_RETURN,				"return",					true  },
-	{ LEX_R_VAR,					"var",						true  },
-	{ LEX_R_LET,					"let",						true  },
-	{ LEX_R_CONST,					"const",						true  },
-	{ LEX_R_WITH,					"with",						true  },
-	{ LEX_R_TRUE,					"true",						true  },
-	{ LEX_R_FALSE,					"false",						true  },
-	{ LEX_R_NULL,					"null",						true  },
-	{ LEX_R_NEW,					"new",						true  },
-	{ LEX_R_TRY,					"try",						true  },
-	{ LEX_R_CATCH,					"catch",						true  },
-	{ LEX_R_FINALLY,				"finally",					true  },
-	{ LEX_R_THROW,					"throw",						true  },
+	{ LEX_R_VAR,				"var",						true  },
+	{ LEX_R_LET,				"let",						true  },
+	{ LEX_R_CONST,				"const",					true  },
+	{ LEX_R_WITH,				"with",						true  },
+	{ LEX_R_TRUE,				"true",						true  },
+	{ LEX_R_FALSE,				"false",					true  },
+	{ LEX_R_NULL,				"null",						true  },
+	{ LEX_R_NEW,				"new",						true  },
+	{ LEX_R_TRY,				"try",						true  },
+	{ LEX_R_CATCH,				"catch",					true  },
+	{ LEX_R_FINALLY,			"finally",					true  },
+	{ LEX_R_THROW,				"throw",					true  },
 	{ LEX_R_TYPEOF,				"typeof",					true  },
-	{ LEX_R_VOID,					"void",						true  },
+	{ LEX_R_VOID,				"void",						true  },
 	{ LEX_R_DELETE,				"delete",					true  },
 	{ LEX_R_INSTANCEOF,			"instanceof",				true  },
 	{ LEX_R_SWITCH,				"switch",					true  },
-	{ LEX_R_CASE,					"case",						true  },
-	{ LEX_R_DEFAULT,				"default",					true  },
-	{ LEX_R_YIELD,					"yield",						true  },
+	{ LEX_R_CASE,				"case",						true  },
+	{ LEX_R_DEFAULT,			"default",					true  },
+	{ LEX_R_YIELD,				"yield",					true  },
 };
 #define ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
 #define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
@@ -2532,6 +2533,12 @@ void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, int Flags) 
 }
 
 void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags) {
+#ifndef CREATE_SORTED_LISTS
+	static int Left2Right_begin[] = {
+		'%', '&', '*', '+', '-', '/', '<', '>', '^', '|', 0x100, 0x101, 0x102, 0x103, 0x105, 0x106, 0x107, 0x108, 0x109, 0x125, 0x139
+	};
+	static int *Left2Right_end = &Left2Right_begin[sizeof(Left2Right_begin)/sizeof(Left2Right_begin[0])];
+#else
 	static int Left2Right_begin[] = { 
 		/* Precedence 5 */		'*', '/', '%', 
 		/* Precedence 6 */		'+', '-',
@@ -2542,7 +2549,18 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 	};
 	static int *Left2Right_end = &Left2Right_begin[sizeof(Left2Right_begin)/sizeof(Left2Right_begin[0])];
 	static bool Left2Right_sorted = false;
-	if(!Left2Right_sorted) Left2Right_sorted = (sort(Left2Right_begin, Left2Right_end), true);
+	if(!Left2Right_sorted) {
+		Left2Right_sorted = (sort(Left2Right_begin, Left2Right_end), true);
+		fstream out("sorted-left2right.txt", fstream::out | fstream::trunc);
+		out << showbase << internal << setfill('0') << "\tstatic int Left2Right_begin[] = {\n\t\t";
+		for(int *it=Left2Right_begin; it<Left2Right_end; it++) {
+			if(it != Left2Right_begin) out << ", ";
+			if(*it < 128) out << "'" << (char)*it << "'";
+			else out << hex << *it;
+		}
+		out << "\n\t};";
+	}
+#endif
 	bool noLeftHand = false;
 	for(;;) {
 		bool right2left_end = false;
