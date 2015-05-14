@@ -676,6 +676,14 @@ public:
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
 	CScriptTokenizer(const char *Code, const std::string &File="", int Line=0, int Column=0);
+	static bool writeCompiledTokens;
+private:
+	void unserialize(const std::string &File, const std::string &FileC="");
+	void serialize(std::ostream &out);
+	void serialize(const std::string &File);
+	void serialize(const std::string &File, const std::nothrow_t &);
+public:
+
 	void tokenizeCode(CScriptLex &Lexer);
 
 	CScriptToken &getToken() { return *(tokenScopeStack.back().pos); }

@@ -46,7 +46,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iterator>
-
+#include <sys/stat.h>
 #include "TinyJS.h"
 
 #ifndef ASSERT
@@ -855,6 +855,7 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 CScriptTokenDataDestructuringVar::CScriptTokenDataDestructuringVar(istream &in) {
 	DESTRUCTURING_VARS_t::size_type size;
 	CScriptToken::unserialize(size, in);
+	vars.reserve(size);
 	while(size--) {
 		string first, second;
 		CScriptToken::unserialize(first, in);
@@ -1208,7 +1209,7 @@ CScriptToken::CScriptToken(istream &in)
 	else if (LEX_TOKEN_DATA_FUNCTION(token))
 		(tokenData = new CScriptTokenDataFnc(in))->ref();
 	else if (LEX_TOKEN_DATA_DESTRUCTURING_VAR(token))
-		(tokenData = new CScriptTokenDataDestructuringVar)->ref();
+		(tokenData = new CScriptTokenDataDestructuringVar(in))->ref();
 	else if (LEX_TOKEN_DATA_OBJECT_LITERAL(token))
 		(tokenData = new CScriptTokenDataObjectLiteral(in))->ref();
 	else if (LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(token))
@@ -1399,13 +1400,13 @@ int CScriptToken::isReservedWord(const string &Str) {
 }
 void  CScriptToken::serialize(const string &value, ostream &out) {
 	string::size_type size = value.size();
-	out.write(reinterpret_cast<const char*>(&size), sizeof(size));
+	CScriptToken::serialize(size, out);
 	out.write(value.c_str(), size);
 }
 
 string &CScriptToken::unserialize(string &value, istream &in) {
 	string::size_type size;
-	in.read(reinterpret_cast<char*>(&size), sizeof(size));
+	CScriptToken::unserialize(size, in);
 	value.reserve(size);
 	istreambuf_iterator<char> ii(in);
 	back_insert_iterator<string> bi = back_inserter(value);
@@ -1441,15 +1442,9 @@ void CScriptToken::unserialize(TOKEN_VECT &Tokens, istream &in)
 {
 	TOKEN_VECT::size_type size;
 	unserialize(size, in);
-	while(size--) {
-		int16_t token, line, column;
-		unserialize(token, in);
-		unserialize(line, in);
-		unserialize(column, in);
-		Tokens.push_back(CScriptToken(in));
-		Tokens.back().line   = line;
-		Tokens.back().column = column;
-	}
+	Tokens.clear();
+	Tokens.reserve(size);
+	while(size--) Tokens.push_back(CScriptToken(in));
 }
 
 
@@ -1462,10 +1457,90 @@ CScriptTokenizer::CScriptTokenizer() : l(0), prevPos(&tokens) {
 CScriptTokenizer::CScriptTokenizer(CScriptLex &Lexer) : l(0), prevPos(&tokens) {
 	tokenizeCode(Lexer);
 }
+bool CScriptTokenizer::writeCompiledTokens = false;
+
 CScriptTokenizer::CScriptTokenizer(const char *Code, const string &File, int Line, int Column) : l(0), prevPos(&tokens) {
-	CScriptLex lexer(Code, File, Line, Column);
-	tokenizeCode(lexer);
+	if(Code) {
+		CScriptLex lexer(Code, File, Line, Column);
+		tokenizeCode(lexer);
+	} else {
+		struct stat js, jsc;
+		if(stat((File+'c').c_str(), &jsc) == 0 && stat(File.c_str(), &js) == 0 && js.st_mtime < jsc.st_mtime) {
+			unserialize(File, File+'c');
+		} else {
+			unserialize(File);
+		}
+	}
 }
+
+static string &read_string_from_istream(istream &in, string &out)
+{
+	char buffer[4096];
+	while (in.read(buffer, sizeof(buffer)))
+		out.append(buffer, sizeof(buffer));
+	out.append(buffer, (size_t)in.gcount());
+	return out;
+}
+
+#define COMPILED_TOKENS_ID 0x006a7300 /* '\0', 'j', 's', '0' */
+#define COMPILED_TOKENS_VERSION 0x0100
+#define COMPILED_TOKENS_VERSION_MIN 0x0100
+#define COMPILED_TOKENS_VERSION_MAX 0x0100
+void CScriptTokenizer::unserialize(const string &File, const string &FileC)
+{
+	if(FileC.size()) {
+		try {
+			fstream in(FileC, fstream::in | fstream::binary);
+			uint32_t id;
+			CScriptToken::unserialize(id, in);
+			if(id == COMPILED_TOKENS_ID) {
+				uint16_t v;
+				CScriptToken::unserialize(v, in);
+				if(v >= COMPILED_TOKENS_VERSION_MIN && COMPILED_TOKENS_VERSION_MAX >= v) {
+					tokens.clear();
+					tokenScopeStack.clear();
+					CScriptToken::unserialize(tokens, in);
+					pushTokenScope(tokens);
+					currentFile = File;
+					tk = getToken().token;
+					return;
+				}
+			}
+		} catch(...) {
+			;
+		}
+	}
+	fstream in(File, fstream::in | fstream::binary);
+	string code;
+	CScriptLex lexer(read_string_from_istream(in, code).c_str(), File);
+	tokenizeCode(lexer);
+	if(writeCompiledTokens)
+		serialize(File+'c', nothrow);
+}
+void CScriptTokenizer::serialize(ostream &out)
+{
+	uint32_t id = COMPILED_TOKENS_ID;
+	uint16_t v = COMPILED_TOKENS_VERSION;
+	CScriptToken::serialize(id, out);
+	CScriptToken::serialize(v, out);
+	CScriptToken::serialize(tokens, out);
+}
+
+void CScriptTokenizer::serialize(const string &File)
+{
+	fstream out(File, fstream::out | fstream::trunc | fstream::binary);
+	serialize(out);
+}
+void CScriptTokenizer::serialize(const string &File, const nothrow_t &)
+{
+	try {
+		serialize(File);
+	}
+	catch(...) {
+		remove(File.c_str());
+	}
+}
+
 void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 	try {
 		l=&Lexer;

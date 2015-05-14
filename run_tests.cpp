@@ -66,6 +66,7 @@
 #include <sys/stat.h>
 #include <string>
 #include <sstream>
+#include <fstream>
 #include <cstdio>
 #include <cstring>
 
@@ -275,7 +276,10 @@ bool run_test(const char *filename) {
   TimeLoggerCreate(Test, true, filename);
 #endif
   try {
-    s.execute(buffer, filename);
+	  CScriptTokenizer tokens(0, filename);
+//	  std::fstream out(std::string(filename)+'c', std::fstream::out | std::fstream::trunc | std::fstream::binary);
+//	  tokens.serialize(out);
+    s.execute(tokens);
   } catch (CScriptException &e) {
     printf("%s\n", e.toString().c_str());
   }
@@ -337,6 +341,8 @@ int main(int argc, char **argv)
 #ifdef WITH_TIME_LOGGER
   TimeLoggerCreate(Tests, true);
 #endif
+  // activate writing of tokenized token-code
+  CScriptTokenizer::writeCompiledTokens = true;
   for(int js42 = 0; js42<2; js42++) {
     int test_num = 1;
     while (test_num<1000) {
