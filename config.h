@@ -220,7 +220,7 @@
 #if defined(NO_REGEXP)
 #pragma message("\n***********************************************************************\n\
 * tiny-js is compiled without support for regular expessions\n\
-* try make WITH_BOOST=1
+* try make WITH_BOOST=1\n\
 ***********************************************************************\n")
 #endif
 

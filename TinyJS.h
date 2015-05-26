@@ -258,6 +258,10 @@ std::string getJSString(const std::string &str);
 /// convert the given int into a string
 std::string int2string(int32_t intData);
 std::string int2string(uint32_t intData);
+#if SIZE_MAX != UINT32_MAX
+std::string int2string(size_t intData);
+#endif
+
 /// convert the given double into a string
 std::string float2string(const double &floatData);
 
@@ -271,15 +275,15 @@ public:
 	ERROR_TYPES errorType;
 	std::string message;
 	std::string fileName;
-	int lineNumber;
-	int column;
-	CScriptException(const std::string &Message, const std::string &File, int Line=-1, int Column=-1) :
+	int32_t lineNumber;
+	int32_t column;
+	CScriptException(const std::string &Message, const std::string &File, int32_t Line=-1, int32_t Column=-1) :
 						errorType(Error), message(Message), fileName(File), lineNumber(Line), column(Column){}
-	CScriptException(ERROR_TYPES ErrorType, const std::string &Message, const std::string &File, int Line=-1, int Column=-1) :
+	CScriptException(ERROR_TYPES ErrorType, const std::string &Message, const std::string &File, int32_t Line=-1, int32_t Column=-1) :
 						errorType(ErrorType), message(Message), fileName(File), lineNumber(Line), column(Column){}
-	CScriptException(const std::string &Message, const char *File="", int Line=-1, int Column=-1) :
+	CScriptException(const std::string &Message, const char *File="", int32_t Line=-1, int32_t Column=-1) :
 						errorType(Error), message(Message), fileName(File), lineNumber(Line), column(Column){}
-	CScriptException(ERROR_TYPES ErrorType, const std::string &Message, const char *File="", int Line=-1, int Column=-1) :
+	CScriptException(ERROR_TYPES ErrorType, const std::string &Message, const char *File="", int32_t Line=-1, int32_t Column=-1) :
 						errorType(ErrorType), message(Message), fileName(File), lineNumber(Line), column(Column){}
 	std::string toString();
 };
@@ -307,10 +311,10 @@ public:
 		const char *tokenStart;
 		int32_t currentLine;
 		const char *currentLineStart;
-		int32_t currentColumn() { return tokenStart-currentLineStart; }
+		int16_t currentColumn() { return (int16_t)(tokenStart-currentLineStart) /* silently casted to int16_t because always checked in match(...) */; }
 	} pos;
 	int32_t currentLine() { return pos.currentLine; }
-	int32_t currentColumn() { return pos.currentColumn(); }
+	int16_t currentColumn() { return pos.currentColumn(); }
 	bool lineBreakBeforeToken;
 private:
 	const char *data;
@@ -644,6 +648,8 @@ private:
 /// CScriptTokenizer - converts the code in a vector with tokens
 //////////////////////////////////////////////////////////////////////////
 
+typedef std::vector<size_t> MARKS_t;
+
 class CScriptTokenizer
 {
 public:
@@ -663,7 +669,7 @@ public:
 		ScriptTokenState() : LeftHand(false), FunctionIsGenerator(false), HaveReturnValue(false) {}
 		TOKEN_VECT Tokens;
 		FORWARDER_VECTOR_t Forwarders;
-		std::vector<int> Marks;
+		MARKS_t Marks;
 		STRING_VECTOR_t Labels;
 		STRING_VECTOR_t LoopLabels;
 		bool LeftHand;
@@ -732,12 +738,12 @@ private:
 	void tokenizeStatementNoLet(ScriptTokenState &State, int Flags);
 	void tokenizeStatement(ScriptTokenState &State, int Flags);
 
-	int pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
-	int pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token);
+	size_t pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
+	size_t pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token);
 	void pushForwarder(ScriptTokenState &State, bool noMarks=false);
 	void removeEmptyForwarder(ScriptTokenState &State);
-	void pushForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, std::vector<int> &Marks);
-	void removeEmptyForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, std::vector<int> &Marks);
+	void pushForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, MARKS_t &Marks);
+	void removeEmptyForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, MARKS_t &Marks);
 	void throwTokenNotExpected();
 	CScriptLex *l;
 	TOKEN_VECT tokens;
@@ -916,7 +922,7 @@ public:
 	uint32_t getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
 	
 	//////////////////////////////////////////////////////////////////////////
-	int getChildren() { return Childs.size(); } ///< Get the number of children
+	size_t getChildren() { return Childs.size(); } ///< Get the number of children
 	CTinyJS *getContext() { return context; }
 	CScriptVarPtr mathsOp(const CScriptVarPtr &b, int op); ///< do a maths op with another script variable
 
@@ -1285,7 +1291,7 @@ public:
 	virtual CScriptVarPtr toObject();
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 
-	uint32_t stringLength() { return data.size(); }
+	size_t stringLength() { return data.size(); }
 	int getChar(uint32_t Idx);
 protected:
 	std::string data;
@@ -1342,6 +1348,7 @@ public:
 			type=tDouble, Double=Value; 
 		return *this; 
 	}
+	CNumber &operator=(uint64_t Value);
 	CNumber &operator=(int64_t Value);
 	CNumber &operator=(double Value);
 	CNumber &operator=(unsigned char Value) { type=tInt32; Int32=Value; return *this; }
@@ -1388,9 +1395,9 @@ public:
 	int sign() const;
 
 	int32_t		toInt32() const { return cast<int32_t>(); }
-	uint32_t		toUInt32() const { return cast<uint32_t>(); }
+	uint32_t	toUInt32() const { return cast<uint32_t>(); }
 	double		toDouble() const;
-	bool			toBoolean() const { return !isZero() && type!=tNaN; }
+	bool		toBoolean() const { return !isZero() && type!=tNaN; }
 	std::string	toString(uint32_t Radix=10) const;
 private:
 	template<typename T> T cast() const { 
@@ -1469,11 +1476,11 @@ private:
 };
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj);
 inline define_newScriptVar_NamedFnc(Number, CTinyJS *Context, const CNumber &Obj) { return new CScriptVarNumber(Context, Obj); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned int Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, unsigned long Obj) { return newScriptVarNumber(Context, CNumber((uint32_t)Obj)); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, long Obj) { return newScriptVarNumber(Context, CNumber((int32_t)Obj)); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int64_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, char Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, uint32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int64_t Obj) { return newScriptVarNumber(Context, CNumber((int32_t)Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, uint64_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, double Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_DEPRECATED_newScriptVar_Fnc(NaN, CTinyJS *Context, NaN_t) { return newScriptVarNumber(Context, CNumber(NaN)); }
 inline define_DEPRECATED_newScriptVar_Fnc(Infinity, CTinyJS *Context, Infinity Obj) { return newScriptVarNumber(Context, CNumber(Obj)); } 
@@ -1657,7 +1664,6 @@ public:
 	bool Sticky() { return flags.find('y')!=std::string::npos; }
 	const std::string &Regexp() { return regexp; }
 	unsigned int LastIndex();
-	void LastIndex(unsigned int Idx);
 
 	static const char *ErrorStr(int Error);
 protected:
@@ -2047,7 +2053,7 @@ private:
 
 public:
 	void *callersStackBase;
-	int callersScopeSize;
+	size_t callersScopeSize;
 	CScriptTokenizer *callersTokenizer;
 	bool callersHaveTry;
 	std::vector<CScriptVarScopePtr> generatorScopes;
@@ -2209,7 +2215,7 @@ public:
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
 	const CScriptVarPtr &constScriptVar(Infinity t)			{ return t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
 	const CScriptVarPtr &constScriptVar(bool Val)			{ return Val?constTrue:constFalse; }
-	const CScriptVarPtr &constScriptVar(NegativeZero_t)	{ return constNegativZero; }
+	const CScriptVarPtr &constScriptVar(NegativeZero_t)		{ return constNegativZero; }
 	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
 
 private:

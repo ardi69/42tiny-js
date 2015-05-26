@@ -260,7 +260,7 @@ bool run_test(const char *filename) {
      return false;
   }
   char *buffer = new char[size+1];
-  long actualRead = fread(buffer,1,size,file);
+  size_t actualRead = fread(buffer,1,size,file);
   buffer[actualRead]=0;
   buffer[size]=0;
   fclose(file);

@@ -47,13 +47,13 @@ SOURCES=  \
 
 OBJECTS=$(SOURCES:.cpp=.o)
 
-all: lib42tiny-js.a run_tests Script
+all:  run_tests Script
 
-run_tests: run_tests.o
+run_tests: lib42tiny-js.a run_tests.o
 	@echo $@
 	@$(CC) $(LDFLAGS) run_tests.o $(LIBS) -o $@
 
-Script: Script.o
+Script: lib42tiny-js.a Script.o
 	@echo $@
 	@$(CC) $(LDFLAGS) Script.o $(LIBS) -o $@
 

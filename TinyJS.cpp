@@ -168,7 +168,7 @@ bool isIDString(const char *s) {
 }
 
 void replace(string &str, char textFrom, const char *textTo) {
-	int sLen = strlen(textTo);
+	size_t sLen = strlen(textTo);
 	size_t p = str.find(textFrom);
 	while (p != string::npos) {
 		str = str.substr(0, p) + textTo + str.substr(p+1);
@@ -185,6 +185,13 @@ string int2string(uint32_t intData) {
 	str << intData;
 	return str.str();
 }
+#if SIZE_MAX != UINT32_MAX
+string int2string(size_t intData) {
+	ostringstream str;
+	str << intData;
+	return str.str();
+}
+#endif
 string float2string(const double &floatData) {
 	ostringstream str;
 	str.unsetf(ios::floatfield);
@@ -196,6 +203,8 @@ string float2string(const double &floatData) {
 	str << floatData;
 	return str.str();
 }
+#define size2int32(size) ((int32_t)(size > INT32_MAX ? INT32_MAX : size))
+
 /// convert the given string into a quoted string suitable for javascript
 string getJSString(const string &str) {
 	char buffer[5] = "\\x00";
@@ -293,6 +302,9 @@ void CScriptLex::match(int expected_tk1, int alternate_tk/*=-1*/) {
 	int line = pos.currentLine;
 	getNextToken();
 	lineBreakBeforeToken = line != pos.currentLine;
+	if(pos.tokenStart-pos.currentLineStart > INT16_MAX) {
+		throw CScriptException(Error, "Maximum line length (of 32767 characters) exhausted", currentFile, pos.currentLine, int32_t(pos.tokenStart-pos.currentLineStart));
+	}
 }
 
 void CScriptLex::getNextCh() {
@@ -998,8 +1010,8 @@ bool CScriptTokenDataObjectLiteral::toDestructuringVar( CScriptTokenDataDestruct
 //////////////////////////////////////////////////////////////////////////
 
 typedef struct { int id; const char *str; bool need_space; } token2str_t;
-static uint32_t reserved_words_min_len = 2;
-static uint32_t reserved_words_max_len = 10;
+static size_t reserved_words_min_len = 2;
+static size_t reserved_words_max_len = 10;
 static token2str_t reserved_words_begin[] ={
 	// reserved words
 	{ LEX_R_IF,					"if",						true  },
@@ -1387,7 +1399,7 @@ const char *CScriptToken::isReservedWord(int Token) {
 	return 0;
 }
 int CScriptToken::isReservedWord(const string &Str) {
-	uint32_t len = Str.length();
+	size_t len = Str.length();
 	if(len >= reserved_words_min_len && len <= reserved_words_max_len) { 
 		const char *str = Str.c_str();
 		if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
@@ -1617,9 +1629,9 @@ void CScriptTokenizer::skip(int Tokens) {
 }
 
 static inline void setTokenSkip(CScriptTokenizer::ScriptTokenState &State) {
-	int tokenBeginIdx = State.Marks.back();
+	size_t tokenBeginIdx = State.Marks.back();
 	State.Marks.pop_back();
-	State.Tokens[tokenBeginIdx].Int() = State.Tokens.size()-tokenBeginIdx;
+	State.Tokens[tokenBeginIdx].Int() = size2int32(State.Tokens.size()-tokenBeginIdx);
 }
 
 enum {
@@ -2470,14 +2482,14 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 				pushToken(State.Tokens, CScriptToken(LEX_ID, label));
 				if(l->tk==':' && canLabel) {
 					if(find(State.Labels.begin(), State.Labels.end(), label) != State.Labels.end()) 
-						throw CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, "dublicate label '"+label+"'", l->currentFile, l->currentLine(), l->currentColumn()-int32_t(label.size()));
 					State.Tokens[State.Tokens.size()-1].token = LEX_T_LABEL; // change LEX_ID to LEX_T_LABEL
 					State.Labels.push_back(label);
 				} else if(label=="this") {
 					if( l->tk == '=' || (l->tk >= LEX_ASSIGNMENTS_BEGIN && l->tk <= LEX_ASSIGNMENTS_END) )
-						throw CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn()-int32_t(label.size()));
 					if( l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS )
-						throw CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-label.size());
+						throw CScriptException(SyntaxError, l->tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn()-int32_t(label.size()));
 				} else
 					State.LeftHand = true;
 			}
@@ -2688,7 +2700,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, int Flags, int op /*= LEX_OROR*/, int op_n /*= LEX_ANDAND*/) {
 	op_n ? tokenizeLogic(State, Flags, op_n, 0) : tokenizeSubExpression(State, Flags);
 	if(l->tk==op) {
-		unsigned int marks_count = State.Marks.size();
+		size_t marks_count = State.Marks.size();
 		while(l->tk==op) {
 			State.Marks.push_back(pushToken(State.Tokens));
 			op_n ? tokenizeLogic(State, Flags, op_n, 0) : tokenizeSubExpression(State, Flags);
@@ -2830,19 +2842,19 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 
 }
 
-int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match, int Alternate) {
+size_t CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, int Match, int Alternate) {
 	if(Match == ';' && l->tk != ';' && (l->lineBreakBeforeToken || l->tk=='}' || l->tk==LEX_EOF))
 		Tokens.push_back(CScriptToken(';')); // inject ';'
 	else
 		Tokens.push_back(CScriptToken(l, Match, Alternate));
 	return Tokens.size()-1;
 }
-int CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token) {
-	int ret = Tokens.size();
+size_t CScriptTokenizer::pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token) {
+	size_t ret = Tokens.size();
 	Tokens.push_back(Token);
 	return ret;
 }
-void CScriptTokenizer::pushForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, vector<int> &Marks) {
+void CScriptTokenizer::pushForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, MARKS_t &Marks) {
 	Marks.push_back(Tokens.size());
 	CScriptToken token(LEX_T_FORWARD);
 	Tokens.push_back(token);
@@ -2864,8 +2876,7 @@ void CScriptTokenizer::removeEmptyForwarder(ScriptTokenState &State)
 	State.Marks.pop_back();
 }
 
-void CScriptTokenizer::removeEmptyForwarder( TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, vector<int> &Marks )
-{
+void CScriptTokenizer::removeEmptyForwarder(TOKEN_VECT &Tokens, FORWARDER_VECTOR_t &Forwarders, MARKS_t &Marks) {
 	CScriptTokenDataForwardsPtr &forwarder = Forwarders.back();
 	forwarder->vars_in_letscope.clear();
 	if(forwarder->empty())
@@ -3306,8 +3317,8 @@ void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t 
 	}
 	CScriptVarStringPtr isStringObj = this->getRawPrimitive();
 	if(isStringObj) {
-		uint32_t length = isStringObj->stringLength();
-		for(uint32_t i=0; i<length; ++i)
+		size_t length = isStringObj->stringLength();
+		for(size_t i=0; i<length; ++i)
 			Keys.insert(int2string(i));
 	}
 	CScriptVarLinkPtr __proto__;
@@ -3704,6 +3715,13 @@ inline bool isNegZero(double d) {
 
 CNumber &CNumber::operator=(int64_t Value) { 
 	if(numeric_limits<int32_t>::min()<=Value && Value<=numeric_limits<int32_t>::max()) 
+		type=tInt32, Int32=int32_t(Value);
+	else 
+		type=tDouble, Double=(double)Value; 
+	return *this; 
+}
+CNumber &CNumber::operator=(uint64_t Value) { 
+	if(Value<=(uint32_t)numeric_limits<int32_t>::max()) 
 		type=tInt32, Int32=int32_t(Value);
 	else 
 		type=tDouble, Double=(double)Value; 
@@ -4461,9 +4479,6 @@ unsigned int CScriptVarRegExp::LastIndex() {
 	if(lastIndex) return lastIndex->toNumber().toInt32();
 	return 0;
 }
-void CScriptVarRegExp::LastIndex(unsigned int Idx) {
-	addChildOrReplace("lastIndex", newScriptVar((int)Idx));
-}
 
 CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/ )
 {
@@ -4471,7 +4486,7 @@ CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/
 	if(IgnoreCase()) flags |= regex_constants::icase;
 	bool global = Global(), sticky = Sticky();
 	unsigned int lastIndex = LastIndex();
-	int offset = 0;
+	size_t offset = 0;
 	if(global || sticky) {
 		if(lastIndex > Input.length()) goto failed; 
 		offset=lastIndex;
@@ -4481,7 +4496,7 @@ CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/
 		if(offset) mflag |= regex_constants::match_prev_avail;
 		smatch match;
 		if(regex_search(Input.begin()+offset, Input.end(), match, regex(regexp, flags), mflag) ) {
-			LastIndex(offset+match.position()+match.str().length());
+			addChildOrReplace("lastIndex", newScriptVar(offset+match.position()+match.str().length()));
 			if(Test) return constScriptVar(true);
 
 			CScriptVarArrayPtr retVar = newScriptVar(Array);
@@ -4494,7 +4509,7 @@ CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/
 	}
 failed:
 	if(global || sticky) 
-		LastIndex(0); 
+		addChildOrReplace("lastIndex", newScriptVar(0)); 
 	if(Test) return constScriptVar(false);
 	return constScriptVar(Null);
 }
@@ -5346,19 +5361,19 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	CScriptVarPtr tmpArgsScope = ScopeControl.addLetScope();
 
 	CScriptResult function_execute;
-	int length_proto = Fnc->arguments.size();
-	int length_arguments = Arguments.size();
-	int length = max(length_proto, length_arguments);
+	size_t length_proto = Fnc->arguments.size();
+	size_t length_arguments = Arguments.size();
+	size_t length = max(length_proto, length_arguments);
 
 	STRING_VECTOR_t arg_names;
-	for(int arguments_idx = 0; arguments_idx<length_proto; ++arguments_idx) {
+	for(size_t arguments_idx = 0; arguments_idx<length_proto; ++arguments_idx) {
 		ASSERT(Fnc->arguments[arguments_idx].token == LEX_T_DESTRUCTURING_VAR);
 		Fnc->arguments[arguments_idx].DestructuringVar().getVarNames(arg_names);
 	}
 	for(STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it)
 		tmpArgsScope->addChildOrReplace(*it, constUndefined);
 
-	for(int arguments_idx = 0; execute && arguments_idx<length; ++arguments_idx) {
+	for(size_t arguments_idx = 0; execute && arguments_idx<length; ++arguments_idx) {
 		string arguments_idx_str = int2string(arguments_idx);
 		CScriptVarLinkWorkPtr value;
 		if(arguments_idx < length_arguments)
@@ -7101,10 +7116,10 @@ void CTinyJS::native_Generator_prototype_next(const CFunctionsScopePtr &c, void 
 	CScriptVarGeneratorPtr Generator(c->getArgument("this"));
 	if(!Generator) {
 		static const char *fnc[] = {"next","send","close","throw"};
-		c->throwError(TypeError, string(fnc[(int)data])+" method called on incompatible Object");
+		c->throwError(TypeError, string(fnc[(ptrdiff_t)data])+" method called on incompatible Object");
 	}
-	if((int)data >=2)
-		Generator->native_throw(c, (void*)(((int)data)-2));
+	if((ptrdiff_t)data >=2)
+		Generator->native_throw(c, (void*)(((ptrdiff_t)data)-2));
 	else
 		Generator->native_send(c, data);
 }
