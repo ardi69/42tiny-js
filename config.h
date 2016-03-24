@@ -195,9 +195,9 @@
 #endif
 
 #if __cplusplus >= 201103L || isCXX0x(4,6) ||  _MSC_VER > 1800 // > Visual Studio 2013
-#	define NOEXPECT noexpect
+#	define NOEXCEPT noexcept
 #else
-#	define NOEXPECT throw()
+#	define NOEXCEPT throw()
 #endif
 
 

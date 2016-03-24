@@ -919,6 +919,7 @@ public:
 	/// ARRAY
 	CScriptVarPtr getArrayIndex(uint32_t idx); ///< The the value at an array index
 	void setArrayIndex(uint32_t idx, const CScriptVarPtr &value); ///< Set the value at an array index
+	std::pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it> CScriptVar::getArrayElements();
 	uint32_t getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
 	
 	//////////////////////////////////////////////////////////////////////////
@@ -1029,6 +1030,8 @@ public:
 	~CScriptVarLink();
 
 	const std::string &getName() const { return name; }
+
+	void reName(const std::string newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array   
 
 	int getFlags() { return flags; }
 	const CScriptVarPtr &getVarPtr() const { return var; }

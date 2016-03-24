@@ -40,6 +40,7 @@
 #include <math.h>
 #include <cstdlib>
 #include <sstream>
+#include <algorithm>
 #include <time.h>
 #include "TinyJS.h"
 
@@ -153,6 +154,55 @@ static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
 		arr->setArrayIndex(l+i, c->getArgument(i));
 }
 
+namespace {
+	class cmp_fnc {
+	public:
+		cmp_fnc(const CFunctionsScopePtr &Scope, CScriptVarFunctionPtr Fnc) : c(Scope), fnc(Fnc) {}
+		bool operator()(CScriptVarLinkPtr a,CScriptVarLinkPtr b) {
+			if(a->getVarPtr()->isUndefined()) {
+				return false;
+			} else if(b->getVarPtr()->isUndefined())
+				return true;
+			else if(fnc) {
+				vector<CScriptVarPtr> arguments;
+				arguments.push_back(a);
+				arguments.push_back(b);
+				return c->getContext()->callFunction(fnc, arguments, c->getContext()->getRoot())->toNumber().toInt32() < 0;
+			}
+			else {
+				return a->toString() < b->toString();
+			}
+		}
+		const CFunctionsScopePtr &c;
+		CScriptVarFunctionPtr fnc;
+	};
+	bool cmp_by_name(const CScriptVarLinkPtr &a, const CScriptVarLinkPtr &b) {
+		return a < b->getName();
+	}
+}
+static void scArraySort(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr arr = c->getArgument("this");
+	CScriptVarFunctionPtr cmp_fnc; 
+	uint32_t len = arr->getArrayLength();
+	if(len > 1) {
+		int args = c->getArgumentsLength();
+		if(args) {
+			cmp_fnc = c->getArgument(0);
+			if(!cmp_fnc) c->throwError(TypeError, "invalid Array.prototype.sort argument");
+		}
+		pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it> arrayElements = arr->getArrayElements();
+		sort(arrayElements.first, arrayElements.second, ::cmp_fnc(c, cmp_fnc));
+		uint32_t idx = 0;
+		for(SCRIPTVAR_CHILDS_it it=arrayElements.first; it != arrayElements.second; ++it, ++idx)
+			(*it)->reName(int2string(idx));
+		sort(arrayElements.first, arrayElements.second, cmp_by_name);
+		if(len > uint32_t(arrayElements.second - arrayElements.first))
+			arr->setArrayIndex(len-1, c->constScriptVar(Undefined));
+	}
+	c->setReturnVar(arr);
+}
+
+
 // ----------------------------------------------- Register Functions
 void registerFunctions(CTinyJS *tinyJS) {
 }
@@ -167,5 +217,6 @@ extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function Array.prototype.remove(obj)", scArrayRemove, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.join(separator)", scArrayJoin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.push()", scArrayPush, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.sort()", scArraySort, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 

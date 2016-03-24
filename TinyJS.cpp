@@ -3391,6 +3391,11 @@ void CScriptVar::setArrayIndex(uint32_t idx, const CScriptVarPtr &value) {
 		addChild(sIdx, value);
 	}
 }
+pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it> CScriptVar::getArrayElements() {
+	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), "0");
+	// array indizes are always sorted at the end;
+	return pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it>(it, Childs.end());
+}
 
 uint32_t CScriptVar::getArrayLength() {
 	if (!isArray() || Childs.size()==0) return 0;
@@ -3752,7 +3757,10 @@ CNumber &CNumber::operator=(const char *str) {
 		parseInt(start, 16, &endptr);
 	else if(*str == '0' && str[1]>='0' && str[1]<='7')
 		parseInt(start, 8, &endptr);
-	else
+	else if(*str == 'I' && strncmp(str, "Infinity", 8) == 0) {
+		type=tInfinity, Int32=*start=='-' ? -1 : 1;
+		endptr = str + 8;
+	} else
 		parseFloat(start, &endptr);
 	while(isWhitespace(*endptr)) endptr++;
 	if(*endptr != '\0')
@@ -5042,6 +5050,7 @@ CTinyJS::CTinyJS() {
 	numberPrototype->addChild(TINYJS_CONSTRUCTOR_VAR, var, SCRIPTVARLINK_BUILDINDEFAULT);
 	numberPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	numberPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
+
 	pseudo_refered.push_back(&numberPrototype);
 	pseudo_refered.push_back(&constNaN);
 	pseudo_refered.push_back(&constInfinityPositive);
@@ -6130,7 +6139,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(CScriptResult &execute) {
 		break;
 	case '~':
 		if(execute_unary_rhs(execute, a)) 
-			a = newScriptVar(~a->getVarPtr()->toNumber(execute));
+			a = newScriptVar(~a->getVarPtr()->toNumber(execute).toInt32());
 		break;
 	case LEX_R_TYPEOF:
 		if(execute_unary_rhs(execute, a)) 
