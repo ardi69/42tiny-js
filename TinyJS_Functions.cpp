@@ -167,7 +167,7 @@ namespace {
 				vector<CScriptVarPtr> arguments;
 				arguments.push_back(a);
 				arguments.push_back(b);
-				return c->getContext()->callFunction(fnc, arguments, c->getContext()->getRoot())->toNumber().toInt32() < 0;
+				return c->getContext()->callFunction(fnc, arguments)->toNumber().toInt32() < 0;
 			}
 			else {
 				return a->toString() < b->toString();

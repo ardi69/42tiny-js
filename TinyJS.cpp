@@ -2091,7 +2091,7 @@ void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, Script
 	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
 		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn);
 	else {
-		tokenizeExpression(functionState, 0);
+		tokenizeAssignment(functionState, 0);
 		functionState.HaveReturnValue = true;
 	}
 	functionState.Tokens.swap(FncData.body);
@@ -5362,8 +5362,13 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	CScriptTokenDataFnc *Fnc = Function->getFunctionData();
 	CScriptVarScopeFncPtr functionRoot(::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
 	if(Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
-	if(!Fnc->isArrowFunction)
-		functionRoot->addChild("this", This);
+	if(!Fnc->isArrowFunction) {
+		// arrow functions get this from closure
+		if(This)
+			functionRoot->addChild("this", This);
+		else
+			functionRoot->addChild("this", root); // if no this given use root
+	}
 	CScriptVarPtr arguments = functionRoot->addChild(TINYJS_ARGUMENTS_VAR, newScriptVar(Object));
 
 	CScopeControl ScopeControl(this);

@@ -2287,7 +2287,7 @@ private:
 
 public:
 	// function call
-	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This=0, CScriptVarPtr *newThis=0);
 	CScriptVarPtr callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 	//////////////////////////////////////////////////////////////////////////
 #ifndef NO_GENERATORS

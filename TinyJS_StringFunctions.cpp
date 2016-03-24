@@ -232,7 +232,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 				ret_str.append(search_begin, match_begin);
 				if(newsubstrVar->isFunction()) {
 					arguments.push_back(c->newScriptVar(string(match_begin, match_end)));
-					newsubstr = c->getContext()->callFunction(newsubstrVar, arguments, c)->toString();
+					newsubstr = c->getContext()->callFunction(newsubstrVar, arguments)->toString();
 					arguments.pop_back();
 				}
 				ret_str.append(newsubstr);
