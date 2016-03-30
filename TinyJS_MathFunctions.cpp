@@ -405,14 +405,13 @@ extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 
 // atan2, ceil, floor, random, round, 
 
-	 Math->addChild("LN2", tinyJS->newScriptVar(k_LN2), SCRIPTVARLINK_READONLY);
-	 Math->addChild("LN10", tinyJS->newScriptVar(k_LN10), SCRIPTVARLINK_READONLY);
-	 Math->addChild("LOG2E", tinyJS->newScriptVar(k_LOG2E), SCRIPTVARLINK_READONLY);
-	 Math->addChild("LOG10E", tinyJS->newScriptVar(k_LOG10E), SCRIPTVARLINK_READONLY);
-	 Math->addChild("SQRT1_2", tinyJS->newScriptVar(k_SQRT1_2), SCRIPTVARLINK_READONLY);
-	 Math->addChild("SQRT2", tinyJS->newScriptVar(k_SQRT2), SCRIPTVARLINK_READONLY);
-	 Math->addChild("PI", tinyJS->newScriptVar(k_PI), SCRIPTVARLINK_READONLY);
-//    tinyJS->addNative("function Math.PI()", scMathPI, 0);
+	 Math->addChild("LN2", tinyJS->newScriptVar(k_LN2), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("LN10", tinyJS->newScriptVar(k_LN10), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("LOG2E", tinyJS->newScriptVar(k_LOG2E), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("LOG10E", tinyJS->newScriptVar(k_LOG10E), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("SQRT1_2", tinyJS->newScriptVar(k_SQRT1_2), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("SQRT2", tinyJS->newScriptVar(k_SQRT2), SCRIPTVARLINK_CONSTANT);
+	 Math->addChild("PI", tinyJS->newScriptVar(k_PI), SCRIPTVARLINK_CONSTANT);
 	 tinyJS->addNative("function Math.toDegrees(a)", scMathToDegrees, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.toRadians(a)", scMathToRadians, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	 tinyJS->addNative("function Math.sin(a)", scMathSin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
