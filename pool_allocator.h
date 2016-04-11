@@ -54,35 +54,8 @@
 #	define DEBUG_POOL_ALLOCATOR
 #endif
 
-struct block_head;
-class __fixed_size_allocator {
-public:
-	~__fixed_size_allocator();
-	static void *alloc(size_t,const char* for_class=0);
-	static void free(void *, size_t);
-	size_t objectSize() { return object_size; }
-private:
-	__fixed_size_allocator(size_t num_objects, size_t object_size, const char* for_class); 
-	__fixed_size_allocator(const __fixed_size_allocator&);
-	__fixed_size_allocator& operator=(const __fixed_size_allocator&);
-	void *_alloc(size_t);
-	bool _free(void* p, size_t);
-	size_t num_objects;
-	size_t object_size;
-	void *head_of_free_list;
-	block_head *head;
-	int refs;
-#ifdef DEBUG_POOL_ALLOCATOR
-	// Debug
-	std::string name;
-	int allocs;
-	int frees;
-	int current;
-	int max;
-	int blocks;
-#endif
-};
 //**************************************************************************************
+
 namespace fixed_size_allocator {
 #ifdef DEBUG_POOL_ALLOCATOR
 	void *alloc(size_t size, const char* for_class);

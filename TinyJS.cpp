@@ -71,17 +71,6 @@
 
 using namespace std;
 
-namespace {
-	class CTOR_HELPER {
-	public:
-		CTOR_HELPER(void(*fnc)(void)) {
-			fnc();
-		}
-		void check() {};
-	};
-}
-
-
 
 // ----------------------------------------------------------------------------------- 
 //////////////////////////////////////////////////////////////////////////
@@ -5813,7 +5802,7 @@ CScriptVarPtr CTinyJS::generator_yield(CScriptResult &execute, CScriptVar *Yield
 
 		// re-throw
 		throw;
-	} 
+	}
 	// push current Generator
 	generatorStack.push_back(Generator);
 

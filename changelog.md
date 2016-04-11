@@ -8,3 +8,11 @@ Version 0.1.0 (2016-04-11 16:52:59)
 * some speed-optimation
 * Array stuff changed (length is no more a getter)
 * many other changes
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.1 (2016-04-11 18:00:23)
+===================================
+
+* cleanup & fix pool_allocator
