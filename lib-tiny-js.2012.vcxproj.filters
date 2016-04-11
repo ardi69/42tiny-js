@@ -62,5 +62,8 @@
     <ClInclude Include="TinyJS_Threading.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="test.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -39,11 +39,20 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
+
+#define TINY_JS_VERSION 0.1.0
+
 #include <string>
 #include <vector>
 #include <map>
 #include <set>
-#include <stdint.h> // <cstdint> is C++11
+#if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || _MSC_VER >= 1700 // Visual Studio 2012
+#	include <cstdint>
+#else
+#	define __STDC_LIMIT_MACROS
+#	include <stdint.h> // <cstdint> is C++11
+#endif
+#include <climits>
 #include <cstring>
 #include <cassert>
 #include <ctime>
@@ -68,10 +77,13 @@
 #		define new DEBUG_NEW
 #	endif
 #	define DEPRECATED(_Text) __declspec(deprecated(_Text))
+#	define ATTRIBUTE_USED
 #elif defined(__GNUC__)
 #	define DEPRECATED(_Text) __attribute__ ((deprecated))
+#	define ATTRIBUTE_USED __attribute__((used))
 #else
 #	define DEPRECATED(_Text)
+#	define ATTRIBUTE_USED
 #endif
 
 #ifndef ASSERT
@@ -774,12 +786,19 @@ typedef void (*JSCallback)(const CFunctionsScopePtr &var, void *userdata);
 class CTinyJS;
 class CScriptResult;
 
+enum IteratorMode {
+	RETURN_KEY = 1,
+	RETURN_VALUE = 2,
+	RETURN_ARRAY = 3
+};
+
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVar
 //////////////////////////////////////////////////////////////////////////
 
 typedef	std::vector<class CScriptVarLinkPtr> SCRIPTVAR_CHILDS_t;
 typedef	SCRIPTVAR_CHILDS_t::iterator SCRIPTVAR_CHILDS_it;
+typedef	SCRIPTVAR_CHILDS_t::reverse_iterator SCRIPTVAR_CHILDS_rit;
 typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
 
 class CScriptVar : public fixed_size_object<CScriptVar> {
@@ -857,21 +876,25 @@ public:
 	double getDouble();
 	std::string getString();
 #endif
+	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value);
+
+
 	virtual CScriptTokenDataFnc *getFunctionData(); ///< { return 0; }
 	
 	virtual CScriptVarPtr toObject()=0;
 
-	CScriptVarPtr toIterator(int Mode=3);
-	CScriptVarPtr toIterator(CScriptResult &execute, int Mode=3);
-
+	CScriptVarPtr toIterator(IteratorMode Mode=RETURN_ARRAY);
+	CScriptVarPtr toIterator(CScriptResult &execute, IteratorMode Mode=RETURN_ARRAY);
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, bool &hasRecursion); ///< get Data as a parsable javascript string
-#define getParsableStringRecursionsCheck() do{		\
+#define getParsableStringRecursionsCheckBegin() do{		\
 		if(uniqueID) { \
 			if(uniqueID==getTemporaryMark()) { hasRecursion=true; return "recursion"; } \
 			setTemporaryMark(uniqueID); \
 		} \
 	} while(0)
+#define getParsableStringRecursionsCheckEnd() setTemporaryMark(0)
+
 
 	std::string getParsableString(); ///< get Data as a parsable javascript string
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); ///< get Data as a parsable javascript string
@@ -911,17 +934,27 @@ public:
 	void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
 	/// add & remove
 	CScriptVarLinkPtr addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
+	CScriptVarLinkPtr addChild(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChild(int2string(childName), child, linkFlags); }
 	CScriptVarLinkPtr DEPRECATED("addChildNoDup is deprecated use addChildOrReplace instead!") addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
 	CScriptVarLinkPtr addChildOrReplace(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
+	CScriptVarLinkPtr addChildOrReplace(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChildOrReplace(int2string(childName), child, linkFlags); }
 	bool removeLink(CScriptVarLinkPtr &link); ///< Remove a specific link (this is faster than finding via a child)
+	bool removeChild(const std::string &childName); ///< Remove a specific child
 	virtual void removeAllChildren();
 
+	/// useful for native functions
+	CScriptVarPtr getProperty(const std::string &name);
+	CScriptVarPtr getProperty(uint32_t idx);
+	void setProperty(const std::string &name, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false);
+	void setProperty(uint32_t idx, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false);
+	virtual uint32_t getLength(); ///< get the value of the "length"-property if it in the range of 0 to 32^2-1 otherwise returns 0 
+
+
 	/// ARRAY
-	CScriptVarPtr getArrayIndex(uint32_t idx); ///< The the value at an array index
-	void setArrayIndex(uint32_t idx, const CScriptVarPtr &value); ///< Set the value at an array index
-	std::pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it> CScriptVar::getArrayElements();
-	uint32_t getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
-	
+	CScriptVarPtr DEPRECATED("getArrayIndex is deprecated use getProperty instead!") getArrayIndex(uint32_t idx); ///< The the value at an array index
+	void DEPRECATED("setArrayIndex is deprecated use setProperty instead!") setArrayIndex(uint32_t idx, const CScriptVarPtr &value); ///< Set the value at an array index
+	uint32_t DEPRECATED("getArrayLength is deprecated use getLength instead!") getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
+
 	//////////////////////////////////////////////////////////////////////////
 	size_t getChildren() { return Childs.size(); } ///< Get the number of children
 	CTinyJS *getContext() { return context; }
@@ -984,6 +1017,11 @@ public:
 		} 
 		return *this; 
 	}
+#if HAVE_CXX11_RVALUE_REFERENCE
+	// move
+	CScriptVarPtr(CScriptVarPtr &&Other) : var(Other.var) { Other.var=0; } 
+	CScriptVarPtr& operator=(CScriptVarPtr &&Other) { if(var) var->unref(); var = Other.var; Other.var=0; return *this; }
+#endif
 	// deconstruct 
 	~CScriptVarPtr() { if(var) var->unref(); } 
 
@@ -1117,6 +1155,12 @@ public:
 		return *this; 
 	}
 
+#if HAVE_CXX11_RVALUE_REFERENCE
+	// move
+	CScriptVarLinkPtr(CScriptVarLinkPtr &&Other) : link(Other.link) { Other.link = 0; } 
+	CScriptVarLinkPtr &operator=(CScriptVarLinkPtr &&Other) { if(link) link->unref(); link = Other.link; Other.link = 0; return *this; }
+#endif
+
 	// getter & setter
 	CScriptVarLinkWorkPtr getter();
 	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
@@ -1159,6 +1203,15 @@ public:
 	CScriptVarLinkWorkPtr(const CScriptVarLinkWorkPtr &Copy) : CScriptVarLinkPtr(Copy), referencedOwner(Copy.referencedOwner) {} 
 	CScriptVarLinkWorkPtr &operator=(const CScriptVarLinkWorkPtr &Copy) { CScriptVarLinkPtr::operator=(Copy); referencedOwner = Copy.referencedOwner; return *this; } 
 
+#if HAVE_CXX11_RVALUE_REFERENCE
+	// move
+	CScriptVarLinkWorkPtr(CScriptVarLinkWorkPtr &&Other) : CScriptVarLinkPtr(std::move(Other)), referencedOwner(std::move(Other.referencedOwner)) {} 
+	CScriptVarLinkWorkPtr &operator=(CScriptVarLinkWorkPtr &&Other) { CScriptVarLinkPtr::operator=(std::move(Other)); referencedOwner = std::move(Other.referencedOwner); return *this; } 
+#endif
+	// assign
+	void assign(CScriptVarPtr rhs, bool ignoreReadOnly=false, bool ignoreNotOwned=false, bool ignoreNotExtensible=false);
+
+
 	// getter & setter
 	CScriptVarLinkWorkPtr getter();
 	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
@@ -1179,6 +1232,10 @@ private:
 	CScriptVarPtr referencedOwner;
 };
 
+inline CScriptVarLinkWorkPtr CScriptVarLinkPtr::getter() { return CScriptVarLinkWorkPtr(*this).getter(); }
+inline CScriptVarLinkWorkPtr CScriptVarLinkPtr::getter( CScriptResult &execute ) { return CScriptVarLinkWorkPtr(*this).getter(execute); }
+inline CScriptVarLinkWorkPtr CScriptVarLinkPtr::setter( const CScriptVarPtr &Var ) { return CScriptVarLinkWorkPtr(*this).setter(Var); }
+inline CScriptVarLinkWorkPtr CScriptVarLinkPtr::setter( CScriptResult &execute, const CScriptVarPtr &Var ) { return CScriptVarLinkWorkPtr(*this).setter(execute, Var); }
 
 //////////////////////////////////////////////////////////////////////////
 #define define_dummy_t(t1) struct t1##_t{}; extern t1##_t t1
@@ -1294,7 +1351,8 @@ public:
 	virtual CScriptVarPtr toObject();
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 
-	size_t stringLength() { return data.size(); }
+	size_t DEPRECATED("stringLength is deprecated use getLength instead!") stringLength() { return data.size(); }
+	virtual uint32_t getLength();
 	int getChar(uint32_t Idx);
 protected:
 	std::string data;
@@ -1380,13 +1438,14 @@ public:
 	CNumber ushift(const CNumber &Value, bool right=true) const;
 
 	CNumber binary(const CNumber &Value, char Mode) const;
-
+	CNumber clamp(const CNumber &min, const CNumber &max) const;
 
 	int less(const CNumber &Value) const;
 	bool equal(const CNumber &Value) const;
 
 
 	bool isInt32() const { return type == tInt32; }
+	bool isUInt32() const { return (type == tInt32 && Int32 >= 0) || (type == tDouble && Double <= std::numeric_limits<uint32_t>::max()) || (type == tnNULL); }
 	bool isDouble() const { return type == tDouble; }
 
 	bool isNaN() const { return type == tNaN; }
@@ -1625,7 +1684,7 @@ define_ScriptVarPtr_Type(Array);
 class CScriptVarArray : public CScriptVarObject {
 protected:
 	CScriptVarArray(CTinyJS *Context);
-	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion) {} ///< Copy protected -> use clone for public
+	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion), length(Copy.length) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarArray();
 	virtual CScriptVarPtr clone();
@@ -1634,11 +1693,17 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
 
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value);
 
-	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
+	uint32_t getLength();
+	CScriptVarPtr getArrayElement(uint32_t idx);
+	void setArrayElement(uint32_t idx, const CScriptVarPtr &value);
 private:
-	void native_Length(const CFunctionsScopePtr &c, void *data);
+	void native_getLength(const CFunctionsScopePtr &c, void *data);
+	void native_setLength(const CFunctionsScopePtr &c, void *data);
 	bool toStringRecursion;
+	uint32_t length;
+	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 };
 inline define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t) { return new CScriptVarArray(Context); } 
 
@@ -1907,9 +1972,25 @@ public:
 	CScriptVarPtr getArgument(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
 	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
 	DEPRECATED("getParameterLength is deprecated use getArgumentsLength instead") int getParameterLength(); ///< If this is a function, get the count of parameters
-	int getArgumentsLength(); ///< If this is a function, get the count of parameters
+	uint32_t getArgumentsLength(); ///< If this is a function, get the count of parameters
 
 	void throwError(ERROR_TYPES ErrorType, const std::string &message);
+	void throwError(ERROR_TYPES ErrorType, const char *message);
+
+	void assign(CScriptVarLinkWorkPtr &lhs, CScriptVarPtr rhs, bool ignoreReadOnly=false, bool ignoreNotOwned=false, bool ignoreNotExtensible=false);
+	CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, const std::string &name) { return Objc->findChildWithPrototypeChain(name); }
+	CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, uint32_t idx)  { return Objc->findChildWithPrototypeChain(int2string(idx)); }
+	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, const std::string &name) { return getProperty(Objc, name).getter(); } // short for getProperty().getter()
+	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, uint32_t idx) { return getProperty(Objc, idx).getter(); } // short for getProperty().getter()
+	uint32_t getLength(const CScriptVarPtr &Objc) { return Objc->getLength(); }
+	void setProperty(const CScriptVarPtr &Objc, const std::string &name, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
+		CScriptVarLinkWorkPtr property = getProperty(Objc, name);
+		setProperty(property, value, ignoreReadOnly, ignoreNotExtensible);
+	}
+	void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) { 
+		setProperty(Objc, int2string(idx), value, ignoreReadOnly, ignoreNotExtensible); 
+	}
+	void setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVarPtr &rhs, bool ignoreReadOnly=false, bool ignoreNotExtensible=false, bool ignoreNotOwned=false);
 
 protected:
 	CScriptVarLinkPtr closure;
@@ -1973,7 +2054,7 @@ define_ScriptVarPtr_Type(DefaultIterator);
 
 class CScriptVarDefaultIterator : public CScriptVarObject {
 protected:
-	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, int Mode);
+	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode);
 	CScriptVarDefaultIterator(const CScriptVarDefaultIterator &Copy) 
 		: 
 		CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
@@ -1985,14 +2066,14 @@ public:
 
 	void native_next(const CFunctionsScopePtr &c, void *data);
 private:
-	int mode;
+	IteratorMode mode;
 	CScriptVarPtr object;
 	STRING_SET_t keys;
 	STRING_SET_it pos;
-	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, int);
+	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, IteratorMode);
 
 };
-inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, int Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
+inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
 
 
 ////////////////////////////////////////////////////////////////////////// 
@@ -2088,7 +2169,7 @@ public:
 		noncatchableThrow,
 		noExecute
 	};
-	CScriptResult() : type(Normal), throw_at_line(-1), throw_at_column(-1) {}
+	CScriptResult() : type(Normal), throw_at_line(-1), throw_at_column(-1), strictMode(false) {}
 //	CScriptResult(TYPE Type) : type(Type), throw_at_line(-1), throw_at_column(-1) {}
 //		~RESULT() { if(type==Throw) throw value; }
 	bool isNormal() { return type==Normal; }
@@ -2099,6 +2180,7 @@ public:
 	bool isReturnNormal() { return type==Return || type==Normal; }
 	bool isThrow() { return type==Throw; }
 
+	bool useStrict() { return strictMode; }
 
 	operator bool() const { return type==Normal; }
 	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.clear(), target.clear(); }
@@ -2116,7 +2198,7 @@ public:
 	std::string throw_at_file;
 	int throw_at_line;
 	int throw_at_column;
-
+	bool strictMode;
 };
 
 

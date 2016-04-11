@@ -40,6 +40,7 @@
 #	else
 #		if defined(_WIN32) && !defined(HAVE_PTHREAD)
 #			include <windows.h>
+#			include <process.h>
 #		else
 #			include <pthread.h>
 #			ifndef HAVE_PTHREAD
@@ -58,31 +59,27 @@
 
 #ifndef HAVE_PTHREAD
 // simple mutex 4 windows
-//#	define pthread_mutex_t HANDLE
-//#	define pthread_mutex_init(m, a)	*(m) = CreateMutex(NULL, false, NULL)
-//#	define pthread_mutex_destroy(m)	CloseHandle(*(m));
-//#	define pthread_mutex_lock(m)		WaitForSingleObject(*(m), INFINITE);
-//#	define pthread_mutex_unlock(m)	ReleaseMutex(*(m));
 #	define pthread_mutex_t CRITICAL_SECTION
-#	define pthread_mutex_init(m, a)	{ InitializeCriticalSection(m); 0; }
+#	define pthread_mutex_init(m, a)	(InitializeCriticalSection(m), 0)
 #	define pthread_mutex_destroy(m)	do {} while(0)
 #	define pthread_mutex_lock(m)		EnterCriticalSection(m)
 #	define pthread_mutex_unlock(m)	LeaveCriticalSection(m)
 
 #endif
+CScriptMutex::CScriptMutex_t::~CScriptMutex_t() {}
 
 class CScriptMutex_impl : public CScriptMutex::CScriptMutex_t {
 public:
 	CScriptMutex_impl() {
 		pthread_mutex_init(&mutex, NULL);
 	}
-	~CScriptMutex_impl() {
+	virtual ~CScriptMutex_impl() {
 		pthread_mutex_destroy(&mutex);
 	}
-	void lock() {
+	virtual void lock() {
 		pthread_mutex_lock(&mutex);
 	}
-	void unlock() {
+	virtual void unlock() {
 		pthread_mutex_unlock(&mutex);
 	}
 	void *getRealMutex() { return &mutex; }
@@ -108,11 +105,44 @@ CScriptMutex::~CScriptMutex() {
 
 #ifndef HAVE_PTHREAD
 // simple conditional Variable 4 windows
-#	define pthread_cond_t CONDITION_VARIABLE
-#	define pthread_cond_init(c, a) InitializeConditionVariable(c)
+
+class condition_variable_impl
+{
+public:
+	condition_variable_impl() : mNumWaiters(0), mSemaphore(CreateEvent(NULL, FALSE, FALSE, NULL)), mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL)) {}
+	~condition_variable_impl() { CloseHandle(mSemaphore); CloseHandle(mWakeEvent); }
+	void wait(pthread_mutex_t* lock)
+	{
+		{
+			CScriptUniqueLock<CScriptMutex> lock(mMutex);
+			mNumWaiters++;
+		}
+		pthread_mutex_unlock(lock);
+		WaitForSingleObject(mSemaphore, INFINITE);
+		mNumWaiters--;
+		SetEvent(mWakeEvent);
+		pthread_mutex_lock(lock);
+	}
+	void notify_one()
+	{
+		CScriptUniqueLock<CScriptMutex> lock(mMutex);
+		if (!mNumWaiters) return;
+		SetEvent(mSemaphore);
+		WaitForSingleObject(mWakeEvent, INFINITE);
+	}
+private:
+	CScriptMutex mMutex;
+	volatile int mNumWaiters;
+	HANDLE mSemaphore;
+	HANDLE mWakeEvent;
+};
+
+
+#	define pthread_cond_t condition_variable_impl
+#	define pthread_cond_init(c, a) do {} while(0)
 #	define pthread_cond_destroy(c) do {} while(0)
-#	define pthread_cond_wait(c, m) SleepConditionVariableCS(c, m, INFINITE)
-#	define pthread_cond_signal(c) WakeConditionVariable(c);
+#	define pthread_cond_wait(c, m) (c)->wait(m)
+#	define pthread_cond_signal(c) (c)->notify_one()
 #endif
 
 class CScriptCondVar_impl : public CScriptCondVar::CScriptCondVar_t {
@@ -120,19 +150,20 @@ public:
 	CScriptCondVar_impl(CScriptCondVar *_this) : This(_this) {
 		pthread_cond_init(&cond, NULL);
 	}
-	~CScriptCondVar_impl() {
+	virtual ~CScriptCondVar_impl() {
 		pthread_cond_destroy(&cond);
 	}
 	CScriptCondVar *This;
-	void notify_one() {
+	virtual void notify_one() {
 		pthread_cond_signal(&cond);
 	}
-	void wait(CScriptUniqueLock &Lock) {
-		pthread_cond_wait(&cond, (pthread_mutex_t *)Lock.mutex->getRealMutex());
+	virtual void wait(CScriptUniqueLock<CScriptMutex> &Lock) {
+		pthread_cond_wait(&cond, (pthread_mutex_t *)Lock.mutex.getRealMutex());
 	}
 	pthread_cond_t cond;
 };
 
+CScriptCondVar::CScriptCondVar_t::~CScriptCondVar_t() {}
 CScriptCondVar::CScriptCondVar() {
 	condVar = new CScriptCondVar_impl(this);
 }
@@ -156,6 +187,7 @@ CScriptCondVar::~CScriptCondVar() {
 #	define pthread_t std::thread
 #	define pthread_create(t, attr, fnc, a) *(t) = std::thread(fnc, this);
 #	define pthread_join(t, v) t.join();
+#	define sched_yield std::thread::yield
 #elif !defined(HAVE_PTHREAD)
 // simple pthreads 4 windows
 #	define pthread_attr_t SIZE_T
@@ -166,13 +198,18 @@ CScriptCondVar::~CScriptCondVar() {
 #	define pthread_t HANDLE
 #	define pthread_create(t, attr, fnc, a) *(t) = CreateThread(NULL, attr ? *((pthread_attr_t*)attr) : 0, (LPTHREAD_START_ROUTINE)fnc, a, 0, NULL)
 #	define pthread_join(t, v) WaitForSingleObject(t, INFINITE), GetExitCodeThread(t,(LPDWORD)v), CloseHandle(t)
+#	define sched_yield() Sleep(0)
 #endif
 
 class CScriptThread_impl : public CScriptThread::CScriptThread_t {
 public:
-	CScriptThread_impl(CScriptThread *_this) : retvar((void*)-1), activ(false), running(false), started(false), This(_this) {}
-	~CScriptThread_impl() {}
-	void Run() {
+	CScriptThread_impl(CScriptThread *_this) : retvar((void*)-1), activ(false), running(false), started(false), This(_this) {
+
+	}
+	virtual ~CScriptThread_impl() {
+
+	}
+	virtual void Run() {
 		if(started) return;
 		activ = true;
 //		pthread_attr_t attribute;
@@ -182,18 +219,18 @@ public:
 //		pthread_attr_destroy(&attribute);
 		while(!started);
 	}
-	int Stop(bool Wait) {
-		if(!running) return started ? retValue() : -1;
+	virtual int Stop(bool Wait) {
 		activ = false;
-		if(Wait) {
+		if(Wait && started) {
 			pthread_join(thread, &retvar);
+			return retValue();
 		}
-		return (int32_t)((ptrdiff_t)retvar);
+		return -1;
 	}
-	int retValue() { return (int32_t)((ptrdiff_t)retvar); }
-	bool isActiv() { return activ; }
-	bool isRunning() { return running; }
-	bool isStarted() { return started; }
+	virtual int retValue() { return (int)((ptrdiff_t)retvar); }
+	virtual bool isActiv() { return activ; }
+	virtual bool isRunning() { return running; }
+	virtual bool isStarted() { return started; }
 	static void *ThreadFnc(CScriptThread_impl *This) {
 		This->running = This->started = true;
 		This->retvar = (void*)((ptrdiff_t)This->This->ThreadFnc());
@@ -217,33 +254,35 @@ CScriptThread::~CScriptThread() {
 }
 void CScriptThread::ThreadFncFinished() {}
 
+void CScriptThread::yield() {
+	sched_yield();
+}
+
 CScriptCoroutine::StopIteration_t CScriptCoroutine::StopIteration;
 
 bool CScriptCoroutine::next()
 {
+	CScriptUniqueLock<CScriptMutex> lock(mutex);
 	if(!isStarted()) {
 		Run();
-		wake_main.wait();
+		if(mainNotifies-- == 0) mainCondVar.wait(lock);
 	} else if(isRunning()) {
-		wake_thread.post();
-		wake_main.wait();
+		++coroutineNotifies;
+		coroutineCondVar.notify_one();
+		if(mainNotifies-- == 0) mainCondVar.wait(lock);
 	} else
 		return false;
 	if(!isRunning()) return false;
 	return true;
 }
 bool CScriptCoroutine::yield_no_throw() {
-	wake_main.post();
-	wake_thread.wait();
+	CScriptUniqueLock<CScriptMutex> lock(mutex);
+	++mainNotifies;
+	mainCondVar.notify_one();
+	if(coroutineNotifies-- == 0) coroutineCondVar.wait(lock);
 	return isActiv();
 }
-void CScriptCoroutine::yield() {
-	wake_main.post();
-	wake_thread.wait();
-	if(!isActiv()) {
-		throw StopIteration;
-	}
-}
+
 int CScriptCoroutine::ThreadFnc() {
 	int ret=-1;
 	try {
@@ -260,7 +299,8 @@ int CScriptCoroutine::ThreadFnc() {
 	return ret;
 }
 void CScriptCoroutine::ThreadFncFinished() {
-	wake_main.post();
+	++mainNotifies;
+	mainCondVar.notify_one();
 }
 
 

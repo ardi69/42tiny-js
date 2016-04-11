@@ -363,17 +363,17 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 	CScriptVarPtr limit_var = c->getArgument("limit");
 	int limit = limit_var->isUndefined() ? 0x7fffffff : limit_var->toNumber().toInt32();
 
-	CScriptVarPtr result(newScriptVar(c->getContext(), Array));
+	CScriptVarPtr result(c->newScriptVar(Array));
 	c->setReturnVar(result);
 	if(limit == 0)
 		return;
 	else if(!str.size() || sep_var->isUndefined()) {
-		result->setArrayIndex(0, c->newScriptVar(str));
+		result->addChild("0", c->newScriptVar(str));
 		return;
 	}
 	if(seperator.size() == 0) {
 		for(int i=0; i<min((int)str.size(), limit); ++i)
-			result->setArrayIndex(i, c->newScriptVar(str.substr(i,1)));
+			result->addChild(i, c->newScriptVar(str.substr(i,1)));
 		return;
 	}
 	int length = 0;
@@ -395,21 +395,21 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 			found = string_search(str, search_begin, seperator, ignoreCase, sticky, match_begin, match_end);
 		string f;
 		if(found) {
-			result->setArrayIndex(length++, c->newScriptVar(string(search_begin, match_begin)));
+			result->addChild(length++, c->newScriptVar(string(search_begin, match_begin)));
 			if(length>=limit) break;
 #ifndef NO_REGEXP
 			for(uint32_t i=1; i<match.size(); i++) {
 				if(match[i].matched) 
-					result->setArrayIndex(length++, c->newScriptVar(string(match[i].first, match[i].second)));
+					result->addChild(length++, c->newScriptVar(string(match[i].first, match[i].second)));
 				else
-					result->setArrayIndex(length++, c->constScriptVar(Undefined));
+					result->addChild(length++, c->constScriptVar(Undefined));
 				if(length>=limit) break;
 			}
 			if(length>=limit) break;
 #endif
 			search_begin = match_end;
 		} else {
-			result->setArrayIndex(length++, c->newScriptVar(string(search_begin,str.end())));
+			result->addChild(length++, c->newScriptVar(string(search_begin,str.end())));
 			if(length>=limit) break;
 		}
 	}

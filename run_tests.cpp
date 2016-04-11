@@ -56,6 +56,9 @@
 
 #ifdef _WIN32
 #include <process.h>
+#ifndef _MSC_VER
+#	include <debugapi.h>
+#endif
 #endif
 
 #include "TinyJS.h"
@@ -74,7 +77,9 @@
 //#define INSANE_MEMORY_DEBUG
 
 
-
+#ifndef WITH_TIME_LOGGER
+#define WITH_TIME_LOGGER
+#endif
 #include "time_logger.h"
 
 #ifdef INSANE_MEMORY_DEBUG
@@ -242,7 +247,7 @@ void js_print(const CFunctionsScopePtr &v, void *) {
 }
 bool run_test(const char *filename) {
   printf("TEST %s ", filename);
-#ifdef _WIN32
+#ifdef _MSC_VER
   char out[256];
   sprintf_s(out, "TEST %s \n", filename);
   OutputDebugString(out);

@@ -61,9 +61,10 @@ using namespace std;
 #define F_SGN(a)            ((a)>0 ? 1 : ((a)<0 ? -1 : 0 ))
 #define F_RNG(a,min,max)    ((a)<(min) ? min : ((a)>(max) ? max : a ))
  
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && _MSC_VER <= 1700
 namespace
 {
+
 	double asinh( const double &value ) {
 		double returned;
 

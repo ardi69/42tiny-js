@@ -144,8 +144,13 @@
  * on Windows the function "GetSystemTimeAsFileTime" is used
  * on non-Windows (WIN32 is not defined) it is tried to use "gettimeofday"
  * unset HAVE_GETTIMEOFDAY to use a simple time()*1000 
+ * or define NO_GETTIMEOFDAY
  */ 
 #define HAVE_GETTIMEOFDAY
+//#define NO_GETTIMEOFDAY
+#ifdef NO_GETTIMEOFDAY
+#undef HAVE_GETTIMEOFDAY
+#endif
 
 
 ////////////////////////////////////////////////
@@ -224,5 +229,6 @@
 ***********************************************************************\n")
 #endif
 
+#undef HAVE_CXX_THREADS
 
 #endif // _42TinyJS_config_h__

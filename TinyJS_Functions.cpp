@@ -85,10 +85,10 @@ static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument("obj");
 	CScriptVarPtr arr = c->getArgument("this");
 
-	int l = arr->getArrayLength();
+	uint32_t l = arr->getLength();
 	CScriptVarPtr equal = c->constScriptVar(Undefined);
-	for (int i=0;i<l;i++) {
-		equal = obj->mathsOp(arr->getArrayIndex(i), LEX_EQUAL);
+	for (uint32_t i=0;i<l;i++) {
+		equal = obj->mathsOp(arr->getProperty(i), LEX_EQUAL);
 		if(equal->toBoolean()) {
 			c->setReturnVar(c->constScriptVar(true));
 			return;
@@ -100,35 +100,15 @@ static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
 static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument("obj");
 	CScriptVarPtr arr = c->getArgument("this");
-	int i;
-	vector<int> removedIndices;
-
-	int l = arr->getArrayLength();
-	CScriptVarPtr equal = c->constScriptVar(Undefined);
-	for (i=0;i<l;i++) {
-		equal = obj->mathsOp(arr->getArrayIndex(i), LEX_EQUAL);
-		if(equal->toBoolean()) {
-			removedIndices.push_back(i);
+	uint32_t l = arr->getLength();
+	uint32_t offset = 0;
+	for(SCRIPTVAR_CHILDS_it it= lower_bound(arr->Childs.begin(), arr->Childs.end(), "0"); it != arr->Childs.end(); ++it) {
+		while(it != arr->Childs.end() && obj->mathsOp(it->getter(), LEX_EQUAL)->toBoolean()) {
+			it = arr->Childs.erase(it);
+			offset++;
 		}
-	}
-	if(removedIndices.size()) {
-		vector<int>::iterator remove_it = removedIndices.begin();
-		int next_remove = *remove_it;
-		int next_insert = *remove_it++;
-		for (i=next_remove;i<l;i++) {
-
-			CScriptVarLinkPtr link = arr->findChild(int2string(i));
-			if(i == next_remove) {
-				if(link) arr->removeLink(link);
-				if(remove_it != removedIndices.end())
-					next_remove = *remove_it++;
-			} else {
-				if(link) {
-					arr->setArrayIndex(next_insert++, link);
-					arr->removeLink(link);
-				}	
-			}
-		}
+		if(offset && it != arr->Childs.end())
+			(*it)->reName(int2string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
 	}
 }
 
@@ -137,21 +117,46 @@ static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
 
 	ostringstream sstr;
-	int l = arr->getArrayLength();
-	for (int i=0;i<l;i++) {
+	uint32_t l = arr->getLength();
+	for (uint32_t i=0;i<l;i++) {
 		if (i>0) sstr << sep;
-		sstr << arr->getArrayIndex(i)->toString();
+		sstr << arr->getProperty(i)->toString();
 	}
 
 	c->setReturnVar(c->newScriptVar(sstr.str()));
 }
 
+static void scArrayFill(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr arr = c->getArgument("this");
+	uint32_t len = c->getLength(arr);
+	CNumber startNumber=0, endNumber=len;
+	CScriptVarPtr value = c->getArgument(0);
+	CScriptVarPtr startVar = c->getArgument(1);
+	CScriptVarPtr endVar = c->getArgument(2);
+	c->setReturnVar(arr);
+	if(!startVar->isUndefined()) startNumber = startVar->toNumber();
+	if(!endVar->isUndefined()) endNumber = endVar->toNumber();
+	uint32_t start = (startNumber.sign()<0 ? startNumber+len : startNumber).clamp(0, len).toUInt32();
+	uint32_t end = (endNumber.sign()<0 ? endNumber+len : endNumber).clamp(0, len).toUInt32();
+	for(; start < end; ++start) c->setProperty(arr, start, value);
+}
+
+static void scArrayPop(const CFunctionsScopePtr &c, void *data) {
+	CScriptVarPtr arr = c->getArgument("this");
+	uint32_t len = c->getLength(arr);
+	if(len) {
+		c->setReturnVar(c->getPropertyValue(arr, len-1));
+		arr->removeChild(int2string(len-1));
+	} else
+		c->setReturnVar(c->constScriptVar(Undefined));
+}
+
 static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
-	int l = arr->getArrayLength();
-	int args = c->getArgumentsLength();
-	for (int i=0;i<args;i++)
-		arr->setArrayIndex(l+i, c->getArgument(i));
+	uint32_t len = c->getLength(arr);
+	uint32_t args = c->getArgumentsLength();
+	for (uint32_t i=0; i<args; ++i)
+		c->setProperty(arr, i, c->getArgument(i));
 }
 
 namespace {
@@ -183,21 +188,31 @@ namespace {
 static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
 	CScriptVarFunctionPtr cmp_fnc; 
-	uint32_t len = arr->getArrayLength();
+	uint32_t len = arr->getLength();
 	if(len > 1) {
 		int args = c->getArgumentsLength();
 		if(args) {
 			cmp_fnc = c->getArgument(0);
 			if(!cmp_fnc) c->throwError(TypeError, "invalid Array.prototype.sort argument");
 		}
-		pair<SCRIPTVAR_CHILDS_it,SCRIPTVAR_CHILDS_it> arrayElements = arr->getArrayElements();
-		sort(arrayElements.first, arrayElements.second, ::cmp_fnc(c, cmp_fnc));
+		SCRIPTVAR_CHILDS_it begin = lower_bound(arr->Childs.begin(), arr->Childs.end(), "0");
+		/* in ECMAScript the sort algorithm is not specified
+		 * in some cases sort throws a TypeError e.G. an array element is read-only, non-configurable, getter or setter
+		 * this will result in a partially sorted array 
+		 * in worst case the sort algorithm results in an endless loop (more getters with constant return value)
+		 *
+		 * 42TinyJS checks before sort if an element read-only, setter or getter and throws immediately a TypeError
+		 */
+		for(SCRIPTVAR_CHILDS_it it = begin; it != arr->Childs.end(); ++it) {
+			if(!(*it)->isWritable()) c->throwError(TypeError, "property "+(*it)->getName()+" is read-only");
+			if(!(*it)->isConfigurable()) c->throwError(TypeError, "property "+(*it)->getName()+" is non-configurable");
+			if(!(*it)->getVarPtr()->isAccessor()) c->throwError(TypeError, "property "+(*it)->getName()+" is a getter and/or a setter");
+		}
+		sort(begin, arr->Childs.end(), ::cmp_fnc(c, cmp_fnc));
 		uint32_t idx = 0;
-		for(SCRIPTVAR_CHILDS_it it=arrayElements.first; it != arrayElements.second; ++it, ++idx)
+		for(SCRIPTVAR_CHILDS_it it=begin; it != arr->Childs.end(); ++it, ++idx)
 			(*it)->reName(int2string(idx));
-		sort(arrayElements.first, arrayElements.second, cmp_by_name);
-		if(len > uint32_t(arrayElements.second - arrayElements.first))
-			arr->setArrayIndex(len-1, c->constScriptVar(Undefined));
+		sort(begin, arr->Childs.end(), cmp_by_name);
 	}
 	c->setReturnVar(arr);
 }
@@ -213,9 +228,13 @@ extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 
 //	tinyJS->addNative("function Integer.valueOf(str)", scIntegerValueOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // value of a single character
 	tinyJS->addNative("function JSON.stringify(obj, replacer)", scJSONStringify, 0, SCRIPTVARLINK_BUILDINDEFAULT); // convert to JSON. replacer is ignored at the moment
+
+	// Array
 	tinyJS->addNative("function Array.prototype.contains(obj)", scArrayContains, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.remove(obj)", scArrayRemove, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.join(separator)", scArrayJoin, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.fill()", scArrayFill, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function Array.prototype.pop()", scArrayPop, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.push()", scArrayPush, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Array.prototype.sort()", scArraySort, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }

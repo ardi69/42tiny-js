@@ -50,7 +50,7 @@ public:
 	void *getRealMutex() { return mutex->getRealMutex(); }
 	class CScriptMutex_t{
 	public:
-//		virtual ~CScriptMutex_t()=0;
+		virtual ~CScriptMutex_t();
 		virtual void lock()=0;
 		virtual void unlock()=0;
 		virtual void *getRealMutex()=0;
@@ -60,23 +60,25 @@ private:
 
 };
 
+template<class LockClass>
 class CScriptUniqueLock {
 public:
-	CScriptUniqueLock(CScriptMutex &Mutex) : mutex(&Mutex) { mutex->lock(); }
-	~CScriptUniqueLock() { mutex->unlock(); }
-	CScriptMutex *mutex;
+	CScriptUniqueLock(LockClass &Mutex) : mutex(Mutex) { mutex.lock(); }
+	~CScriptUniqueLock() { mutex.unlock(); }
+	LockClass &mutex;
 };
 
 class CScriptCondVar {
 public:
 	CScriptCondVar();
-	virtual ~CScriptCondVar();
+	~CScriptCondVar();
 	void notify_one() { condVar->notify_one(); }
-	void wait(CScriptUniqueLock &Lock) { condVar->wait(Lock); }
-	class CScriptCondVar_t{
+	void wait(CScriptUniqueLock<CScriptMutex> &Lock) { condVar->wait(Lock); }
+	class CScriptCondVar_t {
 	public:
+		virtual ~CScriptCondVar_t();
 		virtual void notify_one()=0;
-		virtual void wait(CScriptUniqueLock &Lock)=0;
+		virtual void wait(CScriptUniqueLock<CScriptMutex> &Lock)=0;
 	};
 private:
 	CScriptCondVar_t *condVar;
@@ -84,38 +86,11 @@ private:
 
 #endif /*HAVE_CXX_THREADS*/
 
-
-class CScriptSemaphore
-{
-private:
-	CScriptCondVar cond;
-	CScriptMutex mutex;
-	unsigned int count;
-	unsigned int max_count;
-
-public:
-	CScriptSemaphore(unsigned int currentCount=1, unsigned int maxCount=1) : count(currentCount), max_count(maxCount) {}
-	void post() {
-		CScriptUniqueLock lock(mutex);
-
-		++count;
-		cond.notify_one();
-	}
-	void wait() {
-		CScriptUniqueLock lock(mutex);
-		while(!count) cond.wait(lock);
-		--count;
-	}
-	unsigned int currentWaits() {
-		CScriptUniqueLock lock(mutex);
-		return count;
-	}
-};
-
 class CScriptThread {
 public:
 	CScriptThread();
 	virtual ~CScriptThread();
+	static void yield();
 	void Run() { thread->Run(); }
 	int Stop(bool Wait=true) { return thread->Stop(Wait); }
 	int retValue() { return thread->retValue(); }
@@ -126,6 +101,7 @@ public:
 	bool isStarted() { return thread->isStarted(); }
 	class CScriptThread_t{
 	public:
+		virtual ~CScriptThread_t(){}
 		virtual void Run()=0;
 		virtual int Stop(bool Wait)=0;
 		virtual bool isActiv()=0;
@@ -139,22 +115,35 @@ private:
 
 class CScriptCoroutine : protected CScriptThread {
 public:
-	CScriptCoroutine() : wake_thread(0), wake_main(0) {}
+	CScriptCoroutine() : mainNotifies(0), coroutineNotifies(0) {}
 	typedef struct{} StopIteration_t;
 	static StopIteration_t StopIteration;
 	bool next(); // returns true if coroutine is running
 protected:
 	virtual int Coroutine()=0;
-	void yield();
+	void yield() { if(!yield_no_throw()) throw StopIteration; }
 	bool yield_no_throw();
 private:
 	virtual int ThreadFnc();
 	virtual void ThreadFncFinished();
-	CScriptSemaphore wake_thread;
-	CScriptSemaphore wake_main;
+	void notify_and_wait(CScriptCondVar &notifyCondVar, CScriptCondVar &waitCondVar, bool &waitFlag);
+	CScriptMutex mutex;
+	CScriptCondVar mainCondVar, coroutineCondVar;
+	volatile int mainNotifies, coroutineNotifies;
 };
 
+#ifdef SPINLOCK_IN_POOL_ALLOCATOR
 
+#include <atomic>
+class CScriptSpinLock {
+public:
+	CScriptSpinLock() { flag.clear(std::memory_order_release); }
+	void lock() { while (flag.test_and_set(std::memory_order_acquire)) { CScriptThread::yield(); } }
+	void unlock() { flag.clear(std::memory_order_release); }
+private:
+	std::atomic_flag flag;
+};
+#endif
 
 #endif // NO_THREADING
 #endif // TinyJS_Threading_h__
