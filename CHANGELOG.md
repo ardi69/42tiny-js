@@ -24,3 +24,4 @@ Version 0.9.2 (2016-04-13 18:51:24)
 ===================================
 
 * fix ScriptVar from int64_t
+* added: README.md
