@@ -54,7 +54,7 @@ using namespace std;
 
 #endif
 
-////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////
 /// CScriptTime
 //////////////////////////////////////////////////////////////////////////
 
@@ -199,7 +199,7 @@ recalc:
 	return tm_time;
 }
 
-int64_t CScriptTime::setTime( int32_t Year, int32_t Month, int32_t Day, int32_t Hour, int32_t Min, int32_t Sec, int32_t MSec ) { 
+int64_t CScriptTime::setTime( int32_t Year, int32_t Month, int32_t Day, int32_t Hour, int32_t Min, int32_t Sec, int32_t MSec ) {
 	if(0 <= Year && Year<=99) Year += 1900;
 	tm_msec	= MSec;
 	tm_sec	= Sec;
@@ -228,14 +228,14 @@ int64_t CScriptTime::now() {
 
 	/*converting file time to unix epoch*/
 	tmpres /= 10000;  /*convert into milliseconds*/
-	return tmpres - 11644473600000LL; 
+	return tmpres - 11644473600000LL;
 #else /*_WIN32*/
 #	ifdef HAVE_GETTIMEOFDAY
 	timeval tv;
 	gettimeofday(&tv, NULL); // if gettimeofday not available unset HAVE_GETTIMEOFDAY in config.h
 	return int64_t(tv.tv_sec)*1000 + tv.tv_usec/1000;
 #	else /*HAVE_GETTIMEOFDAY*/
-	time_t t; 
+	time_t t;
 	return 1000LL * time(&t);
 #	endif /*HAVE_GETTIMEOFDAY*/
 #endif /*_WIN32*/
@@ -258,11 +258,11 @@ bool CScriptTime::ParseISODate(const char *s, int64_t *result) {
 		year = strtol(s, &end, 10); if(end-s != 4) return false; else s = end;
 	}
 	if(*s == '-') {
-		++s; 
+		++s;
 		if('0' > *s || *s > '9') return false;
 		month = strtol(s, &end, 10); if(end-s != 2) return false; else s = end;
 		if(*s == '-') {
-			++s; 
+			++s;
 			if('0' > *s || *s > '9') return false;
 			day = strtol(s, &end, 10); if(end-s != 2) return false; else s = end;
 		}
@@ -313,9 +313,9 @@ bool CScriptTime::ParseDate(const char *s, int64_t *result)
 {
 	static struct{ const char* key; int32_t value; } keywords[] = {
 		{ "AM", -1}, { "PM", -2},
-		{ "MONDAY", 0}, { "TUESDAY", 0}, { "WEDNESAY", 0}, { "THURSDAY", 0}, { "FRIDAY", 0}, { "SATURDAY", 0}, { "SUNDAY", 0}, 
-		{ "JANUARY", 1}, { "FEBRUARY", 2}, { "MARCH", 3}, { "APRIL", 4}, { "MAY", 5}, { "JUNE", 6}, 
-		{ "JULY", 7}, { "AUGUST", 8}, { "SEPTEMBER", 9}, { "OCTOBER", 10}, { "NOVEMBER", 11}, { "DECEMBER", 12}, 
+		{ "MONDAY", 0}, { "TUESDAY", 0}, { "WEDNESAY", 0}, { "THURSDAY", 0}, { "FRIDAY", 0}, { "SATURDAY", 0}, { "SUNDAY", 0},
+		{ "JANUARY", 1}, { "FEBRUARY", 2}, { "MARCH", 3}, { "APRIL", 4}, { "MAY", 5}, { "JUNE", 6},
+		{ "JULY", 7}, { "AUGUST", 8}, { "SEPTEMBER", 9}, { "OCTOBER", 10}, { "NOVEMBER", 11}, { "DECEMBER", 12},
 		{ "GMT", 10000+0}, { "UT", 10000+0}, { "UTC", 10000+0},
 		{ "CEST", 10000-2*60}, { "CET", 10000-1*60},
 		{ "EST", 10000+5*60}, { "EDT", 10000+4*60},
@@ -592,7 +592,7 @@ string CScriptTime::toTimeString() const {
 	char buffer[100];
 	const char *sign;
 	long offset;
-	if(tm_offset < 0) { sign = "+"; offset = -tm_offset/60; } 
+	if(tm_offset < 0) { sign = "+"; offset = -tm_offset/60; }
 	else { sign = "-"; offset = tm_offset/60; }
 	offset =	(tm_offset/60)*100+tm_offset%60;
 	sprintf_s(buffer, "%02d:%02d:%02d GMT%s%04ld", tm_hour, tm_min, tm_sec, sign, offset);
@@ -602,7 +602,7 @@ string CScriptTime::castToString() const {
 	char buffer[100];
 	const char *sign;
 	long offset;
-	if(tm_offset < 0) { sign = "+"; offset = -tm_offset/60; } 
+	if(tm_offset < 0) { sign = "+"; offset = -tm_offset/60; }
 	else { sign = "-"; offset = tm_offset/60; }
 	offset =	(offset/60)*100+offset%60;
 	if(tm_islocal)
@@ -708,7 +708,7 @@ recalc:
 		days += 365 + isLeapYear(tm_year);
 	}
 	time_of_year += int64_t(tm_yday = days) * 24 * 60 * 60 * 1000;
-	int month, isLeap; 
+	int month, isLeap;
 	for (month = 0, isLeap=isLeapYear(tm_year); month < 11; month++) {
 		int newdays = days - monthLengths[isLeap][month];
 		if (newdays < 0)
@@ -733,7 +733,7 @@ recalc:
 		struct tm tm;
 		tm_offset = tz;
 		time4dst += tm_offset;
-		localtime_s(&tm, &time4dst); 
+		localtime_s(&tm, &time4dst);
 		if(tm.tm_isdst) {
 			tm.tm_isdst = 0;
 			tm_offset += int32_t(time4dst - mktime(&tm));
@@ -751,7 +751,7 @@ recalc:
 
 
 
-////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////
 /// CScriptVarDate
 //////////////////////////////////////////////////////////////////////////
 
@@ -764,7 +764,7 @@ public:
 	virtual ~CScriptVarDate();
 	virtual CScriptVarPtr clone();
 	virtual bool isDate(); // { return true; }
-	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute); 
+	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute);
 
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
 	virtual CScriptVarPtr valueOf_CallBack();
@@ -774,13 +774,13 @@ private:
 };
 inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context) { return new CScriptVarDate(Context); }
 
-////////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////////
 // CScriptVarDate
 //////////////////////////////////////////////////////////////////////////
 
 
 CScriptVarDate::CScriptVarDate(CTinyJS *Context) : CScriptVarObject(Context, Context->getRoot()->findChildByPath("Date.prototype")) {
-	
+
 }
 
 CScriptVarDate::~CScriptVarDate() {}
@@ -797,11 +797,11 @@ CScriptVarPtr CScriptVarDate::toString_CallBack( CScriptResult &execute, int rad
 	} else
 		return newScriptVar("Invalid Date");
 }
-CScriptVarPtr CScriptVarDate::valueOf_CallBack() { 
+CScriptVarPtr CScriptVarDate::valueOf_CallBack() {
 	if(isValid())
 		return newScriptVar((double)getTime());
 	else
-		return constScriptVar(NaN); 
+		return constScriptVar(NaN);
 }
 
 void test() {
@@ -1021,7 +1021,7 @@ DATE_PROTOTYPE_GET(getTimezoneOffset)
 
 // ----------------------------------------------- Register Functions
 extern "C" void _registerDateFunctions(CTinyJS *tinyJS) {
-	CScriptVarPtr var = tinyJS->addNative("function Date(year, month, day, hour, minute, second, millisecond)", scDate, 0, SCRIPTVARLINK_CONSTANT); 
+	CScriptVarPtr var = tinyJS->addNative("function Date(year, month, day, hour, minute, second, millisecond)", scDate, 0, SCRIPTVARLINK_CONSTANT);
 	CScriptVarPtr datePrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	datePrototype->addChild("valueOf", tinyJS->objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	datePrototype->addChild("toString", tinyJS->objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);

@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.1
+#define TINY_JS_VERSION 0.9.2
 
 #include <string>
 #include <vector>
@@ -1403,7 +1403,7 @@ public:
 	CNumber &operator=(Infinity v) { type=tInfinity; Int32=v.Sig(); return *this; }
 	CNumber &operator=(int32_t Value) { type=tInt32; Int32=Value; return *this; }
 	CNumber &operator=(uint32_t Value) {
-		if(Value<=(uint32_t)std::numeric_limits<int32_t>::max())
+		if(Value<=0x7ffffffUL)
 			type=tInt32, Int32=int32_t(Value);
 		else
 			type=tDouble, Double=Value;
@@ -1541,7 +1541,7 @@ inline define_newScriptVar_NamedFnc(Number, CTinyJS *Context, const CNumber &Obj
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, char Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, uint32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
-inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int64_t Obj) { return newScriptVarNumber(Context, CNumber((int32_t)Obj)); }
+inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int64_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, uint64_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, double Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_DEPRECATED_newScriptVar_Fnc(NaN, CTinyJS *Context, NaN_t) { return newScriptVarNumber(Context, CNumber(NaN)); }
