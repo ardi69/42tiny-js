@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.2
+#define TINY_JS_VERSION 0.9.3
 
 #include <string>
 #include <vector>
@@ -84,6 +84,11 @@
 #else
 #	define DEPRECATED(_Text)
 #	define ATTRIBUTE_USED
+#endif
+
+#ifdef NO_WARN_DEPRECATED
+#	undef DEPRECATED
+#	define DEPRECATED(_Text)
 #endif
 
 #ifndef ASSERT
@@ -864,18 +869,12 @@ public:
 	virtual bool toBoolean();
 	std::string toString(int32_t radix=0); ///< shortcut for this->toPrimitive_hintString()->toCString();
 	std::string toString(CScriptResult &execute, int32_t radix=0); ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
-#define WARN_DEPRECATED
-#ifdef WARN_DEPRECATED
+
 	int DEPRECATED("getInt() is deprecated use toNumber().toInt32 instead") getInt();
 	bool DEPRECATED("getBool() is deprecated use toBoolean() instead") getBool();
 	double DEPRECATED("getDouble() is deprecated use toNumber().toDouble() instead") getDouble();
 	std::string DEPRECATED("getString() is deprecated use toString() instead") getString();
-#else
-	int getInt();
-	bool getBool();
-	double getDouble();
-	std::string getString();
-#endif
+
 	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value);
 
 
@@ -900,11 +899,7 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); ///< get Data as a parsable javascript string
 	virtual std::string getVarType()=0;
 
-#ifdef WARN_DEPRECATED
 	CScriptVarPtr DEPRECATED("getNumericVar() is deprecated use toNumber() instead") getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-#else
-	CScriptVarPtr getNumericVar(); ///< returns an Integer, a Double, an Infinity or a NaN
-#endif
 
 	//////////////////////////////////////////////////////////////////////////
 	/// Childs
@@ -925,13 +920,14 @@ public:
 
 	/// find
 	CScriptVarLinkPtr findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
-	CScriptVarLinkWorkPtr findChildWithStringChars(const std::string &childName);
+	CScriptVarLinkWorkPtr DEPRECATED("findChildWithStringChars is deprecated use getOwnProperty instead") findChildWithStringChars(const std::string &childName);
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName); ///< Tries to find a child with the given name, may return 0 or a faked porperty
 	CScriptVarLinkPtr findChildInPrototypeChain(const std::string &childName);
 	CScriptVarLinkWorkPtr findChildWithPrototypeChain(const std::string &childName);
 	CScriptVarLinkPtr findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
 	CScriptVarLinkPtr findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
 	CScriptVarLinkPtr findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
-	void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
+	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
 	/// add & remove
 	CScriptVarLinkPtr addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
 	CScriptVarLinkPtr addChild(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChild(int2string(childName), child, linkFlags); }
@@ -1350,6 +1346,10 @@ public:
 
 	virtual CScriptVarPtr toObject();
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName);
+	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
+
 
 	size_t DEPRECATED("stringLength is deprecated use getLength instead!") stringLength() { return data.size(); }
 	virtual uint32_t getLength();

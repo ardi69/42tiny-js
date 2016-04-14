@@ -25,3 +25,12 @@ Version 0.9.2 (2016-04-13 18:51:24)
 
 * fix ScriptVar from int64_t
 * added: README.md
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.3 (2016-04-14 20:10:22)
+===================================
+
+* added MSVC 2013 project-files
+* added some virtual functions

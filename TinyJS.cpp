@@ -3162,22 +3162,7 @@ bool CScriptVar::isFrozen() const {
 ////// Childs
 
 CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const string &Name) {
-	CScriptVarLinkPtr child = findChildWithStringChars(Name);
-/*
-	if(!child) {
-		CScriptVarStringPtr strVar = getRawPrimitive();
-		uint32_t Idx;
-		if (strVar && (Idx=isArrayIndex(Name))!=uint32_t(-1) && Idx<strVar->stringLength()) {
-			int Char = strVar->getChar(Idx);
-			CScriptVarPtr ret = newScriptVar(Object);
-			ret->addChild("value", newScriptVar(string(1, (char)Char)));
-			ret->addChild("writable", constScriptVar(false));
-			ret->addChild("enumerable", constScriptVar(true));
-			ret->addChild("configurable", constScriptVar(false));
-			return ret;
-		}
-	}
-*/
+	CScriptVarLinkPtr child = getOwnProperty(Name);
 	if(!child || child->getVarPtr()->isUndefined()) return constScriptVar(Undefined);
 	CScriptVarPtr ret = newScriptVar(Object);
 	if(child->getVarPtr()->isAccessor()) {
@@ -3195,7 +3180,7 @@ CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const string &Name) {
 }
 const char *CScriptVar::defineProperty(const string &Name, CScriptVarPtr Attributes) {
 	CScriptVarPtr attr;
-	CScriptVarLinkPtr child = findChildWithStringChars(Name);
+	CScriptVarLinkPtr child = getOwnProperty(Name);
 
 	CScriptVarPtr attr_value			= Attributes->findChild("value");
 	CScriptVarPtr attr_writable			= Attributes->findChild("writable");
@@ -3261,6 +3246,9 @@ CScriptVarLinkPtr CScriptVar::findChild(const string &childName) {
 }
 
 CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childName) {
+	return getOwnProperty(childName);
+/*
+
 	CScriptVarLinkWorkPtr child = findChild(childName);
 	if(child) return child;
 	CScriptVarStringPtr strVar = getRawPrimitive();
@@ -3276,6 +3264,11 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childNa
 		return child;
 	}
 	return 0;
+*/
+}
+
+CScriptVarLinkWorkPtr CScriptVar::getOwnProperty(const std::string &childName) {
+	return findChild(childName);
 }
 
 CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName) {
@@ -3297,7 +3290,7 @@ CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName)
 }
 
 CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const string &childName) {
-	CScriptVarLinkWorkPtr child = findChildWithStringChars(childName);
+	CScriptVarLinkWorkPtr child = getOwnProperty(childName);
 	if(child) return child;
 	child = findChildInPrototypeChain(childName);
 	if(child) {
@@ -3656,21 +3649,18 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( const CScriptVarPtr &Var ) 
 }
 
 CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( CScriptResult &execute, const CScriptVarPtr &Var ) {
-	if(execute) {
-		if(link) {
-			if(link->getVarPtr() && link->getVarPtr()->isAccessor()) {
-				const CScriptVarPtr &var = link->getVarPtr();
-				CScriptVarLinkPtr setter = var->findChild(TINYJS_ACCESSOR_SET_VAR);
-				if(setter) {
-					vector<CScriptVarPtr> Params;
-					Params.push_back(Var);
-					ASSERT(getReferencedOwner());
-					setter->getVarPtr()->getContext()->callFunction(execute, setter->getVarPtr(), Params, getReferencedOwner());
-				}
-			} else
-				referencedOwner->setter(execute, *this, Var);
-//				link->setVarPtr(Var);
-		}
+	if(execute && link) {
+		if(link->getVarPtr() && link->getVarPtr()->isAccessor()) {
+			const CScriptVarPtr &var = link->getVarPtr();
+			CScriptVarLinkPtr setter = var->findChild(TINYJS_ACCESSOR_SET_VAR);
+			if(setter) {
+				vector<CScriptVarPtr> Params;
+				Params.push_back(Var);
+				ASSERT(getReferencedOwner());
+				setter->getVarPtr()->getContext()->callFunction(execute, setter->getVarPtr(), Params, getReferencedOwner());
+			}
+		} else if(referencedOwner)
+			referencedOwner->setter(execute, *this, Var);
 	}
 	return *this;
 }
@@ -3754,9 +3744,33 @@ CScriptVarPtr CScriptVarString::toObject() {
 CScriptVarPtr CScriptVarString::toString_CallBack( CScriptResult &execute, int radix/*=0*/ ) {
 	return this;
 }
+
+CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const std::string &childName) {
+	CScriptVarLinkWorkPtr child = CScriptVar::getOwnProperty(childName);
+	if(child) return child;
+	uint32_t Idx = isArrayIndex(childName);
+	if (Idx!=uint32_t(-1)) {
+		if((string::size_type)Idx < data.size())
+			child(newScriptVar(data.substr(Idx, 1)), childName, SCRIPTVARLINK_ENUMERABLE);
+		else
+			child(constScriptVar(Undefined), childName, SCRIPTVARLINK_ENUMERABLE);
+		child.setReferencedOwner(this); // fake referenced Owner
+		return child;
+	}
+	return 0;
+}
+
+void CScriptVarString::keys(STRING_SET_t &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/) {
+	if(ID) setTemporaryMark(ID);
+	string::size_type length = data.size();
+	for(string::size_type i=0; i<length; ++i)
+		Keys.insert(int2string(i));
+	CScriptVar::keys(Keys, OnlyEnumerable, ID);
+}
+
 uint32_t CScriptVarString::getLength() { return data.length(); }
 int CScriptVarString::getChar(uint32_t Idx) {
-	if((string::size_type)Idx >= data.length())
+	if((string::size_type)Idx >= data.size())
 		return -1;
 	else
 		return (unsigned char)data[Idx];
@@ -4709,12 +4723,12 @@ void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *d
 	if(mode==RETURN_ARRAY) {
 		CScriptVarArrayPtr arr = newScriptVar(Array);
 		arr->setArrayElement(0, newScriptVar(*pos));
-		arr->setArrayElement(1, object->findChildWithStringChars(*pos));
+		arr->setArrayElement(1, object->getOwnProperty(*pos));
 		c->setReturnVar(arr);
 	} else if(mode==RETURN_KEY)
 		c->setReturnVar(newScriptVar(*pos));
 	else
-		c->setReturnVar(object->findChildWithStringChars(*pos));
+		c->setReturnVar(object->getOwnProperty(*pos));
 }
 
 
@@ -5935,7 +5949,7 @@ inline void CTinyJS::assign_destructuring_var(CScriptResult &execute, const CScr
 				Path.pop_back();
 			} else {
 				if(it->second.empty()) continue; // skip empty entries
-				CScriptVarLinkWorkPtr var = Path.back()->findChildWithStringChars(it->first);
+				CScriptVarLinkWorkPtr var = Path.back()->getOwnProperty(it->first);
 				if(var) var = var.getter(execute); else var = constUndefined;
 				if(!execute) return;
 				if(it->second == "{" || it->second == "[") {
@@ -5988,7 +6002,7 @@ inline void CTinyJS::execute_destructuring(CScriptResult &execute, CScriptTokenD
 	for(vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc.elements.begin(); execute && it!=Objc.elements.end(); ++it) {
 		if(it->value.empty()) continue;
 		CScriptToken &token = it->value.front();
-		CScriptVarPtr rhs = Val->findChildWithStringChars(it->id).getter(execute);
+		CScriptVarPtr rhs = Val->getOwnProperty(it->id).getter(execute);
 		if(!rhs) rhs=constUndefined;
 		if(token.token == LEX_T_OBJECT_LITERAL && token.Object().destructuring) {
 			CScriptTokenDataObjectLiteral &Objc = token.Object();
@@ -7177,7 +7191,7 @@ void CTinyJS::native_Object_defineProperties(const CFunctionsScopePtr &c, void *
 	properties->keys(names, true);
 
 	for(STRING_SET_it it=names.begin(); it!=names.end(); ++it) {
-		CScriptVarPtr attributes = properties->findChildWithStringChars(*it).getter();
+		CScriptVarPtr attributes = properties->getOwnProperty(*it).getter();
 		if(!attributes->isObject()) c->throwError(TypeError, "descriptor for "+*it+" is not an object");
 		const char *err = obj->defineProperty(*it, attributes);
 		if(err) c->throwError(TypeError, err);
