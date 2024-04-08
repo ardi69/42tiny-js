@@ -73,6 +73,20 @@ char *topOfStack;
 #define sizeOfStack 1*1024*1024 /* for example 1 MB depend of Compiler-Options */
 #define sizeOfSafeStack 50*1024 /* safety area */
 
+
+class end { // this is for VisualStudio debugging stuff. It's holds the console open up to ENTER is pressed
+public:
+	end(){}
+	~end() {
+#ifdef _WIN32
+			system("pause");
+#else
+			printf("press Enter (end)");
+			getchar();
+#endif
+	}
+} end;
+
 int main(int , char **)
 {
 	char dummy;

@@ -100,7 +100,7 @@ static void scArrayContains(const CFunctionsScopePtr &c, void *data) {
 static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument("obj");
 	CScriptVarPtr arr = c->getArgument("this");
-	uint32_t l = arr->getLength();
+//	uint32_t l = arr->getLength();
 	uint32_t offset = 0;
 	for(SCRIPTVAR_CHILDS_it it= lower_bound(arr->Childs.begin(), arr->Childs.end(), "0"); it != arr->Childs.end(); ++it) {
 		while(it != arr->Childs.end() && obj->mathsOp(it->getter(), LEX_EQUAL)->toBoolean()) {
@@ -153,7 +153,7 @@ static void scArrayPop(const CFunctionsScopePtr &c, void *data) {
 
 static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
-	uint32_t len = c->getLength(arr);
+//	uint32_t len = c->getLength(arr);
 	uint32_t args = c->getArgumentsLength();
 	for (uint32_t i=0; i<args; ++i)
 		c->setProperty(arr, i, c->getArgument(i));

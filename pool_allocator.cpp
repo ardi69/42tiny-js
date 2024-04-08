@@ -172,32 +172,22 @@ namespace {
 	#	define LOCK CScriptUniqueLock<CScriptMutex> lock(locker)
 	#endif
 
-	#define FIXED_SIZE_MIN 28
-	#define FIXED_SIZE_MAX 148
-	#define FIXED_SIZE_CLAMP 2 // FIXED_SIZE_CLAMP^2 = 4 Byte
-
-
-
-
-	#define FIXED_SIZE_CLAMP_MASK ((1 << FIXED_SIZE_CLAMP) - 1)
-
-	#define FIXED_SIZE_CLAMP_BEGIN(size) (size & ~FIXED_SIZE_CLAMP_MASK)
-	#define FIXED_SIZE_CLAMP_END(size) (size | FIXED_SIZE_CLAMP_MASK)
-
-	#define FIXED_SIZE_IN_RANGE(size) (FIXED_SIZE_CLAMP_BEGIN(FIXED_SIZE_MIN) <= size && size <= FIXED_SIZE_CLAMP_END(FIXED_SIZE_MAX))
-
-	#define FIXED_SIZE_IDX(size) ((size - FIXED_SIZE_CLAMP_BEGIN(FIXED_SIZE_MIN)) >> FIXED_SIZE_CLAMP)
-
-	_fixed_size_allocator *new_allocator_pool[FIXED_SIZE_IDX(FIXED_SIZE_MAX) + 1] = {0,};
-
-	static struct _fixed_size_allocator_cleanup {
-		~_fixed_size_allocator_cleanup() {
-			for(size_t idx = 0; idx < sizeof(new_allocator_pool)/sizeof(*new_allocator_pool); ++idx) {
-				if(new_allocator_pool[idx]) delete new_allocator_pool[idx];
-			}
+#	define ROUND_SIZE(size) ((size+3) & ~3)
+#	define SHIFT_SIZE(size) (size >> 2)
+	static struct _fixed_size_allocator_init_control {
+		~_fixed_size_allocator_init_control() {
+			for (std::vector<_fixed_size_allocator*>::iterator it = pool.begin(); it != pool.end(); ++it)
+				if (*it) delete *it;
 		}
+		_fixed_size_allocator *& getFromPool(size_t size) {
+			size = SHIFT_SIZE(size);
+			if (size >= pool.size())
+				pool.resize(size + 1, 0);
+			return pool[size];
+		}
+		std::vector<_fixed_size_allocator*> pool;
 
-	} cleanup;
+	} control;
 } /* namespace */
 
 #ifdef DEBUG_POOL_ALLOCATOR
@@ -207,15 +197,10 @@ void * fixed_size_allocator::alloc(size_t size) {
 #endif
 	TimeLoggerHelper(alloc);
 	LOCK;
-	if(!FIXED_SIZE_IN_RANGE(size)) {
-		fprintf(stderr, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-		fprintf(stderr, "pool_allocator mismatch (size=%d) - contact the developer\n", size);
-		fprintf(stderr, "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-		return new char[size];
-	}
-	_fixed_size_allocator *&allocator = new_allocator_pool[FIXED_SIZE_IDX(size)];
+	size = ROUND_SIZE(size);
+	_fixed_size_allocator *&allocator = control.getFromPool(size);
 	if(!allocator) {
-		allocator = new _fixed_size_allocator(64, FIXED_SIZE_CLAMP_END(size));
+		allocator = new _fixed_size_allocator(64, size);
 	}
 #ifdef DEBUG_POOL_ALLOCATOR
 	return allocator->_alloc(size, for_class);
@@ -227,11 +212,8 @@ void * fixed_size_allocator::alloc(size_t size) {
 void fixed_size_allocator::free(void *p, size_t size) {
 	TimeLoggerHelper(free);
 	LOCK;
-	if(!FIXED_SIZE_IN_RANGE(size)) {
-		delete [] (char*)p;
-		return;
-	}
-	_fixed_size_allocator *&allocator = new_allocator_pool[FIXED_SIZE_IDX(size)];
+	size = ROUND_SIZE(size);
+	_fixed_size_allocator *&allocator = control.getFromPool(size);
 	if(allocator) {
 #ifdef DEBUG_POOL_ALLOCATOR
 		if(allocator->_free(p, size)) {

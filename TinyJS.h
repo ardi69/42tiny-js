@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.3
+#define TINY_JS_VERSION 0.9.4
 
 #include <string>
 #include <vector>
@@ -252,7 +252,6 @@ extern const char *ERROR_NAME[];
 #define TINYJS_LOKALE_VAR					"__locale__"
 #define TINYJS_ANONYMOUS_VAR				"__anonymous__"
 #define TINYJS_ARGUMENTS_VAR				"arguments"
-#define TINYJS___PROTO___VAR				"__proto__"
 #define TINYJS_PROTOTYPE_CLASS			"prototype"
 #define TINYJS_FUNCTION_CLOSURE_VAR		"__function_closure__"
 #define TINYJS_SCOPE_PARENT_VAR			"__scope_parent__"
@@ -273,11 +272,33 @@ typedef STRING_SET_t::iterator STRING_SET_it;
 /// convert the given string into a quoted string suitable for javascript
 std::string getJSString(const std::string &str);
 /// convert the given int into a string
-std::string int2string(int32_t intData);
-std::string int2string(uint32_t intData);
-#if SIZE_MAX != UINT32_MAX
-std::string int2string(size_t intData);
+
+// GCC 4.8 and above because issue with MingW
+#if (__cplusplus >= 201103L || isCXX0x(4,8) || _MSC_VER >= 1600) // Visual Studio 2010 and above
+#	define HAVE_STD_TO_STRING 1
+	inline std::string int2string(long long intData) { return std::to_string(intData); }
+	inline std::string int2string(unsigned long long intData) { return std::to_string(intData); }
+#	if !defined(_MSC_VER) || _MSC_VER >= 19800// Visual Studio 2013 and above
+		template<typename intType>
+		typename std::enable_if<std::is_integral<intType>::value, std::string>::type int2string(intType intData) { return std::to_string(intData); }
+#	else
+		template<typename intType>
+		typename std::enable_if<std::is_integral<intType>::value && std::is_signed<intType>::value, std::string>::type int2string(intType intData) { return std::to_string((long long)intData); }
+		template<typename intType>
+		typename std::enable_if<std::is_integral<intType>::value && std::is_unsigned<intType>::value, std::string>::type int2string(intType intData) { return std::to_string((unsigned long long)intData); }
+#	endif
+#else
+// 	std::string int2string(int intData);
+// 	std::string int2string(unsigned intData);
+// 	std::string int2string(long intData);
+// 	std::string int2string(unsigned long intData);
+// 	std::string int2string(long long intData);
+// 	std::string int2string(unsigned long long intData);
+	template<typename intType>
+	std::string int2string(intType intData);
+
 #endif
+
 
 /// convert the given double into a string
 std::string float2string(const double &floatData);
@@ -322,7 +343,7 @@ public:
 	void check(int expected_tk, int alternate_tk=-1); ///< Lexical check wotsit
 	void match(int expected_tk, int alternate_tk=-1); ///< Lexical match wotsit
 	void reset(const POS &toPos); ///< Reset this lex so we can start again
-
+	const char *rest() { return pos.tokenStart; }
 	std::string currentFile;
 	struct POS {
 		const char *tokenStart;
@@ -383,8 +404,8 @@ public:
 	C *operator->() { return ptr; }
 	const C *operator->() const { return ptr; }
 	C &operator*() { return *ptr; }
-	operator bool() { return ptr!=0; }
-	bool operator==(const CScriptTokenDataPtr& rhs) { return ptr==rhs.ptr; }
+	operator bool() const { return ptr!=0; }
+	bool operator==(const CScriptTokenDataPtr& rhs) const { return ptr==rhs.ptr; }
 private:
 	C *ptr;
 };
@@ -394,7 +415,7 @@ public:
 	CScriptTokenDataString() {}
 	CScriptTokenDataString(const std::string &String) : tokenStr(String) {}
 	CScriptTokenDataString(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 	std::string tokenStr;
 private:
 };
@@ -403,7 +424,7 @@ class CScriptTokenDataFnc : public fixed_size_object<CScriptTokenDataFnc>, publi
 public:
 	CScriptTokenDataFnc() : line(0),isGenerator(false), isArrowFunction(false) {}
 	CScriptTokenDataFnc(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 	std::string getArgumentsString(bool forArrowFunction=false);
 
 	std::string file;
@@ -415,12 +436,13 @@ public:
 	bool isArrowFunction;
 
 };
+typedef CScriptTokenDataPtr<CScriptTokenDataFnc> CScriptTokenDataFncPtr;
 
 class CScriptTokenDataForwards : public fixed_size_object<CScriptTokenDataForwards>, public CScriptTokenData {
 public:
 	CScriptTokenDataForwards() {}
 	CScriptTokenDataForwards(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 
 	bool checkRedefinition(const std::string &Str, bool checkVars);
 	void addVars( STRING_VECTOR_t &Vars );
@@ -479,7 +501,7 @@ class CScriptTokenDataLoop : public fixed_size_object<CScriptTokenDataLoop>, pub
 public:
 	CScriptTokenDataLoop() { type=FOR; }
 	CScriptTokenDataLoop(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 
 	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 
@@ -495,7 +517,7 @@ class CScriptTokenDataIf : public fixed_size_object<CScriptTokenDataIf>, public 
 public:
 	CScriptTokenDataIf() {}
 	CScriptTokenDataIf(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 	TOKEN_VECT condition;
 	TOKEN_VECT if_body;
@@ -510,7 +532,7 @@ class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDa
 public:
 	CScriptTokenDataDestructuringVar() {}
 	CScriptTokenDataDestructuringVar(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 	std::string getParsableString();
 
 	void getVarNames(STRING_VECTOR_t &Names);
@@ -524,7 +546,7 @@ class CScriptTokenDataObjectLiteral : public fixed_size_object<CScriptTokenDataO
 public:
 	CScriptTokenDataObjectLiteral() {}
 	CScriptTokenDataObjectLiteral(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 
 	std::string getParsableString();
 
@@ -550,7 +572,7 @@ class CScriptTokenDataArrayComprehensionsBody : public fixed_size_object<CScript
 public:
 	CScriptTokenDataArrayComprehensionsBody() {}
 	CScriptTokenDataArrayComprehensionsBody(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 
 	TOKEN_VECT body;
 };
@@ -560,7 +582,7 @@ class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry>, publi
 public:
 	CScriptTokenDataTry() {}
 	CScriptTokenDataTry(std::istream &in);
-	virtual void serialize(std::ostream &out) const;
+	virtual void serialize(std::ostream &out) const OVERRIDE;
 
 	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 
@@ -798,6 +820,35 @@ enum IteratorMode {
 };
 
 //////////////////////////////////////////////////////////////////////////
+/// CScriptPropertyName
+//////////////////////////////////////////////////////////////////////////
+
+class CScriptPropertyName {
+public:
+	CScriptPropertyName() : idx(-1) {}
+	// property name
+	CScriptPropertyName(const std::string &Name) : name(Name), idx(name2arrayIdx(Name)) {}
+	// array index
+	CScriptPropertyName(uint32_t Idx) : name(int2string(Idx)), idx(Idx) { if (idx == 0xffffffffUL) idx = -1; }
+	// symbol
+	CScriptPropertyName(uint32_t Id, const std::string &Desc) : name(Desc), idx(-1-(int64_t)Id) {}
+	bool operator<(const CScriptPropertyName& rhs) {
+		int64_t lhs_idx = idx + 1;
+		int64_t rhs_idx = rhs.idx + 1;
+		if (lhs_idx < rhs_idx) return true;
+		if (lhs_idx == 0 && rhs_idx == 0) return name < rhs.name;
+		return false;
+	}
+	bool isArrayIdx() { return 0 <= idx && idx < 0xFFFFFFFFLL; }
+	bool isPropertyName() { return idx == -1; }
+	bool isSymbol() { return idx < -1; }
+private:
+	static int64_t name2arrayIdx(const std::string &Name);
+	std::string name;
+	int64_t idx; /* -1 ==> normal Name; >=0 ==> arrayIdx; <-1 ==> Symbol*/
+};
+
+//////////////////////////////////////////////////////////////////////////
 /// CScriptVar
 //////////////////////////////////////////////////////////////////////////
 
@@ -815,6 +866,9 @@ private:
 public:
 	virtual ~CScriptVar();
 	virtual CScriptVarPtr clone()=0;
+
+	CScriptVarPtr getPrototype();
+	void setPrototype(const CScriptVarPtr &Prototype);
 
 	/// Type
 	virtual bool isObject();	///< is an Object
@@ -979,18 +1033,23 @@ public:
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2); // { return ::newScriptVar(context, t); }
 	template<typename T>	const CScriptVarPtr &constScriptVar(T t); // { return ::newScriptVar(context, t); }
 	void setTemporaryMark(uint32_t ID); // defined as inline at end of this file { temporaryMark[context->getCurrentMarkSlot()] = ID; }
+	virtual void cleanUp4Destroy();
 	virtual void setTemporaryMark_recursive(uint32_t ID);
 	uint32_t getTemporaryMark(); // defined as inline at end of this file { return temporaryMark[context->getCurrentMarkSlot()]; }
 protected:
 	bool extensible;
 	CTinyJS *context;
 	int refs; ///< The number of references held to this - used for garbage collection
+	CScriptVar *prototype;
 	CScriptVar *prev;
 public:
 	CScriptVar *next;
 	uint32_t temporaryMark[TEMPORARY_MARK_SLOTS];
 
 	friend class CScriptVarPtr;
+#if _DEBUG
+	uint32_t debugID;
+#endif
 };
 
 
@@ -1253,17 +1312,17 @@ protected:
 	CScriptVarPrimitive(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) { setExtensible(false); }
 	CScriptVarPrimitive(const CScriptVarPrimitive &Copy) : CScriptVar(Copy) { } ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarPrimitive();
+	virtual ~CScriptVarPrimitive() OVERRIDE;
 
-	virtual bool isPrimitive();	///< return true;
+	virtual bool isPrimitive() OVERRIDE;	///< return true;
 
-	virtual CScriptVarPrimitivePtr getRawPrimitive();
-	virtual bool toBoolean();							/// false by default
+	virtual CScriptVarPrimitivePtr getRawPrimitive() OVERRIDE;
+	virtual bool toBoolean() OVERRIDE;							/// false by default
 	virtual CNumber toNumber_Callback()=0;
 	virtual std::string toCString(int radix=0)=0;
 
-	virtual CScriptVarPtr toObject();
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual CScriptVarPtr toObject() OVERRIDE;
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 protected:
 };
 
@@ -1279,15 +1338,15 @@ protected:
 	CScriptVarUndefined(CTinyJS *Context);
 	CScriptVarUndefined(const CScriptVarUndefined &Copy) : CScriptVarPrimitive(Copy) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarUndefined();
-	virtual CScriptVarPtr clone();
+	virtual ~CScriptVarUndefined() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
 
-	virtual bool isUndefined(); // { return true; }
+	virtual bool isUndefined() OVERRIDE; // { return true; }
 
-	virtual CNumber toNumber_Callback(); // { return NaN; }
-	virtual std::string toCString(int radix=0);// { return "undefined"; }
+	virtual CNumber toNumber_Callback() OVERRIDE; // { return NaN; }
+	virtual std::string toCString(int radix=0) OVERRIDE;// { return "undefined"; }
 
-	virtual std::string getVarType(); // { return "undefined"; }
+	virtual std::string getVarType() OVERRIDE; // { return "undefined"; }
 	friend define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS *, Undefined_t);
 	friend define_newScriptVar_NamedFnc(Undefined, CTinyJS *Context);
 };
@@ -1306,15 +1365,15 @@ protected:
 	CScriptVarNull(CTinyJS *Context);
 	CScriptVarNull(const CScriptVarNull &Copy) : CScriptVarPrimitive(Copy) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarNull();
-	virtual CScriptVarPtr clone();
+	virtual ~CScriptVarNull() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
 
-	virtual bool isNull(); // { return true; }
+	virtual bool isNull() OVERRIDE; // { return true; }
 
-	virtual CNumber toNumber_Callback(); // { return 0; }
-	virtual std::string toCString(int radix=0);// { return "null"; }
+	virtual CNumber toNumber_Callback() OVERRIDE; // { return 0; }
+	virtual std::string toCString(int radix=0) OVERRIDE;// { return "null"; }
 
-	virtual std::string getVarType(); // { return "null"; }
+	virtual std::string getVarType() OVERRIDE; // { return "null"; }
 
 	friend define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t);
 	friend define_newScriptVar_NamedFnc(Null, CTinyJS *Context);
@@ -1333,26 +1392,26 @@ protected:
 	CScriptVarString(CTinyJS *Context, const std::string &Data);
 	CScriptVarString(const CScriptVarString &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarString();
-	virtual CScriptVarPtr clone();
-	virtual bool isString(); // { return true; }
+	virtual ~CScriptVarString() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isString() OVERRIDE; // { return true; }
 
-	virtual bool toBoolean();
-	virtual CNumber toNumber_Callback();
-	virtual std::string toCString(int radix=0);
+	virtual bool toBoolean() OVERRIDE;
+	virtual CNumber toNumber_Callback() OVERRIDE;
+	virtual std::string toCString(int radix=0) OVERRIDE;
 
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion); // { return getJSString(data); }
-	virtual std::string getVarType(); // { return "string"; }
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE; // { return getJSString(data); }
+	virtual std::string getVarType() OVERRIDE; // { return "string"; }
 
-	virtual CScriptVarPtr toObject();
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual CScriptVarPtr toObject() OVERRIDE;
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 
-	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName);
-	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName) OVERRIDE;
+	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0) OVERRIDE;
 
 
 	size_t DEPRECATED("stringLength is deprecated use getLength instead!") stringLength() { return data.size(); }
-	virtual uint32_t getLength();
+	virtual uint32_t getLength() OVERRIDE;
 	int getChar(uint32_t Idx);
 protected:
 	std::string data;
@@ -1515,22 +1574,22 @@ protected:
 	CScriptVarNumber(CTinyJS *Context, const CNumber &Data);
 	CScriptVarNumber(const CScriptVarNumber &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarNumber();
-	virtual CScriptVarPtr clone();
-	virtual bool isNumber(); // { return true; }
-	virtual bool isInt(); // { return true; }
-	virtual bool isDouble(); // { return true; }
-	virtual bool isRealNumber(); // { return true; }
-	virtual int isInfinity(); // { return data; }
-	virtual bool isNaN();// { return true; }
+	virtual ~CScriptVarNumber() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isNumber() OVERRIDE; // { return true; }
+	virtual bool isInt() OVERRIDE; // { return true; }
+	virtual bool isDouble() OVERRIDE; // { return true; }
+	virtual bool isRealNumber() OVERRIDE; // { return true; }
+	virtual int isInfinity() OVERRIDE; // { return data; }
+	virtual bool isNaN() OVERRIDE;// { return true; }
 
-	virtual bool toBoolean();
-	virtual CNumber toNumber_Callback();
-	virtual std::string toCString(int radix=0);
+	virtual bool toBoolean() OVERRIDE;
+	virtual CNumber toNumber_Callback() OVERRIDE;
+	virtual std::string toCString(int radix=0) OVERRIDE;
 
-	virtual std::string getVarType(); // { return "number"; }
+	virtual std::string getVarType() OVERRIDE; // { return "number"; }
 
-	virtual CScriptVarPtr toObject();
+	virtual CScriptVarPtr toObject() OVERRIDE;
 private:
 	CNumber data;
 	friend define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &);
@@ -1558,17 +1617,17 @@ protected:
 	CScriptVarBool(CTinyJS *Context, bool Data);
 	CScriptVarBool(const CScriptVarBool &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarBool();
-	virtual CScriptVarPtr clone();
-	virtual bool isBool(); // { return true; }
+	virtual ~CScriptVarBool() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isBool() OVERRIDE; // { return true; }
 
-	virtual bool toBoolean();
-	virtual CNumber toNumber_Callback();
-	virtual std::string toCString(int radix=0);
+	virtual bool toBoolean() OVERRIDE;
+	virtual CNumber toNumber_Callback() OVERRIDE;
+	virtual std::string toCString(int radix=0) OVERRIDE;
 
-	virtual std::string getVarType(); // { return "boolean"; }
+	virtual std::string getVarType() OVERRIDE; // { return "boolean"; }
 
-	virtual CScriptVarPtr toObject();
+	virtual CScriptVarPtr toObject() OVERRIDE;
 protected:
 	bool data;
 
@@ -1593,22 +1652,22 @@ protected:
 	CScriptVarObject(CTinyJS *Context, const CScriptVarPrimitivePtr &Value, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype), value(Value) {}
 	CScriptVarObject(const CScriptVarObject &Copy) : CScriptVar(Copy) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarObject();
-	virtual CScriptVarPtr clone();
+	virtual ~CScriptVarObject() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
 
-	virtual void removeAllChildren();
+	virtual void removeAllChildren() OVERRIDE;
 
-	virtual CScriptVarPrimitivePtr getRawPrimitive();
-	virtual bool isObject(); // { return true; }
+	virtual CScriptVarPrimitivePtr getRawPrimitive() OVERRIDE;
+	virtual bool isObject() OVERRIDE; // { return true; }
 
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
-	virtual std::string getVarType(); ///< always "object"
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE;
+	virtual std::string getVarType() OVERRIDE; ///< always "object"
 	virtual std::string getVarTypeTagName(); ///< always "Object"
-	virtual CScriptVarPtr toObject();
+	virtual CScriptVarPtr toObject() OVERRIDE;
 
-	virtual CScriptVarPtr valueOf_CallBack();
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
-	virtual void setTemporaryMark_recursive(uint32_t ID);
+	virtual CScriptVarPtr valueOf_CallBack() OVERRIDE;
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
+	virtual void setTemporaryMark_recursive(uint32_t ID) OVERRIDE;
 protected:
 private:
 	CScriptVarPrimitivePtr value;
@@ -1635,10 +1694,10 @@ protected:
 	CScriptVarObjectTypeTagged(CTinyJS *Context, const CScriptVarPtr &Prototype, const std::string &TypeTagName) : CScriptVarObject(Context, Prototype), typeTagName(TypeTagName) {}
 	CScriptVarObjectTypeTagged(const CScriptVarObjectTypeTagged &Copy) : CScriptVarObject(Copy), typeTagName(Copy.typeTagName) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarObjectTypeTagged();
-	virtual CScriptVarPtr clone();
+	virtual ~CScriptVarObjectTypeTagged() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
 
-	virtual std::string getVarTypeTagName();
+	virtual std::string getVarTypeTagName() OVERRIDE;
 protected:
 private:
 	std::string typeTagName;
@@ -1660,13 +1719,13 @@ protected:
 	CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);// : CScriptVarObject(Context), value(Value) {}
 	CScriptVarError(const CScriptVarError &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarError();
-	virtual CScriptVarPtr clone();
-	virtual bool isError(); // { return true; }
+	virtual ~CScriptVarError() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isError() OVERRIDE; // { return true; }
 
-//	virtual std::string getParsableString(const std::string &indentString, const std::string &indent); ///< get Data as a parsable javascript string
+//	virtual std::string getParsableString(const std::string &indentString, const std::string &indent) OVERRIDE; ///< get Data as a parsable javascript string
 
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 	CScriptException toCScriptException();
 private:
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
@@ -1686,14 +1745,14 @@ protected:
 	CScriptVarArray(CTinyJS *Context);
 	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion), length(Copy.length) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarArray();
-	virtual CScriptVarPtr clone();
-	virtual bool isArray(); // { return true; }
+	virtual ~CScriptVarArray() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isArray() OVERRIDE; // { return true; }
 
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE;
 
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
-	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value);
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
+	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) OVERRIDE;
 
 	uint32_t getLength();
 	CScriptVarPtr getArrayElement(uint32_t idx);
@@ -1719,10 +1778,10 @@ protected:
 	CScriptVarRegExp(CTinyJS *Context, const std::string &Source, const std::string &Flags);
 	CScriptVarRegExp(const CScriptVarRegExp &Copy) : CScriptVarObject(Copy), regexp(Copy.regexp), flags(Copy.flags) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarRegExp();
-	virtual CScriptVarPtr clone();
-	virtual bool isRegExp(); // { return true; }
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual ~CScriptVarRegExp() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isRegExp() OVERRIDE; // { return true; }
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 
 	CScriptVarPtr exec(const std::string &Input, bool Test=false);
 
@@ -1760,21 +1819,27 @@ define_ScriptVarPtr_Type(Function);
 class CScriptVarFunction : public CScriptVarObject {
 protected:
 	CScriptVarFunction(CTinyJS *Context, CScriptTokenDataFnc *Data);
-	CScriptVarFunction(const CScriptVarFunction &Copy) : CScriptVarObject(Copy), data(Copy.data) { data->ref(); } ///< Copy protected -> use clone for public
+	CScriptVarFunction(const CScriptVarFunction &Copy) : CScriptVarObject(Copy), data(Copy.data), constructor(Copy.constructor) { data->ref(); } ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarFunction();
-	virtual CScriptVarPtr clone();
-	virtual bool isObject(); // { return true; }
-	virtual bool isFunction(); // { return true; }
-	virtual bool isPrimitive(); // { return false; }
+	virtual ~CScriptVarFunction() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isObject() OVERRIDE; // { return true; }
+	virtual bool isFunction() OVERRIDE; // { return true; }
+	virtual bool isPrimitive() OVERRIDE; // { return false; }
 
-	virtual std::string getVarType(); // { return "function"; }
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
+	virtual std::string getVarType() OVERRIDE; // { return "function"; }
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE;
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
+
+	virtual void setTemporaryMark_recursive(uint32_t ID) OVERRIDE;
+
 	virtual CScriptTokenDataFnc *getFunctionData();
 	void setFunctionData(CScriptTokenDataFnc *Data);
+	void setConstructor(const CScriptVarFunctionPtr &Constructor) { constructor = Constructor; };
+	const CScriptVarFunctionPtr &getConstructor() { return constructor; }
 private:
 	CScriptTokenDataFnc *data;
+	CScriptVarFunctionPtr constructor;
 
 	friend define_newScriptVar_Fnc(Function, CTinyJS *Context, CScriptTokenDataFnc *);
 };
@@ -1791,10 +1856,10 @@ protected:
 	CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
 	CScriptVarFunctionBounded(const CScriptVarFunctionBounded &Copy) : CScriptVarFunction(Copy), boundedThis(Copy.boundedThis), boundedArguments(Copy.boundedArguments)  { } ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarFunctionBounded();
-	virtual CScriptVarPtr clone();
-	virtual bool isBounded();	///< is CScriptVarFunctionBounded
-	virtual void setTemporaryMark_recursive(uint32_t ID);
+	virtual ~CScriptVarFunctionBounded() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isBounded() OVERRIDE;	///< is CScriptVarFunctionBounded
+	virtual void setTemporaryMark_recursive(uint32_t ID) OVERRIDE;
 	CScriptVarPtr callFunction(CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 protected:
 private:
@@ -1814,14 +1879,12 @@ inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr Bound
 define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
-	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name) : CScriptVarFunction(Context, new CScriptTokenDataFnc), jsUserData(Userdata) {
-		if(Name) getFunctionData()->name = Name;
-	}
+	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name, const char *Args);
 	CScriptVarFunctionNative(const CScriptVarFunctionNative &Copy) : CScriptVarFunction(Copy), jsUserData(Copy.jsUserData) { } ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarFunctionNative();
+	virtual ~CScriptVarFunctionNative() OVERRIDE;
 	virtual CScriptVarPtr clone()=0;
-	virtual bool isNative(); // { return true; }
+	virtual bool isNative() OVERRIDE; // { return true; }
 
 	virtual void callFunction(const CFunctionsScopePtr &c)=0;// { jsCallback(c, jsCallbackUserData); }
 protected:
@@ -1836,17 +1899,17 @@ protected:
 define_ScriptVarPtr_Type(FunctionNativeCallback);
 class CScriptVarFunctionNativeCallback : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name) : CScriptVarFunctionNative(Context, Userdata, Name), jsCallback(Callback) { }
+	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), jsCallback(Callback) {}
 	CScriptVarFunctionNativeCallback(const CScriptVarFunctionNativeCallback &Copy) : CScriptVarFunctionNative(Copy), jsCallback(Copy.jsCallback) { } ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarFunctionNativeCallback();
-	virtual CScriptVarPtr clone();
-	virtual void callFunction(const CFunctionsScopePtr &c);
+	virtual ~CScriptVarFunctionNativeCallback() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual void callFunction(const CFunctionsScopePtr &c) OVERRIDE;
 private:
 	JSCallback jsCallback; ///< Callback for native functions
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*, const char*);
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*, const char*, const char*);
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name=0) { return new CScriptVarFunctionNativeCallback(Context, Callback, Userdata, Name); }
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name=0, const char *Args=0) { return new CScriptVarFunctionNativeCallback(Context, Callback, Userdata, Name, Args); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1856,20 +1919,20 @@ inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallb
 template<class native>
 class CScriptVarFunctionNativeClass : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name) : CScriptVarFunctionNative(Context, Userdata, Name), classPtr(ClassPtr), classFnc(ClassFnc) { }
+	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), classPtr(ClassPtr), classFnc(ClassFnc) {}
 	CScriptVarFunctionNativeClass(const CScriptVarFunctionNativeClass &Copy) : CScriptVarFunctionNative(Copy), classPtr(Copy.classPtr), classFnc(Copy.classFnc) { } ///< Copy protected -> use clone for public
 public:
-	virtual CScriptVarPtr clone() { return new CScriptVarFunctionNativeClass(*this); }
+	virtual CScriptVarPtr clone() OVERRIDE { return new CScriptVarFunctionNativeClass(*this); }
 
-	virtual void callFunction(const CFunctionsScopePtr &c) { (classPtr->*classFnc)(c, jsUserData); }
+	virtual void callFunction(const CFunctionsScopePtr &c) OVERRIDE { (classPtr->*classFnc)(c, jsUserData); }
 private:
 	native *classPtr;
 	void (native::*classFnc)(const CFunctionsScopePtr &c, void *userdata);
 	template<typename native2>
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *, const char *);
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *, const char *, const char *);
 };
 template<typename native>
-define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name=0) { return new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata, Name); }
+define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name=0, const char *Args=0) { return new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata, Name, Args); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1893,13 +1956,13 @@ protected:
 
 	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarAccessor();
-	virtual CScriptVarPtr clone();
-	virtual bool isAccessor(); // { return true; }
-	virtual bool isPrimitive(); // { return false; }
+	virtual ~CScriptVarAccessor() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isAccessor() OVERRIDE; // { return true; }
+	virtual bool isPrimitive() OVERRIDE; // { return false; }
 
-	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion);
-	virtual std::string getVarType(); // { return "object"; }
+	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE;
+	virtual std::string getVarType() OVERRIDE; // { return "object"; }
 
 	CScriptVarPtr getValue();
 
@@ -1922,9 +1985,9 @@ class CScriptVarDestructuring : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarDestructuring(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
-	virtual CScriptVarPtr clone();
+	virtual CScriptVarPtr clone() OVERRIDE;
 public:
-	virtual ~CScriptVarDestructuring();
+	virtual ~CScriptVarDestructuring() OVERRIDE;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1937,10 +2000,10 @@ class CScriptVarScope : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarScope(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
-	virtual CScriptVarPtr clone();
-	virtual bool isObject(); // { return false; }
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isObject() OVERRIDE; // { return false; }
 public:
-	virtual ~CScriptVarScope();
+	virtual ~CScriptVarScope() OVERRIDE;
 	virtual CScriptVarPtr scopeVar(); ///< to create var like: var a = ...
 	virtual CScriptVarPtr scopeLet(); ///< to create var like: let a = ...
 	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName);
@@ -1961,8 +2024,8 @@ protected: // only derived classes or friends can be created
 	CScriptVarScopeFnc(CTinyJS *Context, const CScriptVarScopePtr &Closure) // constructor for FncScope
 		: CScriptVarScope(Context), closure(Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : CScriptVarLinkPtr()) {}
 public:
-	virtual ~CScriptVarScopeFnc();
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName);
+	virtual ~CScriptVarScopeFnc() OVERRIDE;
+	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) OVERRIDE;
 
 	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
 
@@ -2010,10 +2073,10 @@ protected: // only derived classes or friends can be created
 	CScriptVarScopeLet(const CScriptVarScopePtr &Parent); // constructor for LetScope
 //		: CScriptVarScope(Parent->getContext()), parent( context->getRoot() != Parent ? addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0) : 0) {}
 public:
-	virtual ~CScriptVarScopeLet();
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName);
-	virtual CScriptVarPtr scopeVar(); ///< to create var like: var a = ...
-	virtual CScriptVarScopePtr getParent();
+	virtual ~CScriptVarScopeLet() OVERRIDE;
+	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) OVERRIDE;
+	virtual CScriptVarPtr scopeVar() OVERRIDE; ///< to create var like: var a = ...
+	virtual CScriptVarScopePtr getParent() OVERRIDE;
 	void setletExpressionInitMode(bool Mode) { letExpressionInitMode = Mode; }
 protected:
 	CScriptVarLinkPtr parent;
@@ -2035,9 +2098,9 @@ protected:
 		: CScriptVarScopeLet(Parent), with(addChild(TINYJS_SCOPE_WITH_VAR, With, 0)) {}
 
 public:
-	virtual ~CScriptVarScopeWith();
-	virtual CScriptVarPtr scopeLet(); ///< to create var like: let a = ...
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName);
+	virtual ~CScriptVarScopeWith() OVERRIDE;
+	virtual CScriptVarPtr scopeLet() OVERRIDE; ///< to create var like: let a = ...
+	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) OVERRIDE;
 private:
 	CScriptVarLinkPtr with;
 	friend define_newScriptVar_Fnc(ScopeWith, CTinyJS *Context, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With);
@@ -2060,9 +2123,9 @@ protected:
 		CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
 		keys(Copy.keys), pos(keys.begin()){} ///< Copy protected -> use clone for public
 public:
-	virtual ~CScriptVarDefaultIterator();
-	virtual CScriptVarPtr clone();
-	virtual bool isIterator();
+	virtual ~CScriptVarDefaultIterator() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isIterator() OVERRIDE;
 
 	void native_next(const CFunctionsScopePtr &c, void *data);
 private:
@@ -2099,17 +2162,17 @@ protected:
 #pragma warning(pop)
 #endif
 public:
-	virtual ~CScriptVarGenerator();
-	virtual CScriptVarPtr clone();
-	virtual bool isIterator();
-	virtual bool isGenerator();
-	virtual std::string getVarType(); // { return "generator"; }
-	virtual std::string getVarTypeTagName(); // { return "Generator"; }
+	virtual ~CScriptVarGenerator() OVERRIDE;
+	virtual CScriptVarPtr clone() OVERRIDE;
+	virtual bool isIterator() OVERRIDE;
+	virtual bool isGenerator() OVERRIDE;
+	virtual std::string getVarType() OVERRIDE; // { return "generator"; }
+	virtual std::string getVarTypeTagName() OVERRIDE; // { return "Generator"; }
 
 	CScriptVarPtr getFunctionRoot() { return functionRoot; }
 	CScriptVarFunctionPtr getFunction() { return function; }
 
-	virtual void setTemporaryMark_recursive(uint32_t ID);
+	virtual void setTemporaryMark_recursive(uint32_t ID) OVERRIDE;
 
 	void native_send(const CFunctionsScopePtr &c, void *data);
 	void native_throw(const CFunctionsScopePtr &c, void *data);
@@ -2276,12 +2339,17 @@ public:
 			tinyJS->addNative("function String.substring(lo, hi)", &Instanz, &Class::*scSubstring, 0);
 		\endcode
 	*/
-
+private:
+	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, std::string &args);
+public:
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT);
 	template<class C>
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT)
 	{
-		return addNative(funcDesc, ::newScriptVar<C>(this, class_ptr, class_fnc, userdata), LinkFlags);
+		std::string name, args;
+		CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);
+		base->addChild(name, ret = ::newScriptVar<C>(this, class_ptr, class_fnc, userdata, name.c_str(), args.c_str()), LinkFlags);;
+		return ret;
 	}
 
 	/// Send all variables to stdout
@@ -2425,6 +2493,9 @@ private:
 
 	void native_Object(const CFunctionsScopePtr &c, void *data);
 	void native_Object_getPrototypeOf(const CFunctionsScopePtr &c, void *data);
+	void native_Object_setPrototypeOf(const CFunctionsScopePtr &c, void *data);
+	void native_Object_prototype_getter__proto__(const CFunctionsScopePtr &c, void *data);
+	void native_Object_prototype_setter__proto__(const CFunctionsScopePtr &c, void *data);
 	/* Userdate for set-/isObjectState
 	 * 0 - preventExtensions / isExtensible
 	 * 1 - seal / isSealed

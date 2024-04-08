@@ -65,6 +65,7 @@ namespace fixed_size_allocator {
 	void free(void *p, size_t size);
 
 }
+
 template<typename T, int num_objects=64>
 class fixed_size_object {
 public:

@@ -32,11 +32,11 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-/* POOL-ALLOCATOR 
+/* POOL-ALLOCATOR
  * ==============
  * To speed-up new & delete 42TinyJS adds an object-pool
  * The pool is activated by default.
- * To deactivate this stuff define NO_POOL_ALLOCATOR 
+ * To deactivate this stuff define NO_POOL_ALLOCATOR
  */
 //#define NO_POOL_ALLOCATOR
 
@@ -55,7 +55,7 @@
 // NOTE: _DEBUG or LOG_POOL_ALLOCATOR_MEMORY_USAGE implies DEBUG_POOL_ALLOCATOR
 
 /*
- * to increasing of speed a spin lock is used, if available 
+ * to increasing of speed a spin lock is used, if available
  * if c++11 <atomic> not available or NO_SPINLOCK_IN_POOL_ALLOCATOR is defined
  * a normal mutex lock is used or noting if NO_THREADING defined
  */
@@ -66,7 +66,7 @@
 /* REGEXP-SUPPORT
  * ==============
  * The RegExp-support needs c++11, boost-regex or TR1-regex
- * To deactivate this stuff define NO_REGEXP 
+ * To deactivate this stuff define NO_REGEXP
  */
 //#define NO_REGEXP
 
@@ -112,7 +112,7 @@
 /* MULTI-THREADING
  * ===============
  * 42TinyJS is basically thread-save.
- * You can run different or the same JS-code simultaneously in different instances of class TinyJS. 
+ * You can run different or the same JS-code simultaneously in different instances of class TinyJS.
  * >>> NOTE: You can NOT run more threads on the SAME instance of class TinyJS <<<
  * The threading-stuff is needed by the pool-allocator (locking) and the generator-/yield-stuff
  * to deactivate threading define NO_THREADING
@@ -120,15 +120,15 @@
  */
 //#define NO_THREADING
 
-/* with C++2011 (or MS VisualC++ 2012 and above) the C++ 2011 STL-Threading-API is used. 
+/* with C++2011 (or MS VisualC++ 2012 and above) the C++ 2011 STL-Threading-API is used.
  * You can define NO_CXX_THREADS to use alternate API's
  */
-//#define NO_CXX_THREADS 
+//#define NO_CXX_THREADS
 
 /* if C++ 2011 STL-Threading-API not available
  * - on Windows the windows-threading-API is used by default.
  * - on non-Windows (WIN32 is not defined) it is tried to use the POSIX pthread-API
- * to force the pthread-API define HAVE_PTHREAD (windows needs in this case 
+ * to force the pthread-API define HAVE_PTHREAD (windows needs in this case
  *   a pthread-lib e.g http://http://sourceware.org/pthreads-win32/)
  */
 //#define HAVE_PTHREAD
@@ -143,9 +143,9 @@
 /* for Date we need the time in a resolution of 1 ms
  * on Windows the function "GetSystemTimeAsFileTime" is used
  * on non-Windows (WIN32 is not defined) it is tried to use "gettimeofday"
- * unset HAVE_GETTIMEOFDAY to use a simple time()*1000 
+ * unset HAVE_GETTIMEOFDAY to use a simple time()*1000
  * or define NO_GETTIMEOFDAY
- */ 
+ */
 #define HAVE_GETTIMEOFDAY
 //#define NO_GETTIMEOFDAY
 #ifdef NO_GETTIMEOFDAY
@@ -176,13 +176,13 @@
 ***********************************************************************\n")
 #endif
 
-#define isCXX0x(version, minor) (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ > version || __GNUC__ == version && __GNUC_MINOR__ >= version))
+#define isCXX0x(version, minor) (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ > version || __GNUC__ == version && __GNUC_MINOR__ >= minor))
 
-#if __cplusplus >= 201103L || isCXX0x(4,3) || _MSC_VER >= 1600 // Visual Studio 2010
+#if __cplusplus >= 201103L || isCXX0x(4,3) || _MSC_VER >= 1600 // Visual Studio 2010 and above
 #	define HAVE_CXX11_RVALUE_REFERENCE 1
 #endif
 
-#if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || _MSC_VER >= 1700 // Visual Studio 2012
+#if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || _MSC_VER >= 1700 // Visual Studio 2012 and above
 #		if !defined(NO_CXX_THREADS) && !defined(NO_THREADING)
 #			define HAVE_CXX_THREADS 1
 #		endif
@@ -204,6 +204,13 @@
 #else
 #	define NOEXCEPT throw()
 #endif
+
+#if __cplusplus >= 201103L || isCXX0x(4,7) ||  _MSC_VER >= 1700 // Visual Studio 2012 and above
+#	define OVERRIDE override
+#else
+#	define OVERRIDE
+#endif
+
 
 
 #ifndef MEMBER_DELETE

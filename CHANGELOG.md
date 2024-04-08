@@ -34,3 +34,12 @@ Version 0.9.3 (2016-04-14 20:10:22)
 
 * added MSVC 2013 project-files
 * added some virtual functions
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.4 (2024-04-08 16:53:41)
+===================================
+
+- little change on pool_allocator
+- wait on keypress on end of Script.exe
