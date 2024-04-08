@@ -2046,12 +2046,12 @@ public:
 	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, const std::string &name) { return getProperty(Objc, name).getter(); } // short for getProperty().getter()
 	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, uint32_t idx) { return getProperty(Objc, idx).getter(); } // short for getProperty().getter()
 	uint32_t getLength(const CScriptVarPtr &Objc) { return Objc->getLength(); }
-	void setProperty(const CScriptVarPtr &Objc, const std::string &name, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
+	void setProperty(const CScriptVarPtr &Objc, const std::string &name, const CScriptVarPtr &_value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
 		CScriptVarLinkWorkPtr property = getProperty(Objc, name);
-		setProperty(property, value, ignoreReadOnly, ignoreNotExtensible);
+		setProperty(property, _value, ignoreReadOnly, ignoreNotExtensible);
 	}
-	void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
-		setProperty(Objc, int2string(idx), value, ignoreReadOnly, ignoreNotExtensible);
+	void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &_value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
+		setProperty(Objc, int2string(idx), _value, ignoreReadOnly, ignoreNotExtensible);
 	}
 	void setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVarPtr &rhs, bool ignoreReadOnly=false, bool ignoreNotExtensible=false, bool ignoreNotOwned=false);
 
@@ -2136,7 +2136,7 @@ private:
 	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, IteratorMode);
 
 };
-inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode) { return new CScriptVarDefaultIterator(Context, Object, Mode); }
+inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &_Object, IteratorMode Mode) { return new CScriptVarDefaultIterator(Context, _Object, Mode); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -2366,7 +2366,7 @@ public:
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }
 	const CScriptVarPtr &constScriptVar(Null_t)				{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
-	const CScriptVarPtr &constScriptVar(Infinity t)			{ return t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
+	const CScriptVarPtr &constScriptVar(Infinity _t)			{ return _t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
 	const CScriptVarPtr &constScriptVar(bool Val)			{ return Val?constTrue:constFalse; }
 	const CScriptVarPtr &constScriptVar(NegativeZero_t)		{ return constNegativZero; }
 	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
@@ -2386,7 +2386,7 @@ private:
 		CScopeControl(CTinyJS *Context) : context(Context), count(0) {}
 		~CScopeControl() { clear(); }
 		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; }
-		void addFncScope(const CScriptVarScopePtr &Scope) { context->scopes.push_back(Scope); count++; }
+		void addFncScope(const CScriptVarScopePtr &_Scope) { context->scopes.push_back(_Scope); count++; }
 		CScriptVarScopeLetPtr addLetScope() {	count++; return context->scopes.back() = ::newScriptVar(context, ScopeLet, context->scopes.back()); }
 		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = ::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
 	private:

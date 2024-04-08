@@ -3238,8 +3238,8 @@ const char *CScriptVar::defineProperty(const string &Name, CScriptVarPtr Attribu
 			if(attr_enumerable && attr_enumerable->toBoolean() != child->isEnumerable()) goto cant_redefine;
 			if(child->getVarPtr()->isAccessor()) {
 				if(!attr_isAccessorDescriptor) goto cant_redefine;
-				if(attr_get && attr_get != child->getVarPtr()->findChild(TINYJS_ACCESSOR_GET_VAR)) goto cant_redefine;
-				if(attr_set && attr_set != child->getVarPtr()->findChild(TINYJS_ACCESSOR_SET_VAR)) goto cant_redefine;
+				if(attr_get && attr_get != child->getVarPtr()->findChild(TINYJS_ACCESSOR_GET_VAR).operator const CScriptVarPtr &()) goto cant_redefine;
+				if(attr_set && attr_set != child->getVarPtr()->findChild(TINYJS_ACCESSOR_SET_VAR).operator const CScriptVarPtr &()) goto cant_redefine;
 			} else if(attr_isAccessorDescriptor)
 				goto cant_redefine;
 			else if(!child->isWritable()) {
@@ -5253,7 +5253,7 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// Object-Prototype
 	// must be created as first object because this prototype is the base of all objects
-	objectPrototype = newScriptVar(Object, 0);
+	objectPrototype = newScriptVar(Object, nullptr);
 
 	// all objects have a prototype. Also the prototype of prototypes
 //	objectPrototype->addChild(TINYJS___PROTO___VAR, objectPrototype, 0);

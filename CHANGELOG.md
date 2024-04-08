@@ -43,3 +43,6 @@ Version 0.9.4 (2024-04-08 16:53:41)
 
 - little change on pool_allocator
 - wait on keypress on end of Script.exe
+* added MSVC 2017 project-files
+* added MSVC 2022 project-files
+* fix compiler error end warnings with MSVC 2017/2022
