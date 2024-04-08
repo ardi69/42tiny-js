@@ -1534,7 +1534,7 @@ void CScriptTokenizer::unserialize(const string &File, const string &FileC)
 	if(writeCompiledTokens)
 		serialize(File+'c', nothrow);
 }
-void CScriptTokenizer::serialize(ostream &out)
+void CScriptTokenizer::serialize(ostream &out) const
 {
 	uint32_t id = COMPILED_TOKENS_ID;
 	uint16_t v = COMPILED_TOKENS_VERSION;
@@ -2163,7 +2163,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef/*=false*/) {
 	bool Definition = (Flags & TOKENIZE_FLAGS_asStatement)!=0;
 	bool noIN = (Flags & TOKENIZE_FLAGS_noIn)!=0;
-	bool Statement = Definition & !noIN;
+	bool Statement = Definition && !noIN;
 	bool Expression = !Definition;
 	Flags &= ~(TOKENIZE_FLAGS_asStatement);
 	if(!Definition) noIN=false, Flags &= ~TOKENIZE_FLAGS_noIn;
@@ -3567,7 +3567,7 @@ void CScriptVar::unref() {
 		delete this;
 }
 
-int CScriptVar::getRefs() {
+int CScriptVar::getRefs() const {
 	return refs;
 }
 
@@ -6260,7 +6260,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 					if(__constructor__)
 						Constructor = __constructor__;
 					if (stackBase) {
-						int dummy;
+						int dummy = 0;
 						if(&dummy < stackBase)
 							throwError(execute, Error, "too much recursion");
 					}
@@ -6364,7 +6364,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 			if (!fnc->isFunction())
 				throwError(execute, TypeError, a->getName() + " is not a function");
 			if (stackBase) {
-				int dummy;
+				int dummy = 0;
 				if(&dummy < stackBase)
 					throwError(execute, Error, "too much recursion");
 			}

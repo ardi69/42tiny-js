@@ -41,8 +41,10 @@ Version 0.9.3 (2016-04-14 20:10:22)
 Version 0.9.4 (2024-04-08 16:53:41)
 ===================================
 
-- little change on pool_allocator
-- wait on keypress on end of Script.exe
+* little change on pool_allocator
+* wait on keypress on end of Script.exe
 * added MSVC 2017 project-files
 * added MSVC 2022 project-files
 * fix compiler error end warnings with MSVC 2017/2022
+* change some functions to const
+* change C++ Language with MSVC to ISO Standard C++20

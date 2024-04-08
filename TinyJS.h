@@ -343,16 +343,16 @@ public:
 	void check(int expected_tk, int alternate_tk=-1); ///< Lexical check wotsit
 	void match(int expected_tk, int alternate_tk=-1); ///< Lexical match wotsit
 	void reset(const POS &toPos); ///< Reset this lex so we can start again
-	const char *rest() { return pos.tokenStart; }
+	const char* rest() const { return pos.tokenStart; }
 	std::string currentFile;
 	struct POS {
 		const char *tokenStart;
 		int32_t currentLine;
 		const char *currentLineStart;
-		int16_t currentColumn() { return (int16_t)(tokenStart-currentLineStart) /* silently casted to int16_t because always checked in match(...) */; }
+		int16_t currentColumn() const { return (int16_t)(tokenStart - currentLineStart) /* silently casted to int16_t because always checked in match(...) */; }
 	} pos;
-	int32_t currentLine() { return pos.currentLine; }
-	int16_t currentColumn() { return pos.currentColumn(); }
+	int32_t currentLine() const { return pos.currentLine; }
+	int16_t currentColumn() const { return pos.currentColumn(); }
 	bool lineBreakBeforeToken;
 private:
 	const char *data;
@@ -449,7 +449,7 @@ public:
 	void addConsts( STRING_VECTOR_t &Vars );
 	std::string addVarsInLetscope(STRING_VECTOR_t &Vars);
 	std::string addLets(STRING_VECTOR_t &Lets);
-	bool empty() { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
+	bool empty() const { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
 
 	enum {
 		LETS = 0,
@@ -701,8 +701,8 @@ public:
 		}
 		TOKEN_VECT *tokens;
 		TOKEN_VECT_it pos;
-		int currentLine()		{ return pos->line; }
-		int currentColumn()	{ return pos->column; }
+		int currentLine() const { return pos->line; }
+		int currentColumn() const { return pos->column; }
 	};
 	struct ScriptTokenState {
 		ScriptTokenState() : LeftHand(false), FunctionIsGenerator(false), HaveReturnValue(false) {}
@@ -724,7 +724,7 @@ public:
 	static bool writeCompiledTokens;
 private:
 	void unserialize(const std::string &File, const std::string &FileC="");
-	void serialize(std::ostream &out);
+	void serialize(std::ostream &out) const;
 	void serialize(const std::string &File);
 	void serialize(const std::string &File, const std::nothrow_t &);
 public:
@@ -839,9 +839,9 @@ public:
 		if (lhs_idx == 0 && rhs_idx == 0) return name < rhs.name;
 		return false;
 	}
-	bool isArrayIdx() { return 0 <= idx && idx < 0xFFFFFFFFLL; }
-	bool isPropertyName() { return idx == -1; }
-	bool isSymbol() { return idx < -1; }
+	bool isArrayIdx() const { return 0 <= idx && idx < 0xFFFFFFFFLL; }
+	bool isPropertyName() const { return idx == -1; }
+	bool isSymbol() const { return idx < -1; }
 private:
 	static int64_t name2arrayIdx(const std::string &Name);
 	std::string name;
@@ -898,7 +898,7 @@ public:
 	virtual bool isIterator();
 	virtual bool isGenerator();
 
-	bool isBasic() { return Childs.empty(); } ///< Is this *not* an array/object/etc
+	bool isBasic() const { return Childs.empty(); } ///< Is this *not* an array/object/etc
 
 
 	//////////////////////////////////////////////////////////////////////////
@@ -1006,7 +1006,7 @@ public:
 	uint32_t DEPRECATED("getArrayLength is deprecated use getLength instead!") getArrayLength(); ///< If this is an array, return the number of items in it (else 0)
 
 	//////////////////////////////////////////////////////////////////////////
-	size_t getChildren() { return Childs.size(); } ///< Get the number of children
+	size_t getChildren() const { return Childs.size(); } ///< Get the number of children
 	CTinyJS *getContext() { return context; }
 	CScriptVarPtr mathsOp(const CScriptVarPtr &b, int op); ///< do a maths op with another script variable
 
@@ -1022,7 +1022,7 @@ private:
 	CScriptVar *ref(); ///< Add reference to this variable
 	void unref(); ///< Remove a reference, and delete this variable if required
 public:
-	int getRefs(); ///< Get the number of references to this script variable
+	int getRefs() const; ///< Get the number of references to this script variable
 	template<class T>
 	operator T *(){ T *ret = dynamic_cast<T*>(this); ASSERT(ret!=0); return ret; }
 	template<class T>
@@ -1126,7 +1126,7 @@ public:
 
 	void reName(const std::string newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array
 
-	int getFlags() { return flags; }
+	int getFlags() const { return flags; }
 	const CScriptVarPtr &getVarPtr() const { return var; }
 	const CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; } ///< simple Replace the Variable pointed to
 
@@ -1430,7 +1430,7 @@ inline define_newScriptVar_Fnc(String, CTinyJS *Context, char *Obj) { return new
 //////////////////////////////////////////////////////////////////////////
 define_dummy_t(NegativeZero);
 define_dummy_t(NaN);
-class Infinity{public:Infinity(int Sig=1):sig(Sig){} int Sig(){return sig;} private:int sig; } ;
+class Infinity { public:Infinity(int Sig = 1) :sig(Sig) {} int Sig() const { return sig; } private:int sig; };
 extern Infinity InfinityPositive;
 extern Infinity InfinityNegative;
 
@@ -2181,7 +2181,7 @@ public:
 		yieldVar = YieldVar;
 		yieldVarIsException = true;
 	}
-	bool isClosed() { return closed; }
+	bool isClosed() const { return closed; }
 	CScriptVarPtr yield(CScriptResult &execute, CScriptVar *YieldIn);
 private:
 	CScriptVarPtr functionRoot;
@@ -2235,15 +2235,15 @@ public:
 	CScriptResult() : type(Normal), throw_at_line(-1), throw_at_column(-1), strictMode(false) {}
 //	CScriptResult(TYPE Type) : type(Type), throw_at_line(-1), throw_at_column(-1) {}
 //		~RESULT() { if(type==Throw) throw value; }
-	bool isNormal() { return type==Normal; }
-	bool isBreak() { return type==Break; }
-	bool isContinue() { return type==Continue; }
-	bool isBreakContinue() { return type==Break || type==Continue; }
-	bool isReturn() { return type==Return; }
-	bool isReturnNormal() { return type==Return || type==Normal; }
-	bool isThrow() { return type==Throw; }
+	bool isNormal() const { return type == Normal; }
+	bool isBreak() const { return type == Break; }
+	bool isContinue() const { return type == Continue; }
+	bool isBreakContinue() const { return type == Break || type == Continue; }
+	bool isReturn() const { return type == Return; }
+	bool isReturnNormal() const { return type == Return || type == Normal; }
+	bool isThrow() const { return type == Throw; }
 
-	bool useStrict() { return strictMode; }
+	bool useStrict() const { return strictMode; }
 
 	operator bool() const { return type==Normal; }
 	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.clear(), target.clear(); }
@@ -2251,7 +2251,7 @@ public:
 	void set(TYPE Type, const std::string &Target) { type=Type; target=Target; }
 	void setThrow(const CScriptVarPtr &Value, const std::string &File, int Line=-1, int Column=-1) { type=Throw; value=Value; throw_at_file=File, throw_at_line=Line; throw_at_column=Column; }
 
-	void cThrow() { if(type==Throw) throw value; }
+	void cThrow() const { if (type == Throw) throw value; }
 
 	CScriptResult &operator()(const CScriptResult &rhs) { if(rhs.type!=Normal) *this=rhs; return *this; }
 
@@ -2561,7 +2561,7 @@ private:
 	int32_t currentMarkSlot;
 	void *stackBase;
 public:
-	int32_t getCurrentMarkSlot() {
+	int32_t getCurrentMarkSlot() const {
 		ASSERT(currentMarkSlot >= 0); // UniqueID not allocated
 		return currentMarkSlot;
 	}
@@ -2578,7 +2578,7 @@ public:
 	void setTemporaryID_recursive(uint32_t ID);
 	void ClearUnreferedVars(const CScriptVarPtr &extra=CScriptVarPtr());
 	void setStackBase(void * StackBase) { stackBase = StackBase; }
-	void setStackBase(uint32_t StackSize) { char dummy; stackBase = StackSize ? &dummy-StackSize : 0; }
+	void setStackBase(uint32_t StackSize) { char dummy = 0; stackBase = StackSize ? &dummy - StackSize : 0; }
 };
 
 
