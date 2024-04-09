@@ -1,5 +1,5 @@
 function Foo() {
-  this.__proto__ = Foo.prototype;
+  //this.__proto__ = Foo.prototype;
 }
 Foo.prototype = { value : function() { return this.x + this.y; } };
 

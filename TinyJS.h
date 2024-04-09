@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.4
+#define TINY_JS_VERSION 0.9.5
 
 #include <string>
 #include <vector>
@@ -930,6 +930,7 @@ public:
 	std::string DEPRECATED("getString() is deprecated use toString() instead") getString();
 
 	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value);
+	virtual CScriptVarLinkPtr &getter(CScriptResult &execute, CScriptVarLinkPtr &link);
 
 
 	virtual CScriptTokenDataFnc *getFunctionData(); ///< { return 0; }
@@ -1753,6 +1754,8 @@ public:
 
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 	virtual void setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) OVERRIDE;
+	virtual CScriptVarLinkPtr &getter(CScriptResult &execute, CScriptVarLinkPtr &link) OVERRIDE;
+
 
 	uint32_t getLength();
 	CScriptVarPtr getArrayElement(uint32_t idx);

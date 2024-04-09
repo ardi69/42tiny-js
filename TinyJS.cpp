@@ -3129,6 +3129,9 @@ string CScriptVar::getString() { return toPrimitive_hintString()->toCString(); }
 void CScriptVar::setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) {
 	link->setVarPtr(value);
 }
+CScriptVarLinkPtr &CScriptVar::getter(CScriptResult &execute, CScriptVarLinkPtr &link) {
+	return link;
+}
 
 CScriptTokenDataFnc *CScriptVar::getFunctionData() { return 0; }
 
@@ -3641,14 +3644,14 @@ CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, con
 bool CScriptVarLinkPtr::operator <(const string &rhs) const {
 	uint32_t lhs_int = isArrayIndex(link->getName());
 	uint32_t rhs_int = isArrayIndex(rhs);
-	if(lhs_int==uint32_t(-1)) {
-		if(rhs_int==uint32_t(-1))
-			return link->getName() < rhs;
+	if(lhs_int==uint32_t(-1)) {				// lhs is not an array-idx
+		if(rhs_int==uint32_t(-1))			// and rhs is not an array-idx
+			return link->getName() < rhs;	// normal string compare
 		else
-			return true;
-	} else if(rhs_int==uint32_t(-1))
+			return true;					// but rhs is an array-idx always true to sort array-idx at the end
+	} else if(rhs_int==uint32_t(-1))		// if lhs an array-idx but rhs not always false to sort array-idx at the end
 		return false;
-	return lhs_int < rhs_int;
+	return lhs_int < rhs_int;				// both are array-idx normal int compare 
 }
 
 
@@ -3667,17 +3670,20 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::getter() {
 	return *this;
 }
 CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::getter(CScriptResult &execute) {
-	if(execute && link && link->getVarPtr() && link->getVarPtr()->isAccessor()) {
-		const CScriptVarPtr &var = link->getVarPtr();
-		CScriptVarLinkPtr getter = var->findChild(TINYJS_ACCESSOR_GET_VAR);
-		if(getter) {
-			vector<CScriptVarPtr> Params;
-			ASSERT(getReferencedOwner());
-			return getter->getVarPtr()->getContext()->callFunction(execute, getter->getVarPtr(), Params, getReferencedOwner());
-		} else
-			return var->constScriptVar(Undefined);
-	} else
-		return *this;
+	if(execute && link) {
+		if (link->getVarPtr() && link->getVarPtr()->isAccessor()) {
+			const CScriptVarPtr &var = link->getVarPtr();
+			CScriptVarLinkPtr getter = var->findChild(TINYJS_ACCESSOR_GET_VAR);
+			if (getter) {
+				vector<CScriptVarPtr> Params;
+				ASSERT(getReferencedOwner());
+				return getter->getVarPtr()->getContext()->callFunction(execute, getter->getVarPtr(), Params, getReferencedOwner());
+			} else
+				return var->constScriptVar(Undefined);
+		} else if (referencedOwner)
+			return referencedOwner->getter(execute, *this);
+	} 
+	return *this;
 }
 CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( const CScriptVarPtr &Var ) {
 	if(link && link->getVarPtr()) {
@@ -4604,7 +4610,16 @@ void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &li
 	}
 	CScriptVar::setter(execute, link, value);
 }
-
+CScriptVarLinkPtr &CScriptVarArray::getter(CScriptResult &execute, CScriptVarLinkPtr &link) {
+	const std::string &name = link->getName();
+	if (name == "length") {
+		uint32_t len = isArrayIndex(Childs.back()->getName()) + 1;
+		uint32_t val = link->getVarPtr()->toNumber().toUInt32();
+		if (len > val)
+			link->setVarPtr(newScriptVar(len));
+	}
+	return CScriptVar::getter(execute, link);
+}
 uint32_t CScriptVarArray::getLength() {
 	uint32_t len = isArrayIndex(Childs.back()->getName())+1;
 	if(len > length) length = len;
@@ -6195,7 +6210,10 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 							}
 						} else {
 							t->pushTokenScope(it->value);
-							a->addChildOrReplace(it->id, 0).setter(execute, execute_assignment(execute));
+							if (it->id == "__proto__")
+ 								a->setPrototype(execute_assignment(execute));
+							else
+								a->addChildOrReplace(it->id, 0).setter(execute, execute_assignment(execute));
 							t->match(LEX_T_END_EXPRESSION); // eat LEX_T_END_EXPRESSION
 						}
 					}

@@ -48,3 +48,12 @@ Version 0.9.4 (2024-04-08 16:53:41)
 * fix compiler error end warnings with MSVC 2017/2022
 * change some functions to const
 * change C++ Language with MSVC to ISO Standard C++20
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.5 (2024-04-09 21:45:44)
+===================================
+
+* fix typos in MSVC sln
+* fix for test029.js, test31.js and test032.42.js

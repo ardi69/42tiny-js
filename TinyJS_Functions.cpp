@@ -110,6 +110,10 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 		if(offset && it != arr->Childs.end())
 			(*it)->reName(int2string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
 	}
+	if (offset) {
+		arr->setProperty("length", c->newScriptVar(arr->getLength() - offset));
+		
+	}
 }
 
 static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
