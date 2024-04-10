@@ -57,3 +57,4 @@ Version 0.9.5 (2024-04-09 21:45:44)
 
 * fix typos in MSVC sln
 * fix for test029.js, test31.js and test032.42.js
+* remove c++ array.length

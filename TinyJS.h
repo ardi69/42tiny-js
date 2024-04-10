@@ -1744,7 +1744,7 @@ define_ScriptVarPtr_Type(Array);
 class CScriptVarArray : public CScriptVarObject {
 protected:
 	CScriptVarArray(CTinyJS *Context);
-	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion), length(Copy.length) {} ///< Copy protected -> use clone for public
+	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion) {} ///< Copy protected -> use clone for public
 public:
 	virtual ~CScriptVarArray() OVERRIDE;
 	virtual CScriptVarPtr clone() OVERRIDE;
@@ -1761,10 +1761,10 @@ public:
 	CScriptVarPtr getArrayElement(uint32_t idx);
 	void setArrayElement(uint32_t idx, const CScriptVarPtr &value);
 private:
-	void native_getLength(const CFunctionsScopePtr &c, void *data);
-	void native_setLength(const CFunctionsScopePtr &c, void *data);
+//	void native_getLength(const CFunctionsScopePtr &c, void *data);
+//	void native_setLength(const CFunctionsScopePtr &c, void *data);
 	bool toStringRecursion;
-	uint32_t length;
+//	uint32_t length;
 	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 };
 inline define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t) { return new CScriptVarArray(Context); }

@@ -4520,7 +4520,7 @@ CScriptException CScriptVarError::toCScriptException()
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Array);
-CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false), length(0) {
+CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false) {
 	CScriptVarLinkPtr acc = addChild("length", newScriptVar(0), SCRIPTVARLINK_WRITABLE);
 /*
 	CScriptVarLinkPtr acc = addChild("length", newScriptVar(Accessor), SCRIPTVARLINK_WRITABLE);
@@ -4580,18 +4580,21 @@ CScriptVarPtr CScriptVarArray::toString_CallBack( CScriptResult &execute, int ra
 
 void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) {
 	const std::string &name = link->getName();
-	uint32_t len;
+	uint32_t newlen;
 	if(name == "length") {
-		CNumber newLen = value->toNumber(execute);
 		if(!execute) return;
-		if(newLen.isUInt32()) {
-			len = newLen.toUInt32();
-			if(len < length) {
-				SCRIPTVAR_CHILDS_it begin = lower_bound(Childs.begin(), Childs.end(), int2string(len));
-				SCRIPTVAR_CHILDS_it end = Childs.end();
-				while(begin < end) {
-					end = Childs.erase(--end);
+		if((value->toNumber(execute).isUInt32())) {
+			newlen = value->toNumber(execute).toUInt32();
+			if(newlen < link->getVarPtr()->toNumber()) {
+				SCRIPTVAR_CHILDS_it begin = lower_bound(Childs.begin(), Childs.end(), int2string(newlen));
+				//SCRIPTVAR_CHILDS_it end = Childs.end();
+#if (__cplusplus >= 201103L || _MSC_VER >= 1600) // Visual Studio? I do not know exactly! 2010 and above ???
+				Childs.erase(begin, Childs.end());
+#else
+				while(begin != Childs.end()) {
+					begin = Childs.erase(begin);
 				}
+#endif
 //
 // 				if(execute.useStrict()) {
 // 					while(rit != rend)
@@ -4599,14 +4602,15 @@ void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &li
 // 				}
 // 				Childs.erase(rit, rend);
 			}
-			length = len;
+			link->setVarPtr(newScriptVar(newlen));
 		} else {
 			context->throwError(execute, RangeError, "invalid array length");
 			return;
 		}
-	} else if((len = isArrayIndex(name)+1)) {
-		if(len > length) length = len;
-		CScriptVar::setter(execute, findChild("length"), newScriptVar(length));
+	} else if((newlen = isArrayIndex(name)+1)) {
+		auto length = findChild("length");
+		if(length && newlen > length->getVarPtr()->toNumber())
+			length->setVarPtr(newScriptVar(newlen));
 	}
 	CScriptVar::setter(execute, link, value);
 }
@@ -4614,16 +4618,26 @@ CScriptVarLinkPtr &CScriptVarArray::getter(CScriptResult &execute, CScriptVarLin
 	const std::string &name = link->getName();
 	if (name == "length") {
 		uint32_t len = isArrayIndex(Childs.back()->getName()) + 1;
-		uint32_t val = link->getVarPtr()->toNumber().toUInt32();
-		if (len > val)
+//		uint32_t val = link->getVarPtr()->toNumber().toUInt32();
+		if (len > link->getVarPtr()->toNumber())
 			link->setVarPtr(newScriptVar(len));
 	}
 	return CScriptVar::getter(execute, link);
 }
+
+
 uint32_t CScriptVarArray::getLength() {
-	uint32_t len = isArrayIndex(Childs.back()->getName())+1;
-	if(len > length) length = len;
-	return length;
+	auto length = findChild("length");
+	if (length) {
+		uint32_t real_len = isArrayIndex(Childs.back()->getName()) + 1;
+		uint32_t curr_len = length->getVarPtr()->toNumber().toUInt32();
+		if (real_len > curr_len) {
+			length->setVarPtr(newScriptVar(real_len));
+			return real_len;
+		}
+		return curr_len;
+	}
+	return 0;
 }
 
 CScriptVarPtr CScriptVarArray::getArrayElement(uint32_t idx) {
@@ -4635,10 +4649,13 @@ CScriptVarPtr CScriptVarArray::getArrayElement(uint32_t idx) {
 void CScriptVarArray::setArrayElement(uint32_t idx, const CScriptVarPtr &value) {
 	if(idx < (uint32_t)-1) {
 		addChildOrReplace(int2string(idx), value);
-		if(length <= idx) length = idx+1;
+		auto length = findChild("length");
+		if (length && length->getVarPtr()->toNumber().toUInt32() < idx) 
+			length->setVarPtr(newScriptVar(idx + 1));
 	}
 }
 
+/*
 void CScriptVarArray::native_getLength(const CFunctionsScopePtr &c, void *data) {
 	c->setReturnVar(newScriptVar(getLength()));
 }
@@ -4654,6 +4671,7 @@ void CScriptVarArray::native_setLength(const CFunctionsScopePtr &c, void *data) 
 	} else
 		c->throwError(RangeError, "invalid array length");
 }
+*/
 
 
 //////////////////////////////////////////////////////////////////////////
