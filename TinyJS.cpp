@@ -442,6 +442,7 @@ void CScriptLex::getNextToken() {
 							tkStr += (char)strtol(buf, 0, 16);
 						} else
 							throw CScriptException(SyntaxError, "malformed hexadezimal character escape sequence", currentFile, pos.currentLine, currentColumn());
+						FALLTHROUGH;
 					}
 					default: {
 						if(isOctal(currCh)) {
@@ -577,7 +578,7 @@ void CScriptLex::getNextToken() {
 				}
 				if(currCh == '/') {
 #ifndef NO_REGEXP
-					try { regex(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
+					try { regex r(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
 						throw CScriptException(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
 					}
 #endif /* NO_REGEXP */
@@ -594,6 +595,30 @@ void CScriptLex::getNextToken() {
 		} else if (tk=='%' && currCh=='=') {
 			tk = LEX_PERCENTEQUAL;
 			getNextCh();
+		} else if (tk == '?' && currCh == '?') {
+			tk = LEX_ASKASK;
+			getNextCh(); // eat '?'
+			if (currCh == '=') {
+				tk = LEX_ASKASKEQUAL;
+				getNextCh(); // eat '='
+			}
+		} else if (tk == '*' && currCh == '*') {
+			tk = LEX_ASTERISKASTERISK;
+			getNextCh(); // eat '*'
+			if (currCh == '=') {
+				tk = LEX_ASTERISKASTERISKEQUAL;
+				getNextCh(); // eat '='
+			}
+		} else if (tk == '?' && currCh == '.') {
+			tk = LEX_OPTIONAL_CHAINING_MEMBER;
+			getNextCh(); // eat '?'
+			if (currCh == '[') {
+				tk = LEX_OPTIONAL_CHAINING_ARRAY;
+				getNextCh(); // eat '['
+			} else if (currCh == '(') {
+				tk = LEX_OPTIONAL_CHANING_FNC;
+				getNextCh(); // eat '('
+			}
 		}
 	}
 	/* This isn't quite right yet */
@@ -1058,53 +1083,62 @@ static token2str_t **str2reserved_end = ARRAY_END(str2reserved_begin);
 
 static token2str_t tokens2str_begin[] = {
 	{ LEX_EOF, 									"EOF", 										false },
-	{ LEX_ID, 									"ID", 										true	},
-	{ LEX_INT, 									"INT", 										true	},
-	{ LEX_FLOAT, 								"FLOAT", 									true	},
-	{ LEX_STR, 									"STRING", 									true	},
-	{ LEX_REGEXP, 								"REGEXP", 									true	},
+	{ LEX_ID, 									"ID", 										true  },
+	{ LEX_INT, 									"INT", 										true  },
+	{ LEX_FLOAT, 								"FLOAT", 									true  },
+	{ LEX_STR, 									"STRING", 									true  },
+	{ LEX_REGEXP, 								"REGEXP", 									true  },
 	{ LEX_ARROW, 								"=>", 										false },
 	{ LEX_EQUAL, 								"==", 										false },
 	{ LEX_TYPEEQUAL, 							"===", 										false },
 	{ LEX_NEQUAL, 								"!=", 										false },
-	{ LEX_NTYPEEQUAL, 						"!==", 										false },
+	{ LEX_NTYPEEQUAL, 							"!==", 										false },
 	{ LEX_LEQUAL, 								"<=", 										false },
 	{ LEX_LSHIFT, 								"<<", 										false },
-	{ LEX_LSHIFTEQUAL, 						"<<=", 										false },
+	{ LEX_LSHIFTEQUAL, 							"<<=", 										false },
 	{ LEX_GEQUAL, 								">=", 										false },
 	{ LEX_RSHIFT, 								">>", 										false },
-	{ LEX_RSHIFTEQUAL, 						">>=", 										false },
-	{ LEX_RSHIFTU, 							">>>", 										false },
-	{ LEX_RSHIFTUEQUAL, 						">>>=", 										false },
+	{ LEX_RSHIFTEQUAL, 							">>=", 										false },
+	{ LEX_RSHIFTU, 								">>>", 										false },
+	{ LEX_RSHIFTUEQUAL, 						">>>=", 									false },
 	{ LEX_PLUSEQUAL, 							"+=", 										false },
-	{ LEX_MINUSEQUAL, 						"-=", 										false },
+	{ LEX_MINUSEQUAL, 							"-=", 										false },
 	{ LEX_PLUSPLUS, 							"++", 										false },
-	{ LEX_MINUSMINUS, 						"--", 										false },
+	{ LEX_MINUSMINUS, 							"--", 										false },
 	{ LEX_ANDEQUAL, 							"&=", 										false },
 	{ LEX_ANDAND, 								"&&", 										false },
-	{ LEX_OREQUAL, 							"|=", 										false },
+	{ LEX_OREQUAL, 								"|=", 										false },
 	{ LEX_OROR, 								"||", 										false },
 	{ LEX_XOREQUAL, 							"^=", 										false },
-	{ LEX_ASTERISKEQUAL, 					"*=", 										false },
-	{ LEX_SLASHEQUAL, 						"/=", 										false },
+	{ LEX_ASTERISKEQUAL, 						"*=", 										false },
+	{ LEX_SLASHEQUAL, 							"/=", 										false },
 	{ LEX_PERCENTEQUAL, 						"%=", 										false },
+	{ LEX_ASKASK, 								"??", 										false },
+	{ LEX_ASKASKEQUAL, 							"??=", 										false },
+	{ LEX_ASTERISKASTERISK, 					"**", 										false },
+	{ LEX_ASTERISKASTERISKEQUAL, 				"**=", 										false },
+
+	{ LEX_OPTIONAL_CHAINING_MEMBER, 				"?.", 										false },
+	{ LEX_OPTIONAL_CHAINING_ARRAY, 				"?.[", 										false },
+	{ LEX_OPTIONAL_CHANING_FNC, 				"?.(", 										false },
+
 	// special tokens
-	{ LEX_T_OF, 								"of", 										true	},
-	{ LEX_T_FUNCTION_OPERATOR, 			"function", 								true	},
-	{ LEX_T_GET, 								"get", 										true	},
-	{ LEX_T_SET, 								"set", 										true	},
-	{ LEX_T_EXCEPTION_VAR, 					"LEX_T_EXCEPTION_VAR",	 				false },
+	{ LEX_T_OF, 								"of", 										true  },
+	{ LEX_T_FUNCTION_OPERATOR, 					"function", 								true  },
+	{ LEX_T_GET, 								"get", 										true  },
+	{ LEX_T_SET, 								"set", 										true  },
+	{ LEX_T_EXCEPTION_VAR, 						"LEX_T_EXCEPTION_VAR",	 					false },
 	{ LEX_T_SKIP, 								"LEX_T_SKIP", 								false },
-	{ LEX_T_END_EXPRESSION, 				"LEX_T_END_EXPRESSION",	 				false },
-	{ LEX_T_DUMMY_LABEL, 					"LABEL", 									true	},
-	{ LEX_T_LABEL, 							"LABEL", 									true	},
-	{ LEX_T_LOOP, 								"LEX_T_LOOP", 								true	},
-	{ LEX_T_FOR_IN, 							"LEX_FOR_IN", 								true	},
-	{ LEX_T_IF, 								"if", 										true	},
+	{ LEX_T_END_EXPRESSION, 					"LEX_T_END_EXPRESSION",	 					false },
+	{ LEX_T_DUMMY_LABEL, 						"LABEL", 									true  },
+	{ LEX_T_LABEL, 								"LABEL", 									true  },
+	{ LEX_T_LOOP, 								"LEX_T_LOOP", 								true  },
+	{ LEX_T_FOR_IN, 							"LEX_FOR_IN", 								true  },
+	{ LEX_T_IF, 								"if", 										true  },
 	{ LEX_T_FORWARD, 							"LEX_T_FORWARD", 							false },
-	{ LEX_T_OBJECT_LITERAL, 				"LEX_T_OBJECT_LITERAL",	 				false },
-	{ LEX_T_ARRAY_COMPREHENSIONS_BODY,	"LEX_T_ARRAY_COMPREHENSIONS_BODY",	false	},
-	{ LEX_T_DESTRUCTURING_VAR, 			"Destructuring Var", 					false },
+	{ LEX_T_OBJECT_LITERAL, 					"LEX_T_OBJECT_LITERAL",	 					false },
+	{ LEX_T_ARRAY_COMPREHENSIONS_BODY,			"LEX_T_ARRAY_COMPREHENSIONS_BODY",			false },
+	{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
 };
 static token2str_t *tokens2str_end = &tokens2str_begin[sizeof(tokens2str_begin)/sizeof(tokens2str_begin[0])];
 struct token2str_cmp_t {
@@ -2587,8 +2621,8 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	}
 }
 void CScriptTokenizer::tokenizeMember(ScriptTokenState &State, int Flags) {
-	while(l->tk == '.' || l->tk == '[') {
-		if(l->tk == '.') {
+	while(l->tk == '.' || l->tk == LEX_OPTIONAL_CHAINING_MEMBER || l->tk == '[' || l->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
+		if(l->tk == '.' || l->tk == LEX_OPTIONAL_CHAINING_MEMBER) {
 			pushToken(State.Tokens);
 			if(CScriptToken::isReservedWord(l->tk))
 				l->tk = LEX_ID; // fake reserved-word as member.ID
@@ -2608,7 +2642,7 @@ void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, int Flags) 
 	bool for_new = (Flags & TOKENIZE_FLAGS_callForNew)!=0; Flags &= ~TOKENIZE_FLAGS_callForNew;
 	tokenizeLiteral(State, Flags);
 	tokenizeMember(State, Flags);
-	while(l->tk == '(') {
+	while(l->tk == '(' || l->tk == LEX_OPTIONAL_CHANING_FNC /* '?.(' */) {
 		State.LeftHand = false;
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 		State.pushLeftHandState();
@@ -2634,12 +2668,13 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 	static int *Left2Right_end = &Left2Right_begin[sizeof(Left2Right_begin)/sizeof(Left2Right_begin[0])];
 #else
 	static int Left2Right_begin[] = {
-		/* Precedence 5 */		'*', '/', '%',
-		/* Precedence 6 */		'+', '-',
-		/* Precedence 7 */		LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU,
+		/* Precedence 13 */		LEX_ASTERISKASTERISK,
+		/* Precedence 12 */		'*', '/', '%',
+		/* Precedence 11 */		'+', '-',
+		/* Precedence 10*/		LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU,
 		/* Precedence 8 */		LEX_EQUAL, LEX_NEQUAL, LEX_TYPEEQUAL, LEX_NTYPEEQUAL,
 		/* Precedence 9 */		'<', LEX_LEQUAL, '>', LEX_GEQUAL, LEX_R_IN, LEX_R_INSTANCEOF,
-		/* Precedence 10-12 */	'&', '^', '|',
+		/* Precedence 7-5 */	'&', '^', '|',
 	};
 	static int *Left2Right_end = &Left2Right_begin[sizeof(Left2Right_begin)/sizeof(Left2Right_begin[0])];
 	static bool Left2Right_sorted ATTRIBUTE_USED = (mysort(Left2Right_begin, Left2Right_end), true);
@@ -2662,7 +2697,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 	for(;;) {
 		bool right2left_end = false;
 		while(!right2left_end) {
-			switch(l->tk) {
+			switch (l->tk) {
 			case '-':
 			case '+':
 			case '!':
@@ -2670,19 +2705,20 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 			case LEX_R_TYPEOF:
 			case LEX_R_VOID:
 			case LEX_R_DELETE:
+			//case LEX_R_AWAIT:
 				Flags &= ~TOKENIZE_FLAGS_canLabel;
 				noLeftHand = true;
-				pushToken(State.Tokens); // Precedence 3
+				pushToken(State.Tokens); // Precedence 14
 				break;
 			case LEX_PLUSPLUS: // pre-increment
-			case LEX_MINUSMINUS: // pre-decrement
-				{
+			case LEX_MINUSMINUS: { // pre-decrement
 					int tk = l->tk;
 					Flags &= ~TOKENIZE_FLAGS_canLabel;
 					noLeftHand = true;
-					pushToken(State.Tokens); // Precedence 4
-					if(l->tk == LEX_ID && l->tkStr == "this")
-						throw CScriptException(SyntaxError, tk==LEX_PLUSPLUS?"invalid increment operand":"invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn());
+					pushToken(State.Tokens); // Precedence 14
+					if (l->tk == LEX_ID && l->tkStr == "this")
+						throw CScriptException(SyntaxError, tk == LEX_PLUSPLUS ? "invalid increment operand" : "invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn());
+					FALLTHROUGH;
 				}
 			default:
 				right2left_end = true;
@@ -2692,14 +2728,14 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 
 		if (!l->lineBreakBeforeToken && (l->tk==LEX_PLUSPLUS || l->tk==LEX_MINUSMINUS)) { // post-in-/de-crement
 			noLeftHand = true;;
-			pushToken(State.Tokens); // Precedence 4
+			pushToken(State.Tokens); // Precedence 15
 		}
 		if(Flags&TOKENIZE_FLAGS_noIn && l->tk==LEX_R_IN)
 			break;
 		int *found = lower_bound(Left2Right_begin, Left2Right_end, l->tk);
 		if(found != Left2Right_end && *found == l->tk) {
 			noLeftHand = true;
-			pushToken(State.Tokens); // Precedence 5-14
+			pushToken(State.Tokens); // Precedence 12-5
 		}
 		else
 			break;
@@ -2709,9 +2745,9 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 
 void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, int Flags, int op /*= LEX_OROR*/, int op_n /*= LEX_ANDAND*/) {
 	op_n ? tokenizeLogic(State, Flags, op_n, 0) : tokenizeSubExpression(State, Flags);
-	if(l->tk==op) {
+	if(l->tk==op || (op==LEX_OROR && l->tk == LEX_ASKASK)) {
 		size_t marks_count = State.Marks.size();
-		while(l->tk==op) {
+		while(l->tk==op || (op == LEX_OROR && l->tk == LEX_ASKASK)) {
 			State.Marks.push_back(pushToken(State.Tokens));
 			op_n ? tokenizeLogic(State, Flags, op_n, 0) : tokenizeSubExpression(State, Flags);
 		}
@@ -2735,7 +2771,7 @@ void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
 }
 void CScriptTokenizer::tokenizeAssignment(ScriptTokenState &State, int Flags) {
 	tokenizeCondition(State, Flags);
-	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) ) {
+	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) || l->tk == LEX_ASKASKEQUAL || l->tk == LEX_ASTERISKASTERISKEQUAL) {
 		if(!State.LeftHand)
 			throw CScriptException(ReferenceError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
 		pushToken(State.Tokens);
@@ -2776,28 +2812,29 @@ void CScriptTokenizer::tokenizeStatementNoLet(ScriptTokenState &State, int Flags
 }
 void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 	int tk = l->tk;
-	switch(l->tk)
+	switch (l->tk)
 	{
 	case '{':				tokenizeBlock(State, Flags); break;
 	case ';':				pushToken(State.Tokens); break;
 	case LEX_R_CONST:
-	case LEX_R_VAR:		tokenizeVarAndConst(State, Flags); break;
-	case LEX_R_LET:		tokenizeLet(State, Flags | TOKENIZE_FLAGS_asStatement); break;
+	case LEX_R_VAR:			tokenizeVarAndConst(State, Flags); break;
+	case LEX_R_LET:			tokenizeLet(State, Flags | TOKENIZE_FLAGS_asStatement); break;
 	case LEX_R_WITH:		tokenizeWith(State, Flags); break;
 	case LEX_R_IF:			tokenizeIf(State, Flags); break;
-	case LEX_R_SWITCH:	tokenizeSwitch(State, Flags); break;
+	case LEX_R_SWITCH:		tokenizeSwitch(State, Flags); break;
 	case LEX_R_DO:
 	case LEX_R_WHILE:		tokenizeWhileAndDo(State, Flags); break;
-	case LEX_R_FOR:		tokenizeFor(State, Flags); break;
+	case LEX_R_FOR:			tokenizeFor(State, Flags); break;
 	case LEX_R_FUNCTION:	tokenizeFunction(State, Flags | TOKENIZE_FLAGS_asStatement); break;
-	case LEX_R_TRY:		tokenizeTry(State, Flags); break;
+	case LEX_R_TRY:			tokenizeTry(State, Flags); break;
 	case LEX_R_RETURN:
-			if( (Flags & TOKENIZE_FLAGS_canReturn)==0)
-				throw CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
+		if ((Flags & TOKENIZE_FLAGS_canReturn) == 0)
+			throw CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
+		FALLTHROUGH;
 	case LEX_R_THROW:
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
-		if(l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
-			if(tk==LEX_R_RETURN) State.HaveReturnValue = true;
+		if (l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
+			if (tk == LEX_R_RETURN) State.HaveReturnValue = true;
 			tokenizeExpression(State, Flags);
 		}
 		pushToken(State.Tokens, ';'); // push ';'
@@ -2809,16 +2846,17 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 			bool isBreak = l->tk == LEX_R_BREAK;
 			State.Marks.push_back(pushToken(State.Tokens)); // push Token
 
-			if(l->tk != ';' && !l->lineBreakBeforeToken) {
+			if (l->tk != ';' && !l->lineBreakBeforeToken) {
 				l->check(LEX_ID);
-				STRING_VECTOR_t &L = isBreak ? State.Labels : State.LoopLabels;
-				if(find(L.begin(), L.end(), l->tkStr) == L.end())
-					throw CScriptException(SyntaxError, "label '"+l->tkStr+"' not found", l->currentFile, l->currentLine(), l->currentColumn());
+				STRING_VECTOR_t& L = isBreak ? State.Labels : State.LoopLabels;
+				if (find(L.begin(), L.end(), l->tkStr) == L.end())
+					throw CScriptException(SyntaxError, "label '" + l->tkStr + "' not found", l->currentFile, l->currentLine(), l->currentColumn());
 				pushToken(State.Tokens); // push 'Label'
-			} else if((Flags & (isBreak ? TOKENIZE_FLAGS_canBreak : TOKENIZE_FLAGS_canContinue) )==0)
+			}
+			else if ((Flags & (isBreak ? TOKENIZE_FLAGS_canBreak : TOKENIZE_FLAGS_canContinue)) == 0)
 				throw CScriptException(SyntaxError,
-											isBreak ? "'break' must be inside loop, switch or labeled statement" : "'continue' must be inside loop",
-											l->currentFile, l->currentLine(), l->currentColumn());
+					isBreak ? "'break' must be inside loop, switch or labeled statement" : "'continue' must be inside loop",
+					l->currentFile, l->currentLine(), l->currentColumn());
 			pushToken(State.Tokens, ';'); // push ';'
 			setTokenSkip(State);
 		}
@@ -2828,13 +2866,14 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 			State.Marks.push_back(pushToken(State.Tokens, CScriptToken(LEX_T_SKIP))); // push skip & skiperBeginIdx
 			STRING_VECTOR_t::size_type label_count = State.Labels.size();
 			tokenizeExpression(State, Flags | TOKENIZE_FLAGS_canLabel);
-			if(label_count < State.Labels.size() && l->tk == ':') {
-				State.Tokens.erase(State.Tokens.begin()+State.Marks.back()); // remove skip
+			if (label_count < State.Labels.size() && l->tk == ':') {
+				State.Tokens.erase(State.Tokens.begin() + State.Marks.back()); // remove skip
 				State.Marks.pop_back();
 				pushToken(State.Tokens); // push ':'
 				tokenizeStatement(State, Flags);
 				State.Labels.pop_back();
-			} else {
+			}
+			else {
 				pushToken(State.Tokens, ';');
 				setTokenSkip(State);
 			}
@@ -2910,7 +2949,7 @@ int64_t CScriptPropertyName::name2arrayIdx(const std::string &Name) {
 	bool overflow = false;
 	for (; *c_str; ++c_str) {
 		if (!isNumeric(*c_str)) return -1;
-		result = (result << 1) + (result << 3) + (*c_str - '0');
+		result = (result << 1) + (result << 3) + int64_t(*c_str - '0');
 		if(result >= 0x100000000LL) return -1;
 	}
 	return result;
@@ -3221,7 +3260,7 @@ const char *CScriptVar::defineProperty(const string &Name, CScriptVarPtr Attribu
 	CScriptVarPtr attr_set				= Attributes->findChild("set");
 	CScriptVarPtr attr_enumerable		= Attributes->findChild("enumerable");
 	CScriptVarPtr attr_configurable		= Attributes->findChild("configurable");
-	bool attr_isAccessorDescriptor		= attr_get || attr_set || (!attr_value && !attr_value && child && child->getVarPtr()->isAccessor());
+	bool attr_isAccessorDescriptor		= attr_get || attr_set || (!attr_value && child && child->getVarPtr()->isAccessor());
 	if(attr_isAccessorDescriptor) {
 		if(attr_value || attr_writable) return "property descriptors must not specify a value or be writable when a getter or setter has been specified";
 		if(attr_get && (!attr_get->isUndefined() || !attr_get->isFunction())) return "property descriptor's getter field is neither undefined nor a function";
@@ -3987,6 +4026,7 @@ CNumber CNumber::operator-() const {
 	case tInt32:
 		if(Int32==0)
 			return CNumber(NegativeZero);
+		FALLTHROUGH;
 	case tnNULL:
 		return CNumber(-Int32);
 	case tDouble:
@@ -4052,6 +4092,12 @@ CNumber CNumber::div( const CNumber &Value ) const {
 		else return CNumber(tInfinity, Sign);
 	} else
 		return CNumber(toDouble() / Value.toDouble());
+}
+
+CNumber CNumber::pow(const CNumber& Value) const {
+
+	if (*this == 1 && !Value.isFinite()) return NaN;		//	> not IEEE 754 conform pow(1, -Infinity | Infinity | NaN) = 1 / in JS = NaN 
+	return ::pow(toDouble(), Value.toDouble());
 }
 
 CNumber CNumber::modulo( const CNumber &Value ) const {
@@ -4588,7 +4634,7 @@ void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &li
 			if(newlen < link->getVarPtr()->toNumber()) {
 				SCRIPTVAR_CHILDS_it begin = lower_bound(Childs.begin(), Childs.end(), int2string(newlen));
 				//SCRIPTVAR_CHILDS_it end = Childs.end();
-#if (__cplusplus >= 201103L || _MSC_VER >= 1600) // Visual Studio? I do not know exactly! 2010 and above ???
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L || _MSC_VER >= 1600) // Visual Studio? I do not know exactly! 2010 and above ???
 				Childs.erase(begin, Childs.end());
 #else
 				while(begin != Childs.end()) {
@@ -4818,7 +4864,8 @@ void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *d
 #endif
 CScriptVarGenerator::CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function)
 	: CScriptVarObject(Context, Context->generatorPrototype), functionRoot(FunctionRoot), function(Function),
-	closed(false), yieldVarIsException(false), coroutine(this) {
+	closed(false), yieldVarIsException(false), coroutine(this), 
+	callersStackBase(nullptr), callersScopeSize(0) , callersTokenizer(nullptr), callersHaveTry(false) {
 //		addChild("next", ::newScriptVar(context, this, &CScriptVarGenerator::native_send, 0, "Generator.next"));
 	//	addChild("send", ::newScriptVar(context, this, &CScriptVarGenerator::native_send, (void*)1, "Generator.send"));
 		//addChild("close", ::newScriptVar(context, this, &CScriptVarGenerator::native_throw, (void*)0, "Generator.close"));
@@ -6006,24 +6053,25 @@ inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPt
 	CNumber da = a->toNumber();
 	CNumber db = b->toNumber();
 	switch (op) {
-	case '+':			return a->newScriptVar(da+db);
-	case '-':			return a->newScriptVar(da-db);
-	case '*':			return a->newScriptVar(da*db);
-	case '/':			return a->newScriptVar(da/db);
-	case '%':			return a->newScriptVar(da%db);
-	case '&':			return a->newScriptVar(da.toInt32()&db.toInt32());
-	case '|':			return a->newScriptVar(da.toInt32()|db.toInt32());
-	case '^':			return a->newScriptVar(da.toInt32()^db.toInt32());
-	case '~':			return a->newScriptVar(~da);
-	case LEX_LSHIFT:	return a->newScriptVar(da<<db);
-	case LEX_RSHIFT:	return a->newScriptVar(da>>db);
-	case LEX_RSHIFTU:	return a->newScriptVar(da.ushift(db));
-	case LEX_EQUAL:		return a->constScriptVar(da==db);
-	case LEX_NEQUAL:	return a->constScriptVar(da!=db);
-	case '<':			return a->constScriptVar(da<db);
-	case LEX_LEQUAL:	return a->constScriptVar(da<=db);
-	case '>':			return a->constScriptVar(da>db);
-	case LEX_GEQUAL:	return a->constScriptVar(da>=db);
+	case '+': case LEX_PLUSEQUAL:								return a->newScriptVar(da+db);
+	case '-': case LEX_MINUSEQUAL:								return a->newScriptVar(da-db);
+	case '*': case LEX_ASTERISKEQUAL:							return a->newScriptVar(da*db);
+	case '/': case LEX_SLASHEQUAL:								return a->newScriptVar(da/db);
+	case '%': case LEX_PERCENTEQUAL:							return a->newScriptVar(da%db);
+	case '&': case LEX_ANDEQUAL:								return a->newScriptVar(da.toInt32()&db.toInt32());
+	case '|': case LEX_OREQUAL:									return a->newScriptVar(da.toInt32()|db.toInt32());
+	case '^': case LEX_XOREQUAL:								return a->newScriptVar(da.toInt32()^db.toInt32());
+	case '~':													return a->newScriptVar(~da);
+	case LEX_LSHIFT: case LEX_LSHIFTEQUAL:						return a->newScriptVar(da<<db);
+	case LEX_RSHIFT: case LEX_RSHIFTEQUAL:						return a->newScriptVar(da>>db);
+	case LEX_RSHIFTU: case LEX_RSHIFTUEQUAL:					return a->newScriptVar(da.ushift(db));
+	case LEX_ASTERISKASTERISK: case LEX_ASTERISKASTERISKEQUAL:	return a->newScriptVar(da.pow(db));
+	case LEX_EQUAL:												return a->constScriptVar(da==db);
+	case LEX_NEQUAL:											return a->constScriptVar(da!=db);
+	case '<':													return a->constScriptVar(da<db);
+	case LEX_LEQUAL:											return a->constScriptVar(da<=db);
+	case '>':													return a->constScriptVar(da>db);
+	case LEX_GEQUAL:											return a->constScriptVar(da>=db);
 	default: throw CScriptException("This operation not supported on the int datatype");
 	}
 }
@@ -6229,7 +6277,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 						} else {
 							t->pushTokenScope(it->value);
 							if (it->id == "__proto__")
- 								a->setPrototype(execute_assignment(execute));
+								a->setPrototype(execute_assignment(execute));
 							else
 								a->addChildOrReplace(it->id, 0).setter(execute, execute_assignment(execute));
 							t->match(LEX_T_END_EXPRESSION); // eat LEX_T_END_EXPRESSION
@@ -6356,35 +6404,45 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 inline CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a;
 	parent.swap(a);
-	if(t->tk == '.' || t->tk == '[') {
-		while(t->tk == '.' || t->tk == '[') {
+	bool chaining_state = true;
+	while (t->tk == '.' || t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == '[' || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
+		if (execute) {
 			a = a.getter(execute); // a is now the "getted" var
 			parent.swap(a);
-			if(execute && (parent->getVarPtr()->isUndefined() || parent->getVarPtr()->isNull())) {
-				throwError(execute, ReferenceError, parent->getName() + " is " + parent->toString(execute));
-			}
-			string name;
-			if(t->tk == '.') {
-				t->match('.');
-				name = t->tkStr();
-				t->match(LEX_ID);
-			} else {
-				if(execute) {
-					t->match('[');
-					name = execute_base(execute)->toString(execute);
-					t->match(']');
+			if (execute && parent->getVarPtr()->isNullOrUndefined()) {
+				if (t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
+					chaining_state = false;
+					execute.set(CScriptResult::noExecute, false);
+					a(constScriptVar(Undefined));
+
 				} else
-					t->skip(t->getToken().Int());
-			}
-			if (execute) {
-				CScriptVarPtr parentVar = parent;
-				a = parentVar->findChildWithPrototypeChain(name);
-				if(!a) {
-					a(constScriptVar(Undefined), name);
-					a.setReferencedOwner(parentVar);
-				}
+					throwError(execute, ReferenceError, parent->getName() + " is " + parent->toString(execute));
 			}
 		}
+		string name;
+		if (t->tk == '.' || t->tk == LEX_OPTIONAL_CHAINING_MEMBER) {
+			t->match(t->tk);
+			name = t->tkStr();
+			t->match(LEX_ID);
+		} else {
+			if (execute) {
+				t->match(t->tk);
+				name = execute_base(execute)->toString(execute);
+				t->match(']');
+			} else
+				t->skip(t->getToken().Int());
+		}
+		if (execute) {
+			CScriptVarPtr parentVar = parent;
+			a = parentVar->findChildWithPrototypeChain(name);
+			if (!a) {
+				a(constScriptVar(Undefined), name);
+				a.setReferencedOwner(parentVar);
+			}
+		}
+	}
+	if (chaining_state == false) {
+		execute.set(CScriptResult::Normal, false);
 	}
 	return a;
 }
@@ -6392,11 +6450,21 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &pare
 inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execute) {
 	CScriptVarLinkWorkPtr parent = execute_literals(execute);
 	CScriptVarLinkWorkPtr a = execute_member(parent, execute);
-	while (t->tk == '(') {
+	bool chaining_state = true;
+	while (t->tk == '(' || t->tk == LEX_OPTIONAL_CHANING_FNC) {
 		if (execute) {
-			if(a->getVarPtr()->isUndefined() || a->getVarPtr()->isNull())
-				throwError(execute, ReferenceError, a->getName() + " is " + a->toString(execute));
-			CScriptVarPtr fnc = a.getter(execute)->getVarPtr();
+			a = a.getter(execute);
+			if (execute && a->getVarPtr()->isNullOrUndefined()) {
+				if (t->tk == LEX_OPTIONAL_CHANING_FNC) {
+					chaining_state = false;
+					execute.set(CScriptResult::noExecute, false);
+					a(constScriptVar(Undefined));
+				} else
+					throwError(execute, ReferenceError, a->getName() + " is " + a->toString(execute));
+			}
+		}
+		if (execute) {
+			CScriptVarPtr fnc = a->getVarPtr();
 			if (!fnc->isFunction())
 				throwError(execute, TypeError, a->getName() + " is not a function");
 			if (stackBase) {
@@ -6405,7 +6473,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 					throwError(execute, Error, "too much recursion");
 			}
 
-			t->match('('); // path += '(';
+			t->match(t->tk); // path += '(';
 
 			// grab in all parameters
 			vector<CScriptVarPtr> arguments;
@@ -6429,7 +6497,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 			}
 		} else {
 			// function, but not executing - just parse args and be done
-			t->match('(');
+			t->match(t->tk);
 			while (t->tk != ')') {
 				CScriptVarLinkWorkPtr value = execute_base(execute);
 				//	if (t->tk!=')') t->match(',');
@@ -6438,10 +6506,13 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 		}
 		a = execute_member(parent = a, execute);
 	}
+	if (chaining_state == false) {
+		execute.set(CScriptResult::Normal, false);
+	}
 	return a;
 }
-// R->L: Precedence 3 (in-/decrement) ++ --
-// R<-L: Precedence 4 (unary) ! ~ + - typeof void delete
+// R->L: Precedence 15 (post-increment/decrement) .++ .--
+// R<-L: Precedence 14 (pre-increment/decrement) ++. --.  (unary) ! ~ + - typeof void delete
 inline bool CTinyJS::execute_unary_rhs(CScriptResult &execute, CScriptVarLinkWorkPtr& a) {
 	t->match(t->tk);
 	a = execute_unary(execute).getter(execute);
@@ -6538,15 +6609,31 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(CScriptResult &execute) {
 	return a;
 }
 
-// L->R: Precedence 5 (term) * / %
-inline CScriptVarLinkWorkPtr CTinyJS::execute_term(CScriptResult &execute) {
+// L<-R: Precedence 13 (exponentiation) **
+inline CScriptVarLinkWorkPtr CTinyJS::execute_exponentiation(CScriptResult& execute) {
 	CScriptVarLinkWorkPtr a = execute_unary(execute);
+	if (t->tk == LEX_ASTERISKASTERISK) {
+		CheckRightHandVar(execute, a);
+		t->match(t->tk);
+		CScriptVarLinkWorkPtr b = execute_exponentiation(execute); // L<-R
+		if (execute) {
+			CheckRightHandVar(execute, b);
+			a = mathsOp(execute, a.getter(execute), b.getter(execute), LEX_ASTERISKASTERISK);
+		}
+	}
+	return a;
+}
+
+
+// L->R: Precedence 12 (term) * / %
+inline CScriptVarLinkWorkPtr CTinyJS::execute_term(CScriptResult &execute) {
+	CScriptVarLinkWorkPtr a = execute_exponentiation(execute);
 	if (t->tk=='*' || t->tk=='/' || t->tk=='%') {
 		CheckRightHandVar(execute, a);
 		while (t->tk=='*' || t->tk=='/' || t->tk=='%') {
 			int op = t->tk;
 			t->match(t->tk);
-			CScriptVarLinkWorkPtr b = execute_unary(execute); // L->R
+			CScriptVarLinkWorkPtr b = execute_exponentiation(execute); // L->R
 			if (execute) {
 				CheckRightHandVar(execute, b);
 				a = mathsOp(execute, a.getter(execute), b.getter(execute), op);
@@ -6556,7 +6643,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_term(CScriptResult &execute) {
 	return a;
 }
 
-// L->R: Precedence 6 (addition/subtraction) + -
+// L->R: Precedence 11 (addition/subtraction) + -
 inline CScriptVarLinkWorkPtr CTinyJS::execute_expression(CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a = execute_term(execute);
 	if (t->tk=='+' || t->tk=='-') {
@@ -6574,7 +6661,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_expression(CScriptResult &execute)
 	return a;
 }
 
-// L->R: Precedence 7 (bitwise shift) << >> >>>
+// L->R: Precedence 10 (bitwise shift) << >> >>>
 inline CScriptVarLinkWorkPtr CTinyJS::execute_binary_shift(CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a = execute_expression(execute);
 	if (t->tk==LEX_LSHIFT || t->tk==LEX_RSHIFT || t->tk==LEX_RSHIFTU) {
@@ -6593,8 +6680,8 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_binary_shift(CScriptResult &execut
 	}
 	return a;
 }
-// L->R: Precedence 8 (relational) < <= > <= in instanceof
-// L->R: Precedence 9 (equality) == != === !===
+// L->R: Precedence 9 (relational) < <= > <= in instanceof
+// L->R: Precedence 8 (equality) == != === !===
 inline CScriptVarLinkWorkPtr CTinyJS::execute_relation(CScriptResult &execute, int set, int set_n) {
 	CScriptVarLinkWorkPtr a = set_n ? execute_relation(execute, set_n, 0) : execute_binary_shift(execute);
 	if ((set==LEX_EQUAL && t->tk>=LEX_RELATIONS_1_BEGIN && t->tk<=LEX_RELATIONS_1_END)
@@ -6636,9 +6723,9 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_relation(CScriptResult &execute, i
 	return a;
 }
 
-// L->R: Precedence 10 (bitwise-and) &
-// L->R: Precedence 11 (bitwise-xor) ^
-// L->R: Precedence 12 (bitwise-or) |
+// L->R: Precedence 7 (bitwise-and) &
+// L->R: Precedence 6 (bitwise-xor) ^
+// L->R: Precedence 5 (bitwise-or) |
 inline CScriptVarLinkWorkPtr CTinyJS::execute_binary_logic(CScriptResult &execute, int op, int op_n1, int op_n2) {
 	CScriptVarLinkWorkPtr a = op_n1 ? execute_binary_logic(execute, op_n1, op_n2, 0) : execute_relation(execute);
 	if (t->tk==op) {
@@ -6655,30 +6742,30 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_binary_logic(CScriptResult &execut
 	}
 	return a;
 }
-// L->R: Precedence 13 ==> (logical-and) &&
-// L->R: Precedence 14 ==> (logical-or) ||
+// L->R: Precedence 4 ==> (logical-and) &&
+// L->R: Precedence 3 ==> (logical-or) ||  (nullish) ??
 inline CScriptVarLinkWorkPtr CTinyJS::execute_logic(CScriptResult &execute, int op /*= LEX_OROR*/, int op_n /*= LEX_ANDAND*/) {
 	CScriptVarLinkWorkPtr a = op_n ? execute_logic(execute, op_n, 0) : execute_binary_logic(execute);
-	if (t->tk==op) {
+	if (t->tk==op || (op == LEX_OROR && t->tk == LEX_ASKASK)) {
 		if(execute) {
 			CScriptVarLinkWorkPtr b;
 			CheckRightHandVar(execute, a);
 			a(a.getter(execute)); // rebuild a
 			do {
-				if(execute && (op==LEX_ANDAND ? a->toBoolean() : !a->toBoolean())) {
+				if(execute && (op==LEX_ANDAND ? a->toBoolean() : (t->tk == LEX_ASKASK ? a->getVarPtr()->isNullOrUndefined() : !a->toBoolean()))) {
 					t->match(t->tk);
 					b = op_n ? execute_logic(execute, op_n, 0) : execute_binary_logic(execute);
 					CheckRightHandVar(execute, b); a(b.getter(execute)); // rebuild a
 				} else
 					t->skip(t->getToken().Int());
-			} while(t->tk==op);
+			} while(t->tk==op || (op == LEX_OROR && t->tk == LEX_ASKASK));
 		} else
 			t->skip(t->getToken().Int());
 	}
 	return a;
 }
 
-// L<-R: Precedence 15 (condition) ?:
+// L<-R: Precedence 2 (condition) ?:
 inline CScriptVarLinkWorkPtr CTinyJS::execute_condition(CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a = execute_logic(execute);
 	if (t->tk=='?') {
@@ -6706,7 +6793,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_condition(CScriptResult &execute) 
 	return a;
 }
 
-// L<-R: Precedence 16 (assignment) = += -= *= /= %= <<= >>= >>>= &= |= ^=
+// L<-R: Precedence 2 (assignment) = += -= *= /= %= <<= >>= >>>= &= |= ^=
 // now we can return CScriptVarLinkPtr execute_assignment returns always no setters/getters
 // force life of the Owner is no more needed
 inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptResult &execute) {
@@ -6714,10 +6801,25 @@ inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptResult &execute) {
 }
 
 inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, CScriptResult &execute) {
-	if (t->tk=='=' || (t->tk>=LEX_ASSIGNMENTS_BEGIN && t->tk<=LEX_ASSIGNMENTS_END) ) {
+	if (t->tk=='=' || (t->tk>=LEX_ASSIGNMENTS_BEGIN && t->tk<=LEX_ASSIGNMENTS_END) || t->tk == LEX_ASKASKEQUAL || t->tk == LEX_ASTERISKASTERISKEQUAL) {
 		int op = t->tk;
 		CScriptTokenizer::ScriptTokenPosition leftHandPos = t->getPos();
 		t->match(t->tk);
+		if (execute) {
+			if (op != '=' && !lhs->isOwned()) {
+				throwError(execute, ReferenceError, lhs->getName() + " is not defined");
+			}
+			if (op == LEX_ASKASKEQUAL) {
+				CScriptVarLinkWorkPtr ret = lhs.getter(execute);
+				if (ret->getVarPtr()->isNullOrUndefined())
+					op = '='; // lhs == null or undefined execute assignment
+				else {
+					CScriptResult e(CScriptResult::noExecute);
+					execute_assignment(e); // no execute rhs
+					return ret; // lhs.getter(execute);
+				}
+			}
+		}
 		CScriptVarLinkWorkPtr rhs = execute_assignment(execute).getter(execute); // L<-R
 		if (execute) {
 			if (!lhs->isOwned() && !lhs.hasReferencedOwner() && lhs->getName().empty()) {
@@ -6740,8 +6842,8 @@ inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, 
 					return rhs->getVarPtr();
 				} else {
 					CScriptVarPtr result;
-					static int assignments[] = {'+', '-', '*', '/', '%', LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU, '&', '|', '^'};
-					result = mathsOp(execute, lhs, rhs, assignments[op-LEX_PLUSEQUAL]);
+					//static int assignments[] = {'+', '-', '*', '/', '%', LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU, '&', '|', '^'};
+					result = mathsOp(execute, lhs.getter(execute), rhs, op /*assignments[op - LEX_PLUSEQUAL]*/);
 					lhs.setter(execute, result);
 					return result;
 				}
@@ -6755,7 +6857,7 @@ inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, 
 		CheckRightHandVar(execute, lhs);
 	return lhs.getter(execute);
 }
-// L->R: Precedence 17 (comma) ,
+// L->R: Precedence 1 (comma) ,
 inline CScriptVarLinkPtr CTinyJS::execute_base(CScriptResult &execute) {
 	CScriptVarLinkPtr a;
 	for(;;)
@@ -6951,7 +7053,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 					execute_statement(tmp_execute); // initialisation
 				else if (t->tk != ';')
 					execute_base(tmp_execute); // initialisation
-				if(!execute(tmp_execute)) break;
+				if(!execute.updateIsNotNormal(tmp_execute)) break;
 			}
 
 			bool loopCond = true;	// Empty Condition -->always true
@@ -7016,6 +7118,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 			CScriptVarLinkWorkPtr funcVar = parseFunctionDefinition(t->getToken());
 			scope()->scopeVar()->addChildOrReplace(funcVar->getName(), funcVar, SCRIPTVARLINK_VARDEFAULT);
 		}
+		FALLTHROUGH;
 	case LEX_T_FUNCTION_PLACEHOLDER:
 		t->match(t->tk);
 		break;
@@ -7059,7 +7162,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				CScriptResult finally_execute; // alway execute finally-block
 				t->pushTokenScope(TryData.finallyBlock); // finally;
 				execute_block(finally_execute);
-				execute(finally_execute);
+				execute.updateIsNotNormal(finally_execute);
 			}
 			// restore haveTry
 			haveTry = old_haveTry;
@@ -7411,7 +7514,7 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	string RegExp, Flags;
 	if(arglen>=1) {
 		RegExp = c->getArgument(0)->toString();
-		try { regex(RegExp, regex_constants::ECMAScript); } catch(regex_error e) {
+		try { regex r(RegExp, regex_constants::ECMAScript); } catch(regex_error e) {
 			c->throwError(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 		}
 		if(arglen>=2) {

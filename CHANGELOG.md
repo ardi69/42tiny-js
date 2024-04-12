@@ -58,3 +58,16 @@ Version 0.9.5 (2024-04-09 21:45:44)
 * fix typos in MSVC sln
 * fix for test029.js, test31.js and test032.42.js
 * remove c++ array.length
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.6 (2024-04-13 01:30:28)
+===================================
+
+* added few functions comments
+* added exponentiation operator (**)
+* added exponentiation assignment (**=)
+* added nullish coalescing operator (??)
+* added nullish coalescing assignment (??=)
+* added optional chaining (?.) e.g. obj.val?.prop or obj.val?.[expr] or obj.func?.(args)

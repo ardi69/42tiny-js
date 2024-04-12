@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.5
+#define TINY_JS_VERSION 0.9.6
 
 #include <string>
 #include <vector>
@@ -207,6 +207,14 @@ enum LEX_TYPES {
 
 	LEX_R_YIELD,
 
+	LEX_ASTERISKASTERISK, // **
+	LEX_ASTERISKASTERISKEQUAL, // **=
+	LEX_ASKASK, // ??
+	LEX_ASKASKEQUAL, // ??=
+	LEX_OPTIONAL_CHAINING_MEMBER,	// .?
+	LEX_OPTIONAL_CHAINING_ARRAY,		// .?[ ... ]
+	LEX_OPTIONAL_CHANING_FNC,		// .?( ... )
+
 };
 #define LEX_TOKEN_DATA_STRING(tk)							((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
 #define LEX_TOKEN_DATA_FLOAT(tk)							(tk==LEX_FLOAT)
@@ -334,7 +342,7 @@ public:
 class CScriptLex
 {
 public:
-	CScriptLex(const char *Code, const std::string &File="", int Line=0, int Column=0);
+	CScriptLex(const char* Code, const std::string& File = "", int Line = 0, int Column = 0);
 	struct POS;
 	int tk; ///< The type of the token that we have
 	int last_tk; ///< The type of the last token that we have
@@ -372,6 +380,7 @@ class CScriptToken;
 typedef  std::vector<CScriptToken> TOKEN_VECT;
 typedef  std::vector<CScriptToken>::iterator TOKEN_VECT_it;
 typedef  std::vector<CScriptToken>::const_iterator TOKEN_VECT_cit;
+
 class CScriptTokenData
 {
 protected:
@@ -544,7 +553,7 @@ private:
 
 class CScriptTokenDataObjectLiteral : public fixed_size_object<CScriptTokenDataObjectLiteral>, public CScriptTokenData {
 public:
-	CScriptTokenDataObjectLiteral() {}
+	CScriptTokenDataObjectLiteral() : type(CScriptTokenDataObjectLiteral::OBJECT), destructuring(false), structuring(false) {}
 	CScriptTokenDataObjectLiteral(std::istream &in);
 	virtual void serialize(std::ostream &out) const OVERRIDE;
 
@@ -771,9 +780,9 @@ private:
 	void tokenizeSubExpression(ScriptTokenState &State, int Flags);
 	void tokenizeLogic(ScriptTokenState &State, int Flags, int op= LEX_OROR, int op_n=LEX_ANDAND);
 	void tokenizeCondition(ScriptTokenState &State, int Flags);
-	void tokenizeAssignment(ScriptTokenState &State, int Flags);
-	void tokenizeExpression(ScriptTokenState &State, int Flags);
-	void tokenizeBlock(ScriptTokenState &State, int Flags);
+	void tokenizeAssignment(ScriptTokenState& State, int Flags);	// = += -= *= /= %= <<= >>= >>>= &= |= ^= AND ??=
+	void tokenizeExpression(ScriptTokenState& State, int Flags);	// ..., ... 
+	void tokenizeBlock(ScriptTokenState& State, int Flags);			// { ... }
 	void tokenizeStatementNoLet(ScriptTokenState &State, int Flags);
 	void tokenizeStatement(ScriptTokenState &State, int Flags);
 
@@ -823,6 +832,7 @@ enum IteratorMode {
 /// CScriptPropertyName
 //////////////////////////////////////////////////////////////////////////
 
+/// CScriptPropertyName holds the name of any property
 class CScriptPropertyName {
 public:
 	CScriptPropertyName() : idx(-1) {}
@@ -857,9 +867,14 @@ typedef	SCRIPTVAR_CHILDS_t::iterator SCRIPTVAR_CHILDS_it;
 typedef	SCRIPTVAR_CHILDS_t::reverse_iterator SCRIPTVAR_CHILDS_rit;
 typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
 
+// CScriptVar is the base class of all variable values.
+// Instances of CScriptVar can only exists as pointer. CScriptVarPtr holds this pointer
+
+// CScriptVar is the base class of all variable values.
+//
 class CScriptVar : public fixed_size_object<CScriptVar> {
 protected:
-	CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype); ///< Create
+	CScriptVar(CTinyJS* Context, const CScriptVarPtr& Prototype); ///< Create
 	CScriptVar(const CScriptVar &Copy); ///< Copy protected -> use clone for public
 private:
 	CScriptVar & operator=(const CScriptVar &Copy) MEMBER_DELETE; ///< private -> no assignment-Copy
@@ -867,8 +882,16 @@ public:
 	virtual ~CScriptVar();
 	virtual CScriptVarPtr clone()=0;
 
+	//************************************
+	// Method:    getPrototype
+	// FullName:  CScriptVar::getPrototype
+	// Access:    public 
+	// Returns:   CScriptVarPtr
+	// Qualifier:
+	//************************************
 	CScriptVarPtr getPrototype();
-	void setPrototype(const CScriptVarPtr &Prototype);
+
+	void setPrototype(const CScriptVarPtr& Prototype);
 
 	/// Type
 	virtual bool isObject();	///< is an Object
@@ -878,7 +901,7 @@ public:
 	virtual bool isRegExp();	///< is a RegExpObject
 	virtual bool isAccessor();	///< is an Accessor
 	virtual bool isNull();		///< is Null
-	virtual bool isUndefined();///< is Undefined
+	virtual bool isUndefined();	///< is Undefined
 	bool isNullOrUndefined();	///< is Null or Undefined
 	virtual bool isNaN();		///< is NaN
 	virtual bool isString();	///< is String
@@ -887,9 +910,9 @@ public:
 	virtual int isInfinity();	///< is Infinity ///< +1==POSITIVE_INFINITY, -1==NEGATIVE_INFINITY, 0==is not an InfinityVar
 	virtual bool isDouble();	///< is Double
 
-	virtual bool isRealNumber();	///< is isInt | isDouble
+	virtual bool isRealNumber();///< is isInt | isDouble
 	virtual bool isNumber();	///< is isNaN | isInt | isDouble | isInfinity
-	virtual bool isPrimitive();///< isNull | isUndefined | isNaN | isString | isInt | isDouble | isInfinity
+	virtual bool isPrimitive();	///< isNull | isUndefined | isNaN | isString | isInt | isDouble | isInfinity
 
 	virtual bool isFunction();	///< is CScriptVarFunction / CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
 	virtual bool isNative();	///< is CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
@@ -898,7 +921,7 @@ public:
 	virtual bool isIterator();
 	virtual bool isGenerator();
 
-	bool isBasic() const { return Childs.empty(); } ///< Is this *not* an array/object/etc
+	//bool isBasic() const { return Childs.empty(); } ///< Is this *not* an array/object/etc
 
 
 	//////////////////////////////////////////////////////////////////////////
@@ -1018,21 +1041,25 @@ public:
 
 	SCRIPTVAR_CHILDS_t Childs;
 
-	/// For memory management/garbage collection
 private:
 	CScriptVar *ref(); ///< Add reference to this variable
 	void unref(); ///< Remove a reference, and delete this variable if required
 public:
 	int getRefs() const; ///< Get the number of references to this script variable
+
+	// cast template
 	template<class T>
 	operator T *(){ T *ret = dynamic_cast<T*>(this); ASSERT(ret!=0); return ret; }
 	template<class T>
 	T *get(){ T *ret = dynamic_cast<T*>(this); ASSERT(ret!=0); return ret; }
 
-	//CScriptVarPtr newScriptVar(const CNumber &t); // { return ::newScriptVar(context, t); }
-	template<typename T>	CScriptVarPtr newScriptVar(T t); // { return ::newScriptVar(context, t); }
+	
+	/// newScriptVar
+	template<typename T>	CScriptVarPtr newScriptVar(T t); /// { return ::newScriptVar(context, t); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2); // { return ::newScriptVar(context, t); }
 	template<typename T>	const CScriptVarPtr &constScriptVar(T t); // { return ::newScriptVar(context, t); }
+
+	/// For memory management/garbage collection
 	void setTemporaryMark(uint32_t ID); // defined as inline at end of this file { temporaryMark[context->getCurrentMarkSlot()] = ID; }
 	virtual void cleanUp4Destroy();
 	virtual void setTemporaryMark_recursive(uint32_t ID);
@@ -1043,10 +1070,9 @@ protected:
 	int refs; ///< The number of references held to this - used for garbage collection
 	CScriptVar *prototype;
 	CScriptVar *prev;
-public:
 	CScriptVar *next;
 	uint32_t temporaryMark[TEMPORARY_MARK_SLOTS];
-
+	friend class CTinyJS;
 	friend class CScriptVarPtr;
 #if _DEBUG
 	uint32_t debugID;
@@ -1058,6 +1084,7 @@ public:
 /// CScriptVarPtr
 //////////////////////////////////////////////////////////////////////////
 
+/// CScriptVarPtr is the Pointer Class for instances of CScriptVar aka JS values
 class CScriptVarPtr {
 public:
 	// construct
@@ -1067,16 +1094,16 @@ public:
 	// copy
 	CScriptVarPtr(const CScriptVarPtr &Copy) : var(Copy.var) { if(var) var->ref(); }
 	CScriptVarPtr& operator=(const CScriptVarPtr &Copy) {
-		if(var != Copy.var) {
-			if(var) var->unref();
-			var = Copy.var; if(var) var->ref();
+		if(var != Copy.var) { // if old_var == new_var do nothing
+			if(var) var->unref();	// unref old_var
+			var = Copy.var; if(var) var->ref(); // ref new_var
 		}
 		return *this;
 	}
 #if HAVE_CXX11_RVALUE_REFERENCE
 	// move
-	CScriptVarPtr(CScriptVarPtr &&Other) : var(Other.var) { Other.var=0; }
-	CScriptVarPtr& operator=(CScriptVarPtr &&Other) { if(var) var->unref(); var = Other.var; Other.var=0; return *this; }
+	CScriptVarPtr(CScriptVarPtr &&Other) NOEXCEPT : var(Other.var) { Other.var=0; }
+	CScriptVarPtr& operator=(CScriptVarPtr &&Other) NOEXCEPT { if(var) var->unref(); var = Other.var; Other.var=0; return *this; }
 #endif
 	// deconstruct
 	~CScriptVarPtr() { if(var) var->unref(); }
@@ -1114,9 +1141,23 @@ public:
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLink
 //////////////////////////////////////////////////////////////////////////
+
+/*!
+ *  CScriptVarLink is the real javascript variable. This class holds a pointer of CScriptVarLink
+ *  1. a name
+ *  2. a CScriptVarPtr as value
+ *  3. an owner (scope or object)
+ */
 class CScriptVarLink : public fixed_size_object<CScriptVarLink>
 {
 private: // prevent gloabal creating
+	/*!
+	 *  Constructor.
+	 *
+	 *      @param [in] var   
+	 *      @param [in] name  
+	 *      @param [in] flags 
+	 */
 	CScriptVarLink(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
 private: // prevent Copy
 	CScriptVarLink(const CScriptVarLink &link) MEMBER_DELETE; ///< Copy constructor
@@ -1188,15 +1229,21 @@ private:
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
+
+/*!
+ *  CScriptVarLinkPtr holds a pointer of CScriptVarLink
+ */
 class CScriptVarLinkPtr {
 public:
 	// construct
 	CScriptVarLinkPtr() : link(0) {} ///< 0-Pointer
-	CScriptVarLinkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) { link=(new CScriptVarLink(var, name, flags))->ref(); }
+
+	CScriptVarLinkPtr(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) { link = (new CScriptVarLink(var, name, flags))->ref(); }
 	CScriptVarLinkPtr(CScriptVarLink *Link) : link(Link) { if(link) link->ref(); } // creates a new CScriptVarLink (from new);
 
 	// reconstruct
-	CScriptVarLinkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
+
+	CScriptVarLinkPtr& operator()(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
 	CScriptVarLinkPtr &operator=(const CScriptVarPtr &var) { return operator()(var); }
 	// deconstruct
 	~CScriptVarLinkPtr() { if(link) link->unref(); }
@@ -1210,24 +1257,27 @@ public:
 		}
 		return *this;
 	}
-
+	
 #if HAVE_CXX11_RVALUE_REFERENCE
 	// move
-	CScriptVarLinkPtr(CScriptVarLinkPtr &&Other) : link(Other.link) { Other.link = 0; }
-	CScriptVarLinkPtr &operator=(CScriptVarLinkPtr &&Other) { if(link) link->unref(); link = Other.link; Other.link = 0; return *this; }
+	CScriptVarLinkPtr(CScriptVarLinkPtr &&Other) NOEXCEPT : link(Other.link) { Other.link = 0; }
+	CScriptVarLinkPtr &operator=(CScriptVarLinkPtr &&Other) NOEXCEPT { if(link) link->unref(); link = Other.link; Other.link = 0; return *this; }
 #endif
 
-	// getter & setter
 	CScriptVarLinkWorkPtr getter();
 	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
 	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
 
-	// if
+	/*!
+	 *  Operators the bool.
+	 *
+	 *      @return 
+	 */
 	operator bool() const { return link!=0; }
 
 	// for sorting in child-list
-	bool operator <(const std::string &rhs) const;
+	bool operator<(const std::string &rhs) const;
 	bool operator ==(const CScriptVarLinkPtr &rhs) const { return link==rhs.link; }
 	// access to CScriptVarLink
 	CScriptVarLink *operator ->() const { return link; }
@@ -1244,6 +1294,11 @@ protected:
 /// CScriptVarLinkWorkPtr
 //////////////////////////////////////////////////////////////////////////
 
+/*!
+ *  CScriptVarLinkWorkPtr is a special variant of CScriptVarLinkPtr
+ *  The CScriptVarLinkWorkPtr have in addition a referencedOwner
+ *  referencedOwner is useful 
+ */
 class CScriptVarLinkWorkPtr : public CScriptVarLinkPtr {
 public:
 	// construct
@@ -1261,14 +1316,14 @@ public:
 
 #if HAVE_CXX11_RVALUE_REFERENCE
 	// move
-	CScriptVarLinkWorkPtr(CScriptVarLinkWorkPtr &&Other) : CScriptVarLinkPtr(std::move(Other)), referencedOwner(std::move(Other.referencedOwner)) {}
-	CScriptVarLinkWorkPtr &operator=(CScriptVarLinkWorkPtr &&Other) { CScriptVarLinkPtr::operator=(std::move(Other)); referencedOwner = std::move(Other.referencedOwner); return *this; }
+	CScriptVarLinkWorkPtr(CScriptVarLinkWorkPtr &&Other) NOEXCEPT : CScriptVarLinkPtr(std::move(Other)), referencedOwner(std::move(Other.referencedOwner)) {}
+	CScriptVarLinkWorkPtr &operator=(CScriptVarLinkWorkPtr &&Other) NOEXCEPT { CScriptVarLinkPtr::operator=(std::move(Other)); referencedOwner = std::move(Other.referencedOwner); return *this; }
 #endif
 	// assign
-	void assign(CScriptVarPtr rhs, bool ignoreReadOnly=false, bool ignoreNotOwned=false, bool ignoreNotExtensible=false);
+	//void assign(CScriptVarPtr rhs, bool ignoreReadOnly=false, bool ignoreNotOwned=false, bool ignoreNotExtensible=false);
 
 
-	// getter & setter
+
 	CScriptVarLinkWorkPtr getter();
 	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
@@ -1486,7 +1541,8 @@ public:
 	CNumber operator~() const { if(type==tNaN) return *this; else return ~toInt32(); }
 	bool operator!() const { return isZero(); }
 	CNumber multi(const CNumber &Value) const;
-	CNumber div(const CNumber &Value) const;
+	CNumber div(const CNumber& Value) const;
+	CNumber pow(const CNumber& Value) const;
 	CNumber modulo(const CNumber &Value) const;
 
 	CNumber round() const;
@@ -1510,7 +1566,7 @@ public:
 
 	bool isNaN() const { return type == tNaN; }
 	int isInfinity() const { return type == tInfinity ? Int32 : 0; }
-	bool isFinite() const { return type == tInt32 || type == tDouble || type == tnNULL; }
+	bool isFinite() const { return type != tInfinity && type != tNaN; }
 	bool isNegativeZero() const { return type==tnNULL; }
 	bool isZero() const; ///< is 0, -0
 	bool isInteger() const;
@@ -2235,7 +2291,7 @@ public:
 		noncatchableThrow,
 		noExecute
 	};
-	CScriptResult() : type(Normal), throw_at_line(-1), throw_at_column(-1), strictMode(false) {}
+	CScriptResult(TYPE Type=Normal) : type(Type), throw_at_line(-1), throw_at_column(-1), strictMode(false) {}
 //	CScriptResult(TYPE Type) : type(Type), throw_at_line(-1), throw_at_column(-1) {}
 //		~RESULT() { if(type==Throw) throw value; }
 	bool isNormal() const { return type == Normal; }
@@ -2256,7 +2312,9 @@ public:
 
 	void cThrow() const { if (type == Throw) throw value; }
 
-	CScriptResult &operator()(const CScriptResult &rhs) { if(rhs.type!=Normal) *this=rhs; return *this; }
+	// the operator is is less intuitive use updateIsNotNormal instead
+	CScriptResult DEPRECATED("this operator is deprecated use updateIsNotNormal instead")& operator()(const CScriptResult& rhs) { if (rhs.type != Normal) *this = rhs; return *this; }
+	CScriptResult& updateIsNotNormal(const CScriptResult& rhs) { if (rhs.type != Normal) *this = rhs; return *this; }
 
 	enum TYPE type;
 	CScriptVarPtr value;
@@ -2369,7 +2427,7 @@ public:
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }
 	const CScriptVarPtr &constScriptVar(Null_t)				{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
-	const CScriptVarPtr &constScriptVar(Infinity _t)			{ return _t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
+	const CScriptVarPtr &constScriptVar(Infinity _t)		{ return _t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
 	const CScriptVarPtr &constScriptVar(bool Val)			{ return Val?constTrue:constFalse; }
 	const CScriptVarPtr &constScriptVar(NegativeZero_t)		{ return constNegativZero; }
 	const CScriptVarPtr &constScriptVar(StopIteration_t)	{ return constStopIteration; }
@@ -2461,6 +2519,7 @@ private:
 	CScriptVarLinkWorkPtr execute_function_call(CScriptResult &execute);
 	bool execute_unary_rhs(CScriptResult &execute, CScriptVarLinkWorkPtr& a);
 	CScriptVarLinkWorkPtr execute_unary(CScriptResult &execute);
+	CScriptVarLinkWorkPtr execute_exponentiation(CScriptResult& execute);
 	CScriptVarLinkWorkPtr execute_term(CScriptResult &execute);
 	CScriptVarLinkWorkPtr execute_expression(CScriptResult &execute);
 	CScriptVarLinkWorkPtr execute_binary_shift(CScriptResult &execute);

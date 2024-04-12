@@ -211,6 +211,13 @@
 #	define OVERRIDE
 #endif
 
+#if __cplusplus >= 201703L || _MSVC_LANG >= 201703L 
+#	define FALLTHROUGH [[fallthrough]]
+#elif __GNUC__ >= 7 || __clang_major__ >= 12
+#	define FALLTHROUGH __attribute__((fallthrough))
+#else
+#	define FALLTHROUGH do{}while(0)
+#endif
 
 
 #ifndef MEMBER_DELETE

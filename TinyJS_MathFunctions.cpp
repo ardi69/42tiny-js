@@ -101,9 +101,9 @@ namespace
 #endif
 
 #define PARAMETER_TO_NUMBER(v,n) CNumber v = c->getArgument(n)->toNumber()
-#define RETURN_NAN_IS_NAN(v) do{ if(v.isNaN()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
-#define RETURN_NAN_IS_NAN_OR_INFINITY(v) do{ if(v.isNaN() || v.isInfinity()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
-#define RETURN_INFINITY_IS_INFINITY(v) do{ if(v.isInfinity()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
+#define RETURN_NAN_IS_NAN(v) do{ if(v.isNaN()) { c->setReturnVar(c->constScriptVar(NaN)); return; } }while(0)
+#define RETURN_NAN_IS_NAN_OR_INFINITY(v) do{ if(v.isNaN() || v.isInfinity()) { c->setReturnVar(c->constScriptVar(NaN)); return; } }while(0)
+#define RETURN_INFINITY_IS_INFINITY(v) do{ if(v.isInfinity()) { c->setReturnVar(c->constScriptVar(v.isInfinity()<0 ? InfinityNegative : InfinityPositive)); return; } }while(0)
 #define RETURN_ZERO_IS_ZERO(v) do{ if(v.isZero()) { c->setReturnVar(c->newScriptVar(v)); return; } }while(0)
 #define RETURN(a)	do{ c->setReturnVar(c->newScriptVar(a)); return; }while(0)
 #define RETURNconst(a)	c->setReturnVar(c->constScriptVar(a))
@@ -340,7 +340,13 @@ static void scMathExp(const CFunctionsScopePtr &c, void *userdata) {
 //Math.pow(a,b) - returns the result of a number raised to a power (a)^(b)
 static void scMathPow(const CFunctionsScopePtr &c, void *userdata) {
 	PARAMETER_TO_NUMBER(a,"a");
-	PARAMETER_TO_NUMBER(b,"b"); RETURN_NAN_IS_NAN(b); 
+	PARAMETER_TO_NUMBER(b,"b"); 
+	CNumber ret = a.pow(b);
+	RETURN_NAN_IS_NAN(ret);
+	RETURN_INFINITY_IS_INFINITY(ret);
+	RETURN(ret);
+/*
+	RETURN_NAN_IS_NAN(b); 
 	if(b.isZero()) RETURN(1);
 	RETURN_NAN_IS_NAN(a);
 	if(b==1) RETURN(a);
@@ -369,6 +375,7 @@ static void scMathPow(const CFunctionsScopePtr &c, void *userdata) {
 	if(a.sign()<0 && !b.isInteger()) RETURNconst(NaN);
 
 	RETURN( pow(a.toDouble(), b.toDouble()) );
+*/
 }
 
 //Math.sqr(a) - returns square of given value
