@@ -725,7 +725,7 @@ void CScriptTokenDataLoop::serialize(ostream &out) const {
 
 string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
 	static const char *heads[] = {"for each(", "for(", "for(", "for(", "while(", "do "};
-	static const char *ops[] = {" in ", " in ", " of ", "; "};
+	static const char *ops[] = {" in ", " in ", " of ", "; ", "", ""};
 	string out = heads[type];
 	if(init.size() && type==FOR)	out.append(CScriptToken::getParsableString(init));
 	if(type<=WHILE)					out.append(CScriptToken::getParsableString(condition.begin(), condition.end()-(type>=FOR ? 0 : 7)));
@@ -1503,7 +1503,7 @@ void CScriptToken::unserialize(TOKEN_VECT &Tokens, istream &in)
 /// CScriptTokenizer
 //////////////////////////////////////////////////////////////////////////
 
-CScriptTokenizer::CScriptTokenizer() : l(0), prevPos(&tokens) {
+CScriptTokenizer::CScriptTokenizer() : tk(0), l(0), prevPos(&tokens) {
 }
 CScriptTokenizer::CScriptTokenizer(CScriptLex &Lexer) : l(0), prevPos(&tokens) {
 	tokenizeCode(Lexer);
@@ -4106,7 +4106,11 @@ CNumber CNumber::modulo( const CNumber &Value ) const {
 	if(isZero()) return CNumber(0);
 	if(type==tDouble || Value.type==tDouble || (Int32==numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */ ) {
 		double n = toDouble(), d = Value.toDouble(), q;
-		modf(n/d, &q);
+#if __cplusplus >= 201103L || _MSVC_LANG >= 201103L
+		std::ignore = modf(n/d, &q);
+#else
+		modf(n / d, &q);
+#endif
 		return CNumber(n - (d * q));
 	} else
 		return CNumber(Int32 % Value.Int32);
@@ -6024,7 +6028,7 @@ inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPt
 		string da = a->isNull() ? "" : a->toString(execute);
 		string db = b->isNull() ? "" : b->toString(execute);
 		switch (op) {
-		case '+':
+		case '+': case LEX_PLUSEQUAL:
 			try{
 				return newScriptVar(da+db);
 			} catch(exception& e) {

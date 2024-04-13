@@ -71,3 +71,11 @@ Version 0.9.6 (2024-04-13 01:30:28)
 * added nullish coalescing operator (??)
 * added nullish coalescing assignment (??=)
 * added optional chaining (?.) e.g. obj.val?.prop or obj.val?.[expr] or obj.func?.(args)
+
+-------------------------------------------------------------------------------
+
+
+Version 0.9.8 (2024-04-13 12:07:35)
+===================================
+
+* fixed test024.js

@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.6
+#define TINY_JS_VERSION 0.9.8
 
 #include <string>
 #include <vector>
