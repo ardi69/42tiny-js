@@ -59,10 +59,6 @@ static void scObjectDump(const CFunctionsScopePtr &c, void *) {
 	c->getArgument("this")->trace("> ");
 }
 
-static void scObjectClone(const CFunctionsScopePtr &c, void *) {
-	CScriptVarPtr obj = c->getArgument("this");
-	c->setReturnVar(obj->clone());
-}
 /*
 static void scIntegerValueOf(const CFunctionsScopePtr &c, void *) {
 	string str = c->getArgument("str")->toString();
@@ -228,7 +224,6 @@ void registerFunctions(CTinyJS *tinyJS) {
 extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function trace()", scTrace, tinyJS, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Object.prototype.dump()", scObjectDump, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-	tinyJS->addNative("function Object.prototype.clone()", scObjectClone, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 
 //	tinyJS->addNative("function Integer.valueOf(str)", scIntegerValueOf, 0, SCRIPTVARLINK_BUILDINDEFAULT); // value of a single character
 	tinyJS->addNative("function JSON.stringify(obj, replacer)", scJSONStringify, 0, SCRIPTVARLINK_BUILDINDEFAULT); // convert to JSON. replacer is ignored at the moment

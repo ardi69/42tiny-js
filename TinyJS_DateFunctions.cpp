@@ -759,10 +759,9 @@ define_ScriptVarPtr_Type(Date);
 class CScriptVarDate : public CScriptVarObject, public CScriptTime {
 protected:
 	CScriptVarDate(CTinyJS *Context);
-	CScriptVarDate(const CScriptVarDate &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarDate(const CScriptVarDate& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarDate();
-	virtual CScriptVarPtr clone();
 	virtual bool isDate(); // { return true; }
 	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute);
 
@@ -784,7 +783,6 @@ CScriptVarDate::CScriptVarDate(CTinyJS *Context) : CScriptVarObject(Context, Con
 }
 
 CScriptVarDate::~CScriptVarDate() {}
-CScriptVarPtr CScriptVarDate::clone() { return new CScriptVarDate(*this); }
 bool CScriptVarDate::isDate() { return true; }
 
 CScriptVarPrimitivePtr CScriptVarDate::toPrimitive(CScriptResult &execute) {

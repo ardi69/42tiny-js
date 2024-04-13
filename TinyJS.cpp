@@ -2985,31 +2985,6 @@ CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 	debugID = currentDebugID++;
 #endif
 }
-CScriptVar::CScriptVar(const CScriptVar &Copy) {
-	extensible = Copy.extensible;
-	context = Copy.context;
-	memset(temporaryMark, 0, sizeof(temporaryMark));
-	if(context->first) {
-		next = context->first;
-		next->prev = this;
-	} else {
-		next = 0;
-	}
-	context->first = this;
-	prev = 0;
-	refs = 0;
-	SCRIPTVAR_CHILDS_cit it;
-	for(it = Copy.Childs.begin(); it!= Copy.Childs.end(); ++it) {
-		addChild((*it)->getName(), (*it)->getVarPtr(), (*it)->getFlags());
-	}
-	if ((prototype = Copy.prototype)) prototype->ref();
-#if DEBUG_MEMORY
-	mark_allocated(this);
-#endif
-#if _DEBUG
-	debugID = currentDebugID++;
-#endif
-}
 CScriptVar::~CScriptVar(void) {
 #if DEBUG_MEMORY
 	mark_deallocated(this);
@@ -3774,7 +3749,6 @@ CScriptVarPtr CScriptVarPrimitive::toString_CallBack( CScriptResult &execute, in
 declare_dummy_t(Undefined);
 CScriptVarUndefined::CScriptVarUndefined(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
 CScriptVarUndefined::~CScriptVarUndefined() {}
-CScriptVarPtr CScriptVarUndefined::clone() { return new CScriptVarUndefined(*this); }
 bool CScriptVarUndefined::isUndefined() { return true; }
 
 CNumber CScriptVarUndefined::toNumber_Callback() { return NaN; }
@@ -3789,7 +3763,6 @@ string CScriptVarUndefined::getVarType() { return "undefined"; }
 declare_dummy_t(Null);
 CScriptVarNull::CScriptVarNull(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
 CScriptVarNull::~CScriptVarNull() {}
-CScriptVarPtr CScriptVarNull::clone() { return new CScriptVarNull(*this); }
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
@@ -3811,7 +3784,6 @@ CScriptVarString::CScriptVarString(CTinyJS *Context, const string &Data) : CScri
 */
 }
 CScriptVarString::~CScriptVarString() {}
-CScriptVarPtr CScriptVarString::clone() { return new CScriptVarString(*this); }
 bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
@@ -4401,7 +4373,6 @@ double CNumber::toDouble() const
 
 CScriptVarNumber::CScriptVarNumber(CTinyJS *Context, const CNumber &Data) : CScriptVarPrimitive(Context, Context->numberPrototype), data(Data) {}
 CScriptVarNumber::~CScriptVarNumber() {}
-CScriptVarPtr CScriptVarNumber::clone() { return new CScriptVarNumber(*this); }
 bool CScriptVarNumber::isNumber() { return true; }
 bool CScriptVarNumber::isInt() { return data.isInt32(); }
 bool CScriptVarNumber::isDouble() { return data.isDouble(); }
@@ -4432,7 +4403,6 @@ define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
 
 CScriptVarBool::CScriptVarBool(CTinyJS *Context, bool Data) : CScriptVarPrimitive(Context, Context->booleanPrototype), data(Data) {}
 CScriptVarBool::~CScriptVarBool() {}
-CScriptVarPtr CScriptVarBool::clone() { return new CScriptVarBool(*this); }
 bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
@@ -4450,7 +4420,6 @@ CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimiti
 declare_dummy_t(Object);
 CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
 CScriptVarObject::~CScriptVarObject() {}
-CScriptVarPtr CScriptVarObject::clone() { return new CScriptVarObject(*this); }
 
 void CScriptVarObject::removeAllChildren()
 {
@@ -4511,7 +4480,6 @@ void CScriptVarObject::setTemporaryMark_recursive( uint32_t ID) {
 
 declare_dummy_t(StopIteration);
 CScriptVarObjectTypeTagged::~CScriptVarObjectTypeTagged() {}
-CScriptVarPtr CScriptVarObjectTypeTagged::clone() { return new CScriptVarObjectTypeTagged(*this); }
 string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
 
 
@@ -4529,7 +4497,6 @@ CScriptVarError::CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char 
 }
 
 CScriptVarError::~CScriptVarError() {}
-CScriptVarPtr CScriptVarError::clone() { return new CScriptVarError(*this); }
 bool CScriptVarError::isError() { return true; }
 
 CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int radix) {
@@ -4584,7 +4551,6 @@ CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, C
 }
 
 CScriptVarArray::~CScriptVarArray() {}
-CScriptVarPtr CScriptVarArray::clone() { return new CScriptVarArray(*this); }
 bool CScriptVarArray::isArray() { return true; }
 string CScriptVarArray::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
@@ -4739,7 +4705,6 @@ CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const string &Regexp, const
 	addChild("lastIndex", newScriptVar(0));
 }
 CScriptVarRegExp::~CScriptVarRegExp() {}
-CScriptVarPtr CScriptVarRegExp::clone() { return new CScriptVarRegExp(*this); }
 bool CScriptVarRegExp::isRegExp() { return true; }
 //int CScriptVarRegExp::getInt() {return strtol(regexp.c_str(),0,0); }
 //bool CScriptVarRegExp::getBool() {return regexp.length()!=0;}
@@ -4839,7 +4804,6 @@ CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS *Context, const CSc
 	addChild("next", ::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
 }
 CScriptVarDefaultIterator::~CScriptVarDefaultIterator() {}
-CScriptVarPtr CScriptVarDefaultIterator::clone() { return new CScriptVarDefaultIterator(*this); }
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
 void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *data) {
 	if(pos==keys.end()) throw constScriptVar(StopIteration);
@@ -4887,7 +4851,6 @@ CScriptVarGenerator::~CScriptVarGenerator() {
 		coroutine.Stop();
 	}
 }
-CScriptVarPtr CScriptVarGenerator::clone() { return new CScriptVarGenerator(*this); }
 bool CScriptVarGenerator::isIterator()		{return true;}
 bool CScriptVarGenerator::isGenerator()	{return true;}
 
@@ -4985,7 +4948,6 @@ CScriptVarFunction::CScriptVarFunction(CTinyJS *Context, CScriptTokenDataFnc *Da
 	setFunctionData(Data);
 }
 CScriptVarFunction::~CScriptVarFunction() { if(data) data->unref(); }
-CScriptVarPtr CScriptVarFunction::clone() { return new CScriptVarFunction(*this); }
 bool CScriptVarFunction::isObject() { return true; }
 bool CScriptVarFunction::isFunction() { return true; }
 bool CScriptVarFunction::isPrimitive()	{ return false; }
@@ -5054,7 +5016,6 @@ CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr Bound
 		getFunctionData()->name = BoundedFunction->getFunctionData()->name;
 }
 CScriptVarFunctionBounded::~CScriptVarFunctionBounded(){}
-CScriptVarPtr CScriptVarFunctionBounded::clone() { return new CScriptVarFunctionBounded(*this); }
 bool CScriptVarFunctionBounded::isBounded() { return true; }
 void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
 	CScriptVarFunction::setTemporaryMark_recursive(ID);
@@ -5104,7 +5065,6 @@ bool CScriptVarFunctionNative::isNative() { return true; }
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarFunctionNativeCallback::~CScriptVarFunctionNativeCallback() {}
-CScriptVarPtr CScriptVarFunctionNativeCallback::clone() { return new CScriptVarFunctionNativeCallback(*this); }
 void CScriptVarFunctionNativeCallback::callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
 
@@ -5131,7 +5091,6 @@ CScriptVarAccessor::CScriptVarAccessor( CTinyJS *Context, const CScriptVarFuncti
 }
 
 CScriptVarAccessor::~CScriptVarAccessor() {}
-CScriptVarPtr CScriptVarAccessor::clone() { return new CScriptVarAccessor(*this); }
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; }
 string CScriptVarAccessor::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
@@ -5146,7 +5105,6 @@ string CScriptVarAccessor::getVarType() { return "accessor"; }
 
 declare_dummy_t(Scope);
 CScriptVarScope::~CScriptVarScope() {}
-CScriptVarPtr CScriptVarScope::clone() { return CScriptVarPtr(); }
 bool CScriptVarScope::isObject() { return false; }
 CScriptVarPtr CScriptVarScope::scopeVar() { return this; }	///< to create var like: var a = ...
 CScriptVarPtr CScriptVarScope::scopeLet() { return this; }	///< to create var like: let a = ...

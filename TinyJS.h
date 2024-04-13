@@ -40,7 +40,7 @@
 #define TINYJS_H
 
 
-#define TINY_JS_VERSION 0.9.8
+#define TINY_JS_VERSION 0.9.9
 
 #include <string>
 #include <vector>
@@ -875,12 +875,11 @@ typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
 class CScriptVar : public fixed_size_object<CScriptVar> {
 protected:
 	CScriptVar(CTinyJS* Context, const CScriptVarPtr& Prototype); ///< Create
-	CScriptVar(const CScriptVar &Copy); ///< Copy protected -> use clone for public
+	CScriptVar(const CScriptVar& Copy) MEMBER_DELETE; ///< Copy protected
 private:
 	CScriptVar & operator=(const CScriptVar &Copy) MEMBER_DELETE; ///< private -> no assignment-Copy
 public:
 	virtual ~CScriptVar();
-	virtual CScriptVarPtr clone()=0;
 
 	//************************************
 	// Method:    getPrototype
@@ -1366,7 +1365,7 @@ define_ScriptVarPtr_Type(Primitive);
 class CScriptVarPrimitive : public CScriptVar {
 protected:
 	CScriptVarPrimitive(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) { setExtensible(false); }
-	CScriptVarPrimitive(const CScriptVarPrimitive &Copy) : CScriptVar(Copy) { } ///< Copy protected -> use clone for public
+	CScriptVarPrimitive(const CScriptVarPrimitive& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarPrimitive() OVERRIDE;
 
@@ -1392,10 +1391,9 @@ define_ScriptVarPtr_Type(Undefined);
 class CScriptVarUndefined : public CScriptVarPrimitive {
 protected:
 	CScriptVarUndefined(CTinyJS *Context);
-	CScriptVarUndefined(const CScriptVarUndefined &Copy) : CScriptVarPrimitive(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarUndefined(const CScriptVarUndefined& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarUndefined() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 
 	virtual bool isUndefined() OVERRIDE; // { return true; }
 
@@ -1419,10 +1417,9 @@ define_ScriptVarPtr_Type(Null);
 class CScriptVarNull : public CScriptVarPrimitive {
 protected:
 	CScriptVarNull(CTinyJS *Context);
-	CScriptVarNull(const CScriptVarNull &Copy) : CScriptVarPrimitive(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarNull(const CScriptVarNull& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarNull() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 
 	virtual bool isNull() OVERRIDE; // { return true; }
 
@@ -1446,10 +1443,9 @@ define_ScriptVarPtr_Type(String);
 class CScriptVarString : public CScriptVarPrimitive {
 protected:
 	CScriptVarString(CTinyJS *Context, const std::string &Data);
-	CScriptVarString(const CScriptVarString &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
+	CScriptVarString(const CScriptVarString& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarString() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isString() OVERRIDE; // { return true; }
 
 	virtual bool toBoolean() OVERRIDE;
@@ -1629,10 +1625,9 @@ define_ScriptVarPtr_Type(Number);
 class CScriptVarNumber : public CScriptVarPrimitive {
 protected:
 	CScriptVarNumber(CTinyJS *Context, const CNumber &Data);
-	CScriptVarNumber(const CScriptVarNumber &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
+	CScriptVarNumber(const CScriptVarNumber& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarNumber() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isNumber() OVERRIDE; // { return true; }
 	virtual bool isInt() OVERRIDE; // { return true; }
 	virtual bool isDouble() OVERRIDE; // { return true; }
@@ -1672,10 +1667,9 @@ define_ScriptVarPtr_Type(Bool);
 class CScriptVarBool : public CScriptVarPrimitive {
 protected:
 	CScriptVarBool(CTinyJS *Context, bool Data);
-	CScriptVarBool(const CScriptVarBool &Copy) : CScriptVarPrimitive(Copy), data(Copy.data) {} ///< Copy protected -> use clone for public
+	CScriptVarBool(const CScriptVarBool& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarBool() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isBool() OVERRIDE; // { return true; }
 
 	virtual bool toBoolean() OVERRIDE;
@@ -1707,10 +1701,9 @@ protected:
 	CScriptVarObject(CTinyJS *Context);
 	CScriptVarObject(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) {}
 	CScriptVarObject(CTinyJS *Context, const CScriptVarPrimitivePtr &Value, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype), value(Value) {}
-	CScriptVarObject(const CScriptVarObject &Copy) : CScriptVar(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarObject(const CScriptVarObject& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarObject() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 
 	virtual void removeAllChildren() OVERRIDE;
 
@@ -1749,10 +1742,9 @@ class CScriptVarObjectTypeTagged : public CScriptVarObject {
 protected:
 //	CScriptVarObjectTyped(CTinyJS *Context);
 	CScriptVarObjectTypeTagged(CTinyJS *Context, const CScriptVarPtr &Prototype, const std::string &TypeTagName) : CScriptVarObject(Context, Prototype), typeTagName(TypeTagName) {}
-	CScriptVarObjectTypeTagged(const CScriptVarObjectTypeTagged &Copy) : CScriptVarObject(Copy), typeTagName(Copy.typeTagName) {} ///< Copy protected -> use clone for public
+	CScriptVarObjectTypeTagged(const CScriptVarObjectTypeTagged& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarObjectTypeTagged() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 
 	virtual std::string getVarTypeTagName() OVERRIDE;
 protected:
@@ -1774,10 +1766,9 @@ define_ScriptVarPtr_Type(Error);
 class CScriptVarError : public CScriptVarObject {
 protected:
 	CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);// : CScriptVarObject(Context), value(Value) {}
-	CScriptVarError(const CScriptVarError &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarError(const CScriptVarError& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarError() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isError() OVERRIDE; // { return true; }
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent) OVERRIDE; ///< get Data as a parsable javascript string
@@ -1800,10 +1791,9 @@ define_ScriptVarPtr_Type(Array);
 class CScriptVarArray : public CScriptVarObject {
 protected:
 	CScriptVarArray(CTinyJS *Context);
-	CScriptVarArray(const CScriptVarArray &Copy) : CScriptVarObject(Copy), toStringRecursion(Copy.toStringRecursion) {} ///< Copy protected -> use clone for public
+	CScriptVarArray(const CScriptVarArray& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarArray() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isArray() OVERRIDE; // { return true; }
 
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) OVERRIDE;
@@ -1835,10 +1825,9 @@ define_ScriptVarPtr_Type(RegExp);
 class CScriptVarRegExp : public CScriptVarObject {
 protected:
 	CScriptVarRegExp(CTinyJS *Context, const std::string &Source, const std::string &Flags);
-	CScriptVarRegExp(const CScriptVarRegExp &Copy) : CScriptVarObject(Copy), regexp(Copy.regexp), flags(Copy.flags) {} ///< Copy protected -> use clone for public
+	CScriptVarRegExp(const CScriptVarRegExp& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarRegExp() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isRegExp() OVERRIDE; // { return true; }
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) OVERRIDE;
 
@@ -1878,10 +1867,9 @@ define_ScriptVarPtr_Type(Function);
 class CScriptVarFunction : public CScriptVarObject {
 protected:
 	CScriptVarFunction(CTinyJS *Context, CScriptTokenDataFnc *Data);
-	CScriptVarFunction(const CScriptVarFunction &Copy) : CScriptVarObject(Copy), data(Copy.data), constructor(Copy.constructor) { data->ref(); } ///< Copy protected -> use clone for public
+	CScriptVarFunction(const CScriptVarFunction& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarFunction() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isObject() OVERRIDE; // { return true; }
 	virtual bool isFunction() OVERRIDE; // { return true; }
 	virtual bool isPrimitive() OVERRIDE; // { return false; }
@@ -1913,10 +1901,9 @@ define_ScriptVarPtr_Type(FunctionBounded);
 class CScriptVarFunctionBounded : public CScriptVarFunction {
 protected:
 	CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
-	CScriptVarFunctionBounded(const CScriptVarFunctionBounded &Copy) : CScriptVarFunction(Copy), boundedThis(Copy.boundedThis), boundedArguments(Copy.boundedArguments)  { } ///< Copy protected -> use clone for public
+	CScriptVarFunctionBounded(const CScriptVarFunctionBounded& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarFunctionBounded() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isBounded() OVERRIDE;	///< is CScriptVarFunctionBounded
 	virtual void setTemporaryMark_recursive(uint32_t ID) OVERRIDE;
 	CScriptVarPtr callFunction(CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
@@ -1939,10 +1926,9 @@ define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
 	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name, const char *Args);
-	CScriptVarFunctionNative(const CScriptVarFunctionNative &Copy) : CScriptVarFunction(Copy), jsUserData(Copy.jsUserData) { } ///< Copy protected -> use clone for public
+	CScriptVarFunctionNative(const CScriptVarFunctionNative& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarFunctionNative() OVERRIDE;
-	virtual CScriptVarPtr clone()=0;
 	virtual bool isNative() OVERRIDE; // { return true; }
 
 	virtual void callFunction(const CFunctionsScopePtr &c)=0;// { jsCallback(c, jsCallbackUserData); }
@@ -1959,10 +1945,9 @@ define_ScriptVarPtr_Type(FunctionNativeCallback);
 class CScriptVarFunctionNativeCallback : public CScriptVarFunctionNative {
 protected:
 	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), jsCallback(Callback) {}
-	CScriptVarFunctionNativeCallback(const CScriptVarFunctionNativeCallback &Copy) : CScriptVarFunctionNative(Copy), jsCallback(Copy.jsCallback) { } ///< Copy protected -> use clone for public
+	CScriptVarFunctionNativeCallback(const CScriptVarFunctionNativeCallback& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarFunctionNativeCallback() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual void callFunction(const CFunctionsScopePtr &c) OVERRIDE;
 private:
 	JSCallback jsCallback; ///< Callback for native functions
@@ -1979,9 +1964,8 @@ template<class native>
 class CScriptVarFunctionNativeClass : public CScriptVarFunctionNative {
 protected:
 	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), classPtr(ClassPtr), classFnc(ClassFnc) {}
-	CScriptVarFunctionNativeClass(const CScriptVarFunctionNativeClass &Copy) : CScriptVarFunctionNative(Copy), classPtr(Copy.classPtr), classFnc(Copy.classFnc) { } ///< Copy protected -> use clone for public
+	CScriptVarFunctionNativeClass(const CScriptVarFunctionNativeClass& Copy) MEMBER_DELETE;
 public:
-	virtual CScriptVarPtr clone() OVERRIDE { return new CScriptVarFunctionNativeClass(*this); }
 
 	virtual void callFunction(const CFunctionsScopePtr &c) OVERRIDE { (classPtr->*classFnc)(c, jsUserData); }
 private:
@@ -2013,10 +1997,9 @@ protected:
 	}
 	CScriptVarAccessor(CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter);
 
-	CScriptVarAccessor(const CScriptVarAccessor &Copy) : CScriptVarObject(Copy) {} ///< Copy protected -> use clone for public
+	CScriptVarAccessor(const CScriptVarAccessor& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarAccessor() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isAccessor() OVERRIDE; // { return true; }
 	virtual bool isPrimitive() OVERRIDE; // { return false; }
 
@@ -2044,7 +2027,6 @@ class CScriptVarDestructuring : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarDestructuring(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
-	virtual CScriptVarPtr clone() OVERRIDE;
 public:
 	virtual ~CScriptVarDestructuring() OVERRIDE;
 };
@@ -2059,7 +2041,6 @@ class CScriptVarScope : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarScope(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isObject() OVERRIDE; // { return false; }
 public:
 	virtual ~CScriptVarScope() OVERRIDE;
@@ -2177,13 +2158,9 @@ define_ScriptVarPtr_Type(DefaultIterator);
 class CScriptVarDefaultIterator : public CScriptVarObject {
 protected:
 	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode);
-	CScriptVarDefaultIterator(const CScriptVarDefaultIterator &Copy)
-		:
-		CScriptVarObject(Copy), mode(Copy.mode), object(Copy.object),
-		keys(Copy.keys), pos(keys.begin()){} ///< Copy protected -> use clone for public
+	CScriptVarDefaultIterator(const CScriptVarDefaultIterator& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarDefaultIterator() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isIterator() OVERRIDE;
 
 	void native_next(const CFunctionsScopePtr &c, void *data);
@@ -2210,19 +2187,9 @@ define_ScriptVarPtr_Type(Generator);
 class CScriptVarGenerator : public CScriptVarObject {
 protected:
 	CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function);
-#if _MSC_VER == 1600
-#pragma warning(push)
-#pragma warning(disable: 4355) // possible loss of data
-#endif
-	CScriptVarGenerator(const CScriptVarGenerator &Copy)
-		:
-		CScriptVarObject(Copy), functionRoot(Copy.functionRoot), function(Copy.function), coroutine(this) {} ///< Copy protected -> use clone for public
-#if _MSC_VER == 1600
-#pragma warning(pop)
-#endif
+	CScriptVarGenerator(const CScriptVarGenerator& Copy) MEMBER_DELETE;
 public:
 	virtual ~CScriptVarGenerator() OVERRIDE;
-	virtual CScriptVarPtr clone() OVERRIDE;
 	virtual bool isIterator() OVERRIDE;
 	virtual bool isGenerator() OVERRIDE;
 	virtual std::string getVarType() OVERRIDE; // { return "generator"; }
