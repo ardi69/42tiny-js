@@ -100,56 +100,23 @@
 #define TRACE printf
 #endif // TRACE
 
+/*!
+ *  indicates the highest supported version of compiled js
+ *  when enum LEX_TYPES are changed, then increment this version
+ *  compiled js are created with this version
+ */
+#define COMPILED_TOKENS_VERSION_MAX 0x0101
+/*!
+ *  indicates the lowest supported version of compiled js
+ *  when id's inserted, removed or reordered, then set version min to version max
+ */
+#define COMPILED_TOKENS_VERSION_MIN 0x0101
+
 enum LEX_TYPES {
 	LEX_EOF = 0,
-#define LEX_RELATIONS_1_BEGIN LEX_EQUAL
-	LEX_EQUAL = 256,
-	LEX_TYPEEQUAL,
-	LEX_NEQUAL,
-	LEX_NTYPEEQUAL,
-#define LEX_RELATIONS_1_END LEX_NTYPEEQUAL
-	LEX_ARROW,
-	LEX_LEQUAL,
-	LEX_GEQUAL,
-#define LEX_SHIFTS_BEGIN LEX_LSHIFT
-	LEX_LSHIFT,
-	LEX_RSHIFT,
-	LEX_RSHIFTU, // unsigned
-#define LEX_SHIFTS_END LEX_RSHIFTU
-	LEX_PLUSPLUS,
-	LEX_MINUSMINUS,
-	LEX_ANDAND,
-	LEX_OROR,
-	LEX_INT,
-
-#define LEX_ASSIGNMENTS_BEGIN LEX_PLUSEQUAL
-	LEX_PLUSEQUAL,
-	LEX_MINUSEQUAL,
-	LEX_ASTERISKEQUAL,
-	LEX_SLASHEQUAL,
-	LEX_PERCENTEQUAL,
-	LEX_LSHIFTEQUAL,
-	LEX_RSHIFTEQUAL,
-	LEX_RSHIFTUEQUAL, // unsigned
-	LEX_ANDEQUAL,
-	LEX_OREQUAL,
-	LEX_XOREQUAL,
-#define LEX_ASSIGNMENTS_END LEX_XOREQUAL
-
-#define LEX_TOKEN_NONSIMPLE_1_BEGIN LEX_TOKEN_STRING_BEGIN
-#define LEX_TOKEN_STRING_BEGIN LEX_ID
-	LEX_ID,
-	LEX_STR,
-	LEX_REGEXP,
-	LEX_T_LABEL,
-	LEX_T_DUMMY_LABEL,
-#define LEX_TOKEN_STRING_END LEX_T_DUMMY_LABEL
-
-	LEX_FLOAT,
-#define LEX_TOKEN_NONSIMPLE_1_END LEX_FLOAT
 
 	// reserved words
-	LEX_R_IF,
+	LEX_R_IF = 256,
 	LEX_R_ELSE,
 	LEX_R_DO,
 	LEX_R_WHILE,
@@ -178,41 +145,96 @@ enum LEX_TYPES {
 	LEX_R_SWITCH,
 	LEX_R_CASE,
 	LEX_R_DEFAULT,
+	LEX_R_YIELD,
+
+#define LEX_EQUALS_BEGIN LEX_EQUAL
+	LEX_EQUAL,					// ==
+	LEX_TYPEEQUAL,				// ===
+	LEX_NEQUAL,					// !=
+	LEX_NTYPEEQUAL,				// !==
+#define LEX_EQUALS_END LEX_NTYPEEQUAL
+
+	LEX_ARROW,					// =>
+	LEX_LEQUAL,					// <=
+	LEX_GEQUAL,					// >=
+
+#define LEX_SHIFTS_BEGIN LEX_LSHIFT
+	LEX_LSHIFT,					// <<
+	LEX_RSHIFT,					// >>
+	LEX_RSHIFTU,				// >>> (unsigned)
+#define LEX_SHIFTS_END LEX_RSHIFTU
+
+	LEX_ASKASK,					// ??
+	LEX_ASTERISKASTERISK,		// **
+	LEX_PLUSPLUS,				// ++
+	LEX_MINUSMINUS,				// --
+	LEX_ANDAND,					// &&
+	LEX_OROR,					// ||
+	LEX_INT,
+
+#define LEX_ASSIGNMENTS_BEGIN LEX_PLUSEQUAL
+	LEX_PLUSEQUAL,				// +=
+	LEX_MINUSEQUAL,				// -=
+	LEX_ASTERISKEQUAL,			// *=
+	LEX_ASTERISKASTERISKEQUAL,	// **=
+	LEX_SLASHEQUAL,				// /=
+	LEX_PERCENTEQUAL,			// %=
+	LEX_LSHIFTEQUAL,			// <<=
+	LEX_RSHIFTEQUAL,			// >>=
+	LEX_RSHIFTUEQUAL,			// >>>= (unsigned)
+	LEX_ANDEQUAL,				// &=
+	LEX_OREQUAL,				// |=
+	LEX_XOREQUAL,				// ^=
+	LEX_ASKASKEQUAL,			// ??=
+#define LEX_ASSIGNMENTS_END LEX_ASKASKEQUAL
+
+
+
+#define LEX_TOKEN_NONSIMPLE_BEGIN LEX_TOKEN_STRING_BEGIN // tokens with a special CScriptTokenData class
+
+#define LEX_TOKEN_STRING_BEGIN LEX_ID			// CScriptTokenDataString
+	LEX_ID,
+	LEX_STR,
+	LEX_REGEXP,
+	LEX_T_LABEL,
+	LEX_T_DUMMY_LABEL,
+#define LEX_TOKEN_STRING_END LEX_T_DUMMY_LABEL
+
+	LEX_FLOAT,
+#define LEX_TOKEN_NONSIMPLE_1_END LEX_FLOAT					// float
+
 
 	// special token
-//	LEX_T_FILE,
-#define LEX_TOKEN_NONSIMPLE_2_BEGIN LEX_TOKEN_FOR_BEGIN
-#define LEX_TOKEN_FOR_BEGIN LEX_T_LOOP
+
+#define LEX_TOKEN_FOR_BEGIN LEX_T_LOOP						// CScriptTokenDataLoop
 	LEX_T_LOOP,
 	LEX_T_FOR_IN,
 #define LEX_TOKEN_FOR_END LEX_T_FOR_IN
-#define LEX_TOKEN_FUNCTION_BEGIN LEX_R_FUNCTION
+#define LEX_TOKEN_FUNCTION_BEGIN LEX_R_FUNCTION				// CScriptTokenDataFnc
 	LEX_R_FUNCTION,
 	LEX_T_FUNCTION_PLACEHOLDER,
 	LEX_T_FUNCTION_OPERATOR,
+	LEX_T_FUNCTION_ARROW,
+	LEX_T_GENERATOR,
+	LEX_T_GENERATOR_OPERATOR,
+	LEX_T_GENERATOR_MEMBER,
 	LEX_T_GET,
 	LEX_T_SET,
 #define LEX_TOKEN_FUNCTION_END LEX_T_SET
-	LEX_T_IF,
-	LEX_T_TRY,
-	LEX_T_OBJECT_LITERAL,
-	LEX_T_DESTRUCTURING_VAR,
-	LEX_T_ARRAY_COMPREHENSIONS_BODY,
-	LEX_T_FORWARD,
-#define LEX_TOKEN_NONSIMPLE_2_END LEX_T_FORWARD
+	LEX_T_IF,												// CScriptTokenDataIf
+	LEX_T_TRY,												// CScriptTokenDataTry
+	LEX_T_OBJECT_LITERAL,									// CScriptTokenDataObjectLiteral
+	LEX_T_DESTRUCTURING_VAR,								// CScriptTokenDataDestructuringVar
+	LEX_T_ARRAY_COMPREHENSIONS_BODY,						// CScriptTokenDataArrayComprehensionsBody
+	LEX_T_FORWARD,											// CScriptTokenDataForwards
+#define LEX_TOKEN_NONSIMPLE_END LEX_T_FORWARD
 
 	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
 	LEX_T_END_EXPRESSION,
 
-	LEX_R_YIELD,
-
-	LEX_ASTERISKASTERISK, // **
-	LEX_ASTERISKASTERISKEQUAL, // **=
-	LEX_ASKASK, // ??
-	LEX_ASKASKEQUAL, // ??=
 	LEX_OPTIONAL_CHAINING_MEMBER,	// .?
-	LEX_OPTIONAL_CHAINING_ARRAY,		// .?[ ... ]
+	LEX_OPTIONAL_CHAINING_ARRAY,	// .?[ ... ]
 	LEX_OPTIONAL_CHANING_FNC,		// .?( ... )
 
 };
@@ -227,7 +249,7 @@ enum LEX_TYPES {
 #define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)		(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
 #define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
 
-#define LEX_TOKEN_DATA_SIMPLE(tk) (!((LEX_TOKEN_NONSIMPLE_1_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_1_END) || (LEX_TOKEN_NONSIMPLE_2_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_2_END)))
+#define LEX_TOKEN_DATA_SIMPLE(tk) (!(LEX_TOKEN_NONSIMPLE_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_END))
 
 enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_WRITABLE			= 1<<0,
@@ -431,18 +453,19 @@ private:
 
 class CScriptTokenDataFnc : public fixed_size_object<CScriptTokenDataFnc>, public CScriptTokenData {
 public:
-	CScriptTokenDataFnc() : line(0),isGenerator(false), isArrowFunction(false) {}
+	CScriptTokenDataFnc(int32_t Type) : type(Type), line(0) {}
 	CScriptTokenDataFnc(std::istream &in);
 	virtual void serialize(std::ostream &out) const OVERRIDE;
 	std::string getArgumentsString(bool forArrowFunction=false);
 
+	int32_t type;
 	std::string file;
 	int32_t line;
 	std::string name;
 	TOKEN_VECT arguments;
 	TOKEN_VECT body;
-	bool isGenerator;
-	bool isArrowFunction;
+	bool isGenerator() { return type == LEX_T_GENERATOR || type == LEX_T_GENERATOR_OPERATOR || type == LEX_T_GENERATOR_MEMBER; }
+	bool isArrowFunction() { return type == LEX_T_FUNCTION_ARROW; }
 
 };
 typedef CScriptTokenDataPtr<CScriptTokenDataFnc> CScriptTokenDataFncPtr;
@@ -660,6 +683,7 @@ public:
 	uint16_t			column;
 	uint16_t			token;
 
+	// ACTUAL_CHANGE
 	static std::string getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString="", const std::string &Indent="");
 	static std::string getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString="", const std::string &Indent="");
 	static std::string getTokenStr( int token, const char *tokenStr=0, bool *need_space=0 );
@@ -714,7 +738,7 @@ public:
 		int currentColumn() const { return pos->column; }
 	};
 	struct ScriptTokenState {
-		ScriptTokenState() : LeftHand(false), FunctionIsGenerator(false), HaveReturnValue(false) {}
+		ScriptTokenState() : LeftHand(false), /*FunctionIsGenerator(false),*/ HaveReturnValue(false) {}
 		TOKEN_VECT Tokens;
 		FORWARDER_VECTOR_t Forwarders;
 		MARKS_t Marks;
@@ -724,7 +748,7 @@ public:
 		void pushLeftHandState() { States.push_back(LeftHand); }
 		void popLeftHandeState() { LeftHand = States.back(); States.pop_back(); }
 		std::vector<bool> States;
-		bool FunctionIsGenerator;
+//		bool FunctionIsGenerator;
 		bool HaveReturnValue;
 	};
 	CScriptTokenizer();

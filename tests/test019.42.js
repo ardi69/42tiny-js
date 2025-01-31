@@ -20,7 +20,12 @@ obj1 = new Object();
 obj1.food = "cake";
 obj1.desert = "pie";
 
-obj2 = obj1.clone();
+// 42-tiny-js change begin --->
+// as of version 0.9.9 clone() has been removed
+//obj2 = obj1.clone();  
+// alternativly we can use:
+obj2 = JSON.parse(JSON.stringify(obj1));
+//<--- 42-tiny-js change end
 obj2.food = "kittens";
 
 result = foo.length==13 && foo.indexOf("bar")==4 && foo.substring(8,13)=="stuff" && parsed==42 &&

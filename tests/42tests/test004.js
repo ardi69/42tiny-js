@@ -1,6 +1,6 @@
 // generator-test
 
-function fibonacci(){
+function* fibonacci(){
   var fn1 = 1;
   var fn2 = 1;
   while (1){

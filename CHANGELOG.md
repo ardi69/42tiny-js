@@ -87,3 +87,10 @@ Version 0.9.9 (2024-04-13 13:56:41)
 ===================================
 
 * removed cloning stuff
+* changed test019.42.js now uses JSON.parse(JSON.stringify(obj1)) instead of obj1.clone()
+* added generator function statements and expessions with asterisk
+  - as statement: function* generator() { ... }
+  - as expression let generator = function*() { ... }
+  - or as object member: let obj = { *generator() { ... } }
+  Previously, a generator was recognized by it if a yield expression was included. This behavior is no longer supported.
+* changed 42tests/test004.js now uses function* fibonacci()

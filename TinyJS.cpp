@@ -368,10 +368,10 @@ void CScriptLex::getNextToken() {
 			tkStr += currCh;
 			getNextCh();
 		}
-		if(!isIDChar(currCh)) {
+		if (!isIDChar(currCh)) {
 			tk = CScriptToken::isReservedWord(tkStr);
 #ifdef NO_GENERATORS
-			if(tk == LEX_R_YIELD)
+			if (tk == LEX_R_YIELD)
 				throw CScriptException(Error, "42TinyJS was built without support of generators (yield expression)", currentFile, pos.currentLine, currentColumn());
 #endif
 		} else {
@@ -850,23 +850,21 @@ void CScriptTokenDataString::serialize(ostream &out) const {
 
 CScriptTokenDataFnc::CScriptTokenDataFnc(std::istream &in)
 {
+	CScriptToken::unserialize(type, in);
 	CScriptToken::unserialize(file, in);
 	CScriptToken::unserialize(line, in);
 	CScriptToken::unserialize(name, in);
 	CScriptToken::unserialize(arguments, in);
 	CScriptToken::unserialize(body, in);
-	CScriptToken::unserialize(isGenerator, in);
-	CScriptToken::unserialize(isArrowFunction, in);
 }
 
 void CScriptTokenDataFnc::serialize(ostream &out) const {
+	CScriptToken::serialize(type, out);
 	CScriptToken::serialize(file, out);
 	CScriptToken::serialize(line, out);
 	CScriptToken::serialize(name, out);
 	CScriptToken::serialize(arguments, out);
 	CScriptToken::serialize(body, out);
-	CScriptToken::serialize(isGenerator, out);
-	CScriptToken::serialize(isArrowFunction, out);
 }
 
 string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
@@ -1118,13 +1116,16 @@ static token2str_t tokens2str_begin[] = {
 	{ LEX_ASTERISKASTERISK, 					"**", 										false },
 	{ LEX_ASTERISKASTERISKEQUAL, 				"**=", 										false },
 
-	{ LEX_OPTIONAL_CHAINING_MEMBER, 				"?.", 										false },
+	{ LEX_OPTIONAL_CHAINING_MEMBER, 			"?.", 										false },
 	{ LEX_OPTIONAL_CHAINING_ARRAY, 				"?.[", 										false },
 	{ LEX_OPTIONAL_CHANING_FNC, 				"?.(", 										false },
 
 	// special tokens
 	{ LEX_T_OF, 								"of", 										true  },
 	{ LEX_T_FUNCTION_OPERATOR, 					"function", 								true  },
+	{ LEX_T_GENERATOR, 							"function*", 								true  },
+	{ LEX_T_GENERATOR_OPERATOR, 				"function*", 								true  },
+	{ LEX_T_GENERATOR_MEMBER, 					"*",		 								true  },
 	{ LEX_T_GET, 								"get", 										true  },
 	{ LEX_T_SET, 								"set", 										true  },
 	{ LEX_T_EXCEPTION_VAR, 						"LEX_T_EXCEPTION_VAR",	 					false },
@@ -1179,17 +1180,22 @@ CScriptToken::CScriptToken(CScriptLex *l, int Match, int Alternate) : line(l->cu
 	} else if(LEX_TOKEN_DATA_STRING(token))
 		(tokenData = new CScriptTokenDataString(l->tkStr))->ref();
 	else if(LEX_TOKEN_DATA_FUNCTION(token))
-		(tokenData = new CScriptTokenDataFnc)->ref();
+		(tokenData = new CScriptTokenDataFnc(token))->ref();
 	else if (LEX_TOKEN_DATA_LOOP(token))
 		(tokenData = new CScriptTokenDataLoop)->ref();
 	else if (LEX_TOKEN_DATA_IF(token))
 		(tokenData = new CScriptTokenDataIf)->ref();
 	else if (LEX_TOKEN_DATA_TRY(token))
 		(tokenData = new CScriptTokenDataTry)->ref();
-	if(Match>=0)
-		l->match(Match, Alternate);
-	else
-		l->match(l->tk);
+	try {
+		if (Match >= 0)
+			l->match(Match, Alternate);
+		else
+			l->match(l->tk);
+	} catch (...) {
+		clear();
+		throw;
+	}
 #ifdef _DEBUG
 	token_str = getTokenStr(token);
 #endif
@@ -1198,7 +1204,7 @@ CScriptToken::CScriptToken(uint16_t Tk, int32_t IntData) : line(0), column(0), t
 	if (LEX_TOKEN_DATA_SIMPLE(token))
 		intData = IntData;
 	else if (LEX_TOKEN_DATA_FUNCTION(token))
-		(tokenData = new CScriptTokenDataFnc)->ref();
+		(tokenData = new CScriptTokenDataFnc(token))->ref();
 	else if (LEX_TOKEN_DATA_DESTRUCTURING_VAR(token))
 		(tokenData = new CScriptTokenDataDestructuringVar)->ref();
 	else if (LEX_TOKEN_DATA_OBJECT_LITERAL(token))
@@ -1338,10 +1344,19 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 		else if(it->token == LEX_INT)
 			OutString.append(CNumber(it->Int()).toString()), need_space=true;
 		else if(LEX_TOKEN_DATA_FUNCTION(it->token)) {
-			bool isArrowFunction = it->Fnc().isArrowFunction;
-			if(!isArrowFunction)
-				OutString.append("function ");
-			if(it->Fnc().name.size() )
+			CScriptTokenDataFnc &Fnc = it->Fnc();
+			bool isArrowFunction = Fnc.isArrowFunction();
+			if (!isArrowFunction) {
+				if (Fnc.type == LEX_T_GET) OutString.append("get ");
+				else if (Fnc.type == LEX_T_SET) OutString.append("set ");
+				else if (Fnc.type == LEX_T_GENERATOR_MEMBER) OutString.append("*");
+				else {
+					OutString.append("function");
+					if (Fnc.isGenerator()) OutString.append("*");
+					OutString.append(" ");
+				}
+			}
+			if (Fnc.name.size())
 				OutString.append(it->Fnc().name);
 			OutString.append(it->Fnc().getArgumentsString(isArrowFunction));
 			if(isArrowFunction)
@@ -1534,9 +1549,6 @@ static string &read_string_from_istream(istream &in, string &out)
 }
 
 #define COMPILED_TOKENS_ID 0x006a7300 /* '\0', 'j', 's', '0' */
-#define COMPILED_TOKENS_VERSION 0x0100
-#define COMPILED_TOKENS_VERSION_MIN 0x0100
-#define COMPILED_TOKENS_VERSION_MAX 0x0100
 void CScriptTokenizer::unserialize(const string &File, const string &FileC)
 {
 	if(FileC.size()) {
@@ -1544,7 +1556,7 @@ void CScriptTokenizer::unserialize(const string &File, const string &FileC)
 			ifstream in(FileC.c_str(), fstream::in | fstream::binary);
 			uint32_t id;
 			CScriptToken::unserialize(id, in);
-			if(id == COMPILED_TOKENS_ID) {
+			if(id == COMPILED_TOKENS_ID) { // check file id and byte order
 				uint16_t v;
 				CScriptToken::unserialize(v, in);
 				if(v >= COMPILED_TOKENS_VERSION_MIN && COMPILED_TOKENS_VERSION_MAX >= v) {
@@ -1571,7 +1583,7 @@ void CScriptTokenizer::unserialize(const string &File, const string &FileC)
 void CScriptTokenizer::serialize(ostream &out) const
 {
 	uint32_t id = COMPILED_TOKENS_ID;
-	uint16_t v = COMPILED_TOKENS_VERSION;
+	uint16_t v = COMPILED_TOKENS_VERSION_MAX;
 	CScriptToken::serialize(id, out);
 	CScriptToken::serialize(v, out);
 	CScriptToken::serialize(tokens, out);
@@ -1682,9 +1694,10 @@ enum {
 	TOKENIZE_FLAGS_asStatement		= 1<<5,
 	TOKENIZE_FLAGS_noIn				= 1<<6,	/// expression without 'in' or 'of'
 	TOKENIZE_FLAGS_isAccessor		= 1<<7,
-	TOKENIZE_FLAGS_callForNew		= 1<<8,
-	TOKENIZE_FLAGS_noBlockStart	= 1<<9,
-	TOKENIZE_FLAGS_nestedObject	= 1<<10,
+	TOKENIZE_FLAGS_isGenerator		= 1<<8,
+	TOKENIZE_FLAGS_callForNew		= 1<<9,
+	TOKENIZE_FLAGS_noBlockStart		= 1<<10,
+	TOKENIZE_FLAGS_nestedObject		= 1<<11,
 };
 void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, int Flags) {
 	l->match(LEX_R_TRY);
@@ -2118,17 +2131,16 @@ CScriptToken CScriptTokenizer::tokenizeFunctionArgument() {
 void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef/*=false*/)
 {
 	l->match(LEX_ARROW);
-	CScriptToken FncToken(LEX_T_FUNCTION_OPERATOR);
+	CScriptToken FncToken(LEX_T_FUNCTION_ARROW);
 	CScriptTokenDataFnc &FncData = FncToken.Fnc();
-	FncData.isArrowFunction = true;
 	FncData.arguments = Arguments;
 	FncData.file = l->currentFile;
 	FncData.line = l->currentLine();
 
 	ScriptTokenState functionState;
-	functionState.HaveReturnValue = functionState.FunctionIsGenerator = false;
-	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
-		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn);
+	functionState.HaveReturnValue /*= functionState.FunctionIsGenerator*/ = false;
+	if(l->tk == '{')
+		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn); // => { } 
 	else {
 		tokenizeAssignment(functionState, 0);
 		functionState.HaveReturnValue = true;
@@ -2141,17 +2153,28 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 	bool forward = false;
 	bool Statement = (Flags & TOKENIZE_FLAGS_asStatement) != 0;
 	bool Accessor = (Flags & TOKENIZE_FLAGS_isAccessor) != 0;
+	bool Generator = (Flags & TOKENIZE_FLAGS_isGenerator) != 0;
 	CScriptLex::POS functionPos = l->pos;
 
 	int tk = l->tk;
 	if(Accessor) {
 		tk = State.Tokens.back().String()=="get"?LEX_T_GET:LEX_T_SET;
 		State.Tokens.pop_back();
+	} else if (Generator) {
+		tk = LEX_T_GENERATOR_MEMBER;
+		State.Tokens.pop_back();
 	} else {
+//		Generator = l->pos.tokenStart[8] == '*';
 		l->match(LEX_R_FUNCTION);
-		if(!Statement) tk = LEX_T_FUNCTION_OPERATOR;
+		if (l->tk == '*') {
+			Generator = true;
+			l->match('*');
+			tk = LEX_T_GENERATOR;
+//			do {} while (0);
+		}
+		if(!Statement) tk = tk == LEX_R_FUNCTION ? LEX_T_FUNCTION_OPERATOR : LEX_T_GENERATOR_OPERATOR;
 	}
-	if(tk == LEX_R_FUNCTION) // only forward functions
+	if(tk == LEX_R_FUNCTION || tk == LEX_T_GENERATOR) // only forward functions
 		forward = !noLetDef && State.Forwarders.front() == State.Forwarders.back();
 
 	CScriptToken FncToken(tk);
@@ -2167,24 +2190,21 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 		FncData.arguments.push_back(tokenizeFunctionArgument());
 		if (l->tk!=')') l->match(',',')');
 	}
-	// l->match(')');
-	// to allow regexp at the beginning of a lambda-function fake last token
-	l->tk = '{';
-	l->match('{');
+	l->match(')');
+
 	FncData.file = l->currentFile;
 	FncData.line = l->currentLine();
-
+	
 	ScriptTokenState functionState;
-	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
-		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn | TOKENIZE_FLAGS_canYield);
-	else {
-		tokenizeExpression(functionState, TOKENIZE_FLAGS_canYield);
-		if(Statement) l->match(';');
-		functionState.HaveReturnValue = true;
-	}
-	if(functionState.HaveReturnValue == true && functionState.FunctionIsGenerator == true)
+//	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
+		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn | (Generator ? TOKENIZE_FLAGS_canYield : 0));
+//	else {
+//		tokenizeExpression(functionState, TOKENIZE_FLAGS_canYield);
+//		if(Statement) l->match(';');
+//		functionState.HaveReturnValue = true;
+//	}
+	if(functionState.HaveReturnValue == true && Generator != 0)
 		throw CScriptException(TypeError, "generator function returns a value.", l->currentFile, functionPos.currentLine, functionPos.currentColumn());
-	FncData.isGenerator = functionState.FunctionIsGenerator;
 
 	functionState.Tokens.swap(FncData.body);
 	if(forward) {
@@ -2349,13 +2369,13 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 		if(CScriptToken::isReservedWord(l->tk))
 			l->tk = LEX_ID; // fake reserved-word as member.ID
 		if(l->tk == LEX_ID) {
-			element.id = l->tkStr;
+			element.id = l->tkStr; 
 			CScriptToken Token(l, LEX_ID);
-			if((l->tk==LEX_ID || l->tk==LEX_STR ) && (element.id=="get" || element.id=="set")) {
+			if((l->tk==LEX_ID || l->tk==LEX_STR ) && (element.id=="get" || element.id == "set")) {
 				element.id = l->tkStr;
 				element.value.push_back(Token);
 				State.Tokens.swap(element.value);
-				tokenizeFunction(State, Flags|TOKENIZE_FLAGS_isAccessor);
+				tokenizeFunction(State, Flags| TOKENIZE_FLAGS_isAccessor);
 				State.Tokens.swap(element.value);
 				Objc.destructuring = false;
 			} else {
@@ -2372,7 +2392,16 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 				} else
 					assign = true;
 			}
-		} else if(l->tk == LEX_INT) {
+		} else if (l->tk == '*') { // *generator() {}
+			CScriptToken Token(l, '*');
+			l->check(LEX_ID);
+			element.id = l->tkStr;
+			element.value.push_back(Token);
+			State.Tokens.swap(element.value);
+			tokenizeFunction(State, Flags | TOKENIZE_FLAGS_isGenerator);
+			State.Tokens.swap(element.value);
+			Objc.destructuring = false;
+		} else if (l->tk == LEX_INT) {
 			element.id = int2string((int32_t)strtol(l->tkStr.c_str(),0,0));
 			l->match(LEX_INT);
 			assign = true;
@@ -2505,18 +2534,31 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	int ObjectLiteralFlags = Flags;
 	Flags &= ~TOKENIZE_FLAGS_noIn;
 	switch(l->tk) {
+#ifndef NO_GENERATORS
+	case LEX_R_YIELD:
+		if (Flags & TOKENIZE_FLAGS_canYield) {
+			pushToken(State.Tokens);
+			if (l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
+				tokenizeExpression(State, Flags);
+			}
+			//State.FunctionIsGenerator = true;
+			break;
+		} else
+			l->tk = LEX_ID; // yield is only reserved in generator function bodies
+		FALLTHROUGH;
+#endif
 	case LEX_ID:
 		{
 			string label = l->tkStr;
 			l->match(LEX_ID);
-			if(label != "this" && l->tk == LEX_ARROW) { // Arrow-Function
+			if(label != "this" && l->tk == LEX_ARROW) { // Arrow-Function  // label => ...
 				TOKEN_VECT arguments;
 				CScriptToken token(LEX_T_DESTRUCTURING_VAR);
 				token.DestructuringVar().vars.push_back(DESTRUCTURING_VAR_t("", label));
 				token.column = l->currentColumn();
 				token.line = l->currentLine();
 				arguments.push_back(token);
-				tokenizeArrowFunction(arguments, State, Flags);
+				tokenizeArrowFunction(arguments, State, Flags); 
 			} else {
 				pushToken(State.Tokens, CScriptToken(LEX_ID, label));
 				if(l->tk==':' && canLabel) {
@@ -2575,17 +2617,6 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		}
 		setTokenSkip(State);
 		break;
-#ifndef NO_GENERATORS
-	case LEX_R_YIELD:
-		if( (Flags & TOKENIZE_FLAGS_canYield)==0)
-			throw CScriptException(SyntaxError, "'yield' expression, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
-		pushToken(State.Tokens);
-		if(l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
-			tokenizeExpression(State, Flags);
-		}
-		State.FunctionIsGenerator = true;
-		break;
-#endif
 	case '(':
 		{
 			l->match('(');
@@ -2600,7 +2631,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 						else if (l->tk!=')') arguments_ok = false;
 					}
 					if((arguments_ok = arguments_ok && l->tk == ')')) l->match(')');
-					if(arguments_ok && l->tk == LEX_ARROW) {
+					if(arguments_ok && l->tk == LEX_ARROW) {				// ( ... ) =>
 						tokenizeArrowFunction(arguments, State, Flags);
 						break;
 					}
@@ -2771,7 +2802,7 @@ void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
 }
 void CScriptTokenizer::tokenizeAssignment(ScriptTokenState &State, int Flags) {
 	tokenizeCondition(State, Flags);
-	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END) || l->tk == LEX_ASKASKEQUAL || l->tk == LEX_ASTERISKASTERISKEQUAL) {
+	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END)) {
 		if(!State.LeftHand)
 			throw CScriptException(ReferenceError, "invalid assignment left-hand side", l->currentFile, l->currentLine(), l->currentColumn());
 		pushToken(State.Tokens);
@@ -4441,8 +4472,17 @@ string CScriptVarObject::getParsableString(const string &indentString, const str
 		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
 			if((*it)->isEnumerable()) {
 				destination.append(comma); comma=",";
-				destination.append(nl).append(new_indentString).append(getIDString((*it)->getName()));
-				destination.append(" : ");
+				destination.append(nl).append(new_indentString);
+				CScriptTokenDataFnc* Fnc = (*it)->getVarPtr()->getFunctionData();
+				if (Fnc) {
+					if (Fnc->type == LEX_T_GET) destination.append("get ");
+					else if (Fnc->type == LEX_T_SET) destination.append("set ");
+					else if (Fnc->type == LEX_T_GENERATOR_MEMBER) destination.append("*");
+				}
+				if (!(*it)->getVarPtr()->isAccessor()) {
+					destination.append(getIDString((*it)->getName()));
+					if (!Fnc || (Fnc->type != LEX_T_GET && Fnc->type != LEX_T_SET && Fnc->type != LEX_T_GENERATOR_MEMBER)) destination.append(" : ");
+				}
 				destination.append((*it)->getVarPtr()->getParsableString(new_indentString, indent, uniqueID, hasRecursion));
 			}
 		}
@@ -4957,11 +4997,20 @@ string CScriptVarFunction::getVarType() { return "function"; }
 string CScriptVarFunction::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
 	string destination;
-	if(!data->isArrowFunction)
-		destination.append("function ").append(data->name);
+	if (!data->isArrowFunction()) {
+		if (data->type == LEX_T_GET) destination.append("get ");
+		else if (data->type == LEX_T_SET) destination.append("set ");
+		else if (data->type == LEX_T_GENERATOR_MEMBER) destination.append("*");
+		else {
+			destination.append("function");
+			if (data->isGenerator()) destination.append("*");
+			destination.append(" ");
+		}
+		destination.append(data->name);
+	}
 	// get list of arguments
-	destination.append(data->getArgumentsString(data->isArrowFunction));
-	if(data->isArrowFunction)
+	destination.append(data->getArgumentsString(data->isArrowFunction()));
+	if(data->isArrowFunction())
 		destination.append("=> ");
 
 	if(isNative() || isBounded())
@@ -5009,7 +5058,7 @@ void CScriptVarFunction::setFunctionData(CScriptTokenDataFnc *Data) {
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const vector<CScriptVarPtr> &BoundedArguments)
-	: CScriptVarFunction(BoundedFunction->getContext(), new CScriptTokenDataFnc) ,
+	: CScriptVarFunction(BoundedFunction->getContext(), new CScriptTokenDataFnc(LEX_R_FUNCTION)) ,
 	boundedFunction(BoundedFunction),
 	boundedThis(BoundedThis),
 	boundedArguments(BoundedArguments) {
@@ -5037,7 +5086,7 @@ CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, v
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name, const char *Args) : CScriptVarFunction(Context, 0), jsUserData(Userdata) {
-	CScriptTokenDataPtr<CScriptTokenDataFnc> FncData(*new CScriptTokenDataFnc);
+	CScriptTokenDataPtr<CScriptTokenDataFnc> FncData(*new CScriptTokenDataFnc(LEX_R_FUNCTION));
 	if (Name) FncData->name = Name;
 	if (Args) {
 		CScriptLex lex(Args);
@@ -5094,7 +5143,15 @@ CScriptVarAccessor::~CScriptVarAccessor() {}
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; }
 string CScriptVarAccessor::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
-	return "";
+	getParsableStringRecursionsCheckBegin();
+	string destination;
+	CScriptVarLinkPtr getter = findChild(TINYJS_ACCESSOR_GET_VAR);
+	CScriptVarLinkPtr setter = findChild(TINYJS_ACCESSOR_SET_VAR);
+	if (getter) destination.append(getter->getVarPtr()->getParsableString(indentString, indent, uniqueID, hasRecursion));
+	if (getter && setter) destination.append(", ");
+	if (setter) destination.append(setter->getVarPtr()->getParsableString(indentString, indent, uniqueID, hasRecursion));
+	getParsableStringRecursionsCheckEnd();
+	return destination;
 }
 string CScriptVarAccessor::getVarType() { return "accessor"; }
 
@@ -5690,7 +5747,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	CScriptTokenDataFnc *Fnc = Function->getFunctionData();
 	CScriptVarScopeFncPtr functionRoot(::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
 	if(Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
-	if(!Fnc->isArrowFunction) {
+	if(!Fnc->isArrowFunction()) {
 		// arrow functions get this from closure
 		if(This)
 			functionRoot->addChild("this", This);
@@ -5743,7 +5800,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	arguments->addChild("length", newScriptVar(length_arguments));
 
 #ifndef NO_GENERATORS
-	if(Fnc->isGenerator) {
+	if(Fnc->isGenerator()) {
 		return ::newScriptVarCScriptVarGenerator(this, functionRoot, Function);
 	}
 #endif /*NO_GENERATORS*/
@@ -6236,6 +6293,10 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 								if(!child) child = a->addChildOrReplace(Fnc.name, newScriptVar(Accessor));
 								child->getVarPtr()->addChildOrReplace((tk.token==LEX_T_GET?TINYJS_ACCESSOR_GET_VAR:TINYJS_ACCESSOR_SET_VAR), funcVar->getVarPtr());
 							}
+						} else if (tk.token == LEX_T_GENERATOR_MEMBER) {
+							CScriptTokenDataFnc& Fnc = tk.Fnc();
+							CScriptVarLinkWorkPtr funcVar = parseFunctionDefinition(tk);
+							a->addChildOrReplace(it->id, funcVar->getVarPtr());
 						} else {
 							t->pushTokenScope(it->value);
 							if (it->id == "__proto__")
@@ -6646,11 +6707,11 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_binary_shift(CScriptResult &execut
 // L->R: Precedence 8 (equality) == != === !===
 inline CScriptVarLinkWorkPtr CTinyJS::execute_relation(CScriptResult &execute, int set, int set_n) {
 	CScriptVarLinkWorkPtr a = set_n ? execute_relation(execute, set_n, 0) : execute_binary_shift(execute);
-	if ((set==LEX_EQUAL && t->tk>=LEX_RELATIONS_1_BEGIN && t->tk<=LEX_RELATIONS_1_END)
+	if ((set==LEX_EQUAL && t->tk>=LEX_EQUALS_BEGIN && t->tk<=LEX_EQUALS_END)
 				||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN || t->tk == LEX_R_INSTANCEOF))) {
 		CheckRightHandVar(execute, a);
 		a = a.getter(execute);
-		while ((set==LEX_EQUAL && t->tk>=LEX_RELATIONS_1_BEGIN && t->tk<=LEX_RELATIONS_1_END)
+		while ((set==LEX_EQUAL && t->tk>=LEX_EQUALS_BEGIN && t->tk<=LEX_EQUALS_END)
 					||	(set=='<' && (t->tk==LEX_LEQUAL || t->tk==LEX_GEQUAL || t->tk=='<' || t->tk=='>' || t->tk == LEX_R_IN || t->tk == LEX_R_INSTANCEOF))) {
 			int op = t->tk;
 			t->match(t->tk);
@@ -6763,7 +6824,7 @@ inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptResult &execute) {
 }
 
 inline CScriptVarLinkPtr CTinyJS::execute_assignment(CScriptVarLinkWorkPtr lhs, CScriptResult &execute) {
-	if (t->tk=='=' || (t->tk>=LEX_ASSIGNMENTS_BEGIN && t->tk<=LEX_ASSIGNMENTS_END) || t->tk == LEX_ASKASKEQUAL || t->tk == LEX_ASTERISKASTERISKEQUAL) {
+	if (t->tk=='=' || (t->tk>=LEX_ASSIGNMENTS_BEGIN && t->tk<=LEX_ASSIGNMENTS_END)) {
 		int op = t->tk;
 		CScriptTokenizer::ScriptTokenPosition leftHandPos = t->getPos();
 		t->match(t->tk);
