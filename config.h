@@ -63,29 +63,6 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-/* REGEXP-SUPPORT
- * ==============
- * The RegExp-support needs c++11, boost-regex or TR1-regex
- * To deactivate this stuff define NO_REGEXP
- */
-//#define NO_REGEXP
-
-/* if NO_REGEXP not defined <regex> is included and std::regex is used
- * you can define HAVE_BOOST_REGEX and <boost/regex.hpp> is included and boost::regex is used
- */
-//#define HAVE_BOOST_REGEX
-
-/* or you can define HAVE_TR1_REGEX and <tr1/regex> is included and std::tr1::regex is used
- */
-//#define HAVE_TR1_REGEX
-
-/* or you can define HAVE_CXX_REGEX and <regex> is included and std::regex is used
- */
-//#define HAVE_CXX_REGEX
-
-
-//////////////////////////////////////////////////////////////////////////
-
 /* LET-STUFF
  * =========
  * Redeclaration of LET-vars is not allowed in block-scopes.
@@ -147,7 +124,6 @@
  * or define NO_GETTIMEOFDAY
  */
 #define HAVE_GETTIMEOFDAY
-//#define NO_GETTIMEOFDAY
 #ifdef NO_GETTIMEOFDAY
 #undef HAVE_GETTIMEOFDAY
 #endif
@@ -178,69 +154,14 @@
 
 #define isCXX0x(version, minor) (defined(__GXX_EXPERIMENTAL_CXX0X__) && (__GNUC__ > version || __GNUC__ == version && __GNUC_MINOR__ >= minor))
 
-#if __cplusplus >= 201103L || isCXX0x(4,3) || _MSC_VER >= 1600 // Visual Studio 2010 and above
-#	define HAVE_CXX11_RVALUE_REFERENCE 1
-#endif
-
 #if __cplusplus >= 201103L || defined(__GXX_EXPERIMENTAL_CXX0X__) || _MSC_VER >= 1700 // Visual Studio 2012 and above
 #		if !defined(NO_CXX_THREADS) && !defined(NO_THREADING)
 #			define HAVE_CXX_THREADS 1
 #		endif
 #endif
 
-#if __cplusplus >= 201103L || isCXX0x(4,4) || _MSC_VER >= 1800 // Visual Studio 2013
-#	define HAVE_MEMBER_DELETE 1
-#	define HAVE_MEMBER_DEFAULT 1
-#	define MEMBER_DELETE =delete
-#	define MEMBER_DEFAULT =default
-#endif
-
 #if !defined(NO_SPINLOCK_IN_POOL_ALLOCATOR) && (__cplusplus >= 201103L || isCXX0x(4,5) || _MSC_VER >= 1700 /* Visual Studio 2012 */)
 #	define SPINLOCK_IN_POOL_ALLOCATOR 1
-#endif
-
-#if __cplusplus >= 201103L || isCXX0x(4,6) ||  _MSC_VER > 1800 // > Visual Studio 2013
-#	define NOEXCEPT noexcept
-#else
-#	define NOEXCEPT throw()
-#endif
-
-#if __cplusplus >= 201103L || isCXX0x(4,7) ||  _MSC_VER >= 1700 // Visual Studio 2012 and above
-#	define OVERRIDE override
-#else
-#	define OVERRIDE
-#endif
-
-#if __cplusplus >= 201703L || _MSVC_LANG >= 201703L 
-#	define FALLTHROUGH [[fallthrough]]
-#elif __GNUC__ >= 7 || __clang_major__ >= 12
-#	define FALLTHROUGH __attribute__((fallthrough))
-#else
-#	define FALLTHROUGH do{}while(0)
-#endif
-
-
-#ifndef MEMBER_DELETE
-#	define MEMBER_DELETE
-#	define MEMBER_DEFAULT
-#endif
-
-#if !defined(NO_REGEXP) && !defined(HAVE_BOOST_REGEX) && !defined(HAVE_TR1_REGEX) && !defined(HAVE_CXX_REGEX) && __cplusplus < 201103L
-#	define NO_REGEXP
-#	if _MSC_VER > 1500 // Visual Studio 2010 and above
-#		undef NO_REGEXP
-#	elif _MSC_VER == 1500 && _MSC_FULL_VER >= 150030729 // Visual Studio 2008 SP1
-#		undef NO_REGEXP
-#		define HAVE_TR1_REGEX // untested
-#	elif isCXX0x(4,6) // a better idea?? testet with libstdc++ shipped with GCC 4.6.3
-#		undef NO_REGEXP
-#	endif
-#endif
-#if defined(NO_REGEXP)
-#pragma message("\n***********************************************************************\n\
-* tiny-js is compiled without support for regular expessions\n\
-* try make WITH_BOOST=1\n\
-***********************************************************************\n")
 #endif
 
 #undef HAVE_CXX_THREADS

@@ -94,3 +94,16 @@ Version 0.9.9 (2024-04-13 13:56:41)
   - or as object member: let obj = { *generator() { ... } }
   Previously, a generator was recognized by it if a yield expression was included. This behavior is no longer supported.
 * changed 42tests/test004.js now uses function* fibonacci()
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.0 (2025-02-11 16:02)
+=================================
+
+* modern times: from version 0.10.0 a compiler with C++17 support is required
+* changed: parseFloat, parseInt CNumber.operator=(string_view)
+* changed: Left2Right is now a sorted array at compile time (constexpr)
+* removed: serialize and unserialize binary (compiled js-code)
+* removed: dynamic_cast<CScriptTokenData...> now std::variant is used no RTTI overhead
+* added: all CScriptTokenData... now hold in std::shared_ptr

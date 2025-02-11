@@ -759,7 +759,7 @@ define_ScriptVarPtr_Type(Date);
 class CScriptVarDate : public CScriptVarObject, public CScriptTime {
 protected:
 	CScriptVarDate(CTinyJS *Context);
-	CScriptVarDate(const CScriptVarDate& Copy) MEMBER_DELETE;
+	CScriptVarDate(const CScriptVarDate& Copy) =delete;
 public:
 	virtual ~CScriptVarDate();
 	virtual bool isDate(); // { return true; }

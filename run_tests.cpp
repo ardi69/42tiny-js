@@ -346,8 +346,6 @@ int main(int argc, char **argv)
 #ifdef WITH_TIME_LOGGER
   TimeLoggerCreate(Tests, true);
 #endif
-  // activate writing of tokenized token-code
-  CScriptTokenizer::writeCompiledTokens = true;
   for(int js42 = 0; js42<2; js42++) {
     int test_num = 1;
     while (test_num<1000) {

@@ -104,7 +104,7 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 			offset++;
 		}
 		if(offset && it != arr->Childs.end())
-			(*it)->reName(int2string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
+			(*it)->reName(to_string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
 	}
 	if (offset) {
 		arr->setProperty("length", c->newScriptVar(arr->getLength() - offset));
@@ -146,7 +146,7 @@ static void scArrayPop(const CFunctionsScopePtr &c, void *data) {
 	uint32_t len = c->getLength(arr);
 	if(len) {
 		c->setReturnVar(c->getPropertyValue(arr, len-1));
-		arr->removeChild(int2string(len-1));
+		arr->removeChild(to_string(len-1));
 	} else
 		c->setReturnVar(c->constScriptVar(Undefined));
 }
@@ -211,7 +211,7 @@ static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 		sort(begin, arr->Childs.end(), ::cmp_fnc(c, cmp_fnc));
 		uint32_t idx = 0;
 		for(SCRIPTVAR_CHILDS_it it=begin; it != arr->Childs.end(); ++it, ++idx)
-			(*it)->reName(int2string(idx));
+			(*it)->reName(to_string(idx));
 		sort(begin, arr->Childs.end(), cmp_by_name);
 	}
 	c->setReturnVar(arr);

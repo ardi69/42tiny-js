@@ -32,6 +32,7 @@
 #include <vector>
 #include <algorithm>
 #include <stdio.h>
+#include <iostream>
 
 #include <assert.h>
 #ifndef ASSERT
@@ -75,17 +76,16 @@ namespace {
 	#	ifndef LOG_POOL_ALLOCATOR_MEMORY_USAGE
 			if(refs) {
 	#	endif
-				fprintf(stderr, "allocator %d byte (", object_size);
+				std::cerr << "allocator " << object_size << " byte (";
 				const char *sep = "";
 				for(std::set<const char*>::iterator it = names.begin(); it!=names.end(); ++it, sep=", ")
-					fprintf(stderr, "%s%s", sep, *it);
-				fprintf(stderr, ") destroyed\n");
-				fprintf(stderr, "allocs:%i, ", allocs);
-				fprintf(stderr, "frees:%i, ", frees);
-				fprintf(stderr, "max:%i, ", max);
-				fprintf(stderr, "blocks:%i\n", blocks);
-				if(refs) fprintf(stderr, "************ %i x not freed ************\n", refs);
-				fprintf(stderr, "\n");
+					std::cerr << sep << *it;
+				std::cerr << ") destroyed" << std::endl;
+				std::cerr << "allocs:" << allocs << ", ";
+				std::cerr << "frees:" << frees << ", ";
+				std::cerr << "max:" << max << ", ";
+				std::cerr << "blocks:" << blocks << std::endl;
+				if(refs) std::cerr << "************ " << refs << " x not freed ************" << std::endl << std::endl;
 	#	ifndef LOG_POOL_ALLOCATOR_MEMORY_USAGE
 			}
 	#	endif
