@@ -60,9 +60,6 @@
 #endif
 
 
-using namespace std;
-
-
 // -----------------------------------------------------------------------------------
 //////////////////////////////////////////////////////////////////////////
 /// Memory Debug
@@ -128,7 +125,7 @@ inline bool isNumeric(char ch) {
 	return (ch>='0') && (ch<='9');
 }
 
-uint32_t isArrayIndex(string_view str) {
+uint32_t isArrayIndex(std::string_view str) {
 	if(str.empty() || (str.length()>1 && str.front() == '0') || str.length() > 10 || (str.length()==10 && str > "4294967294")) return -1; // empty or (more as 1 digit and beginning with '0')
 	uint32_t result = 0;
 	while(str.length()) {
@@ -162,19 +159,19 @@ bool isIDString(const char *s) {
 	return true;
 }
 
-void replace(string &str, char textFrom, const char *textTo) {
+void replace(std::string &str, char textFrom, const char *textTo) {
 	size_t sLen = strlen(textTo);
 	size_t p = str.find(textFrom);
-	while (p != string::npos) {
+	while (p != std::string::npos) {
 		str = str.substr(0, p) + textTo + str.substr(p+1);
 		p = str.find(textFrom, p+sLen);
 	}
 }
-	string float2string(const double &floatData) {
-	ostringstream str;
-	str.unsetf(ios::floatfield);
+	std::string float2string(const double &floatData) {
+	std::ostringstream str;
+	str.unsetf(std::ios::floatfield);
 #if (defined(_MSC_VER) && _MSC_VER >= 1600) || __cplusplus >= 201103L
-	str.precision(numeric_limits<double>::max_digits10);
+	str.precision(std::numeric_limits<double>::max_digits10);
 #else
 	str.precision(numeric_limits<double>::digits10+2);
 #endif
@@ -183,12 +180,12 @@ void replace(string &str, char textFrom, const char *textTo) {
 }
 #define size2int32(size) ((int32_t)(size > INT32_MAX ? INT32_MAX : size))
 
-/// convert the given string into a quoted string suitable for javascript
-string getJSString(const string &str) {
+/// convert the given std::string into a quoted std::string suitable for javascript
+std::string getJSString(const std::string &str) {
 	char buffer[5] = "\\x00";
-	string nStr; nStr.reserve(str.length());
+	std::string nStr; nStr.reserve(str.length());
 	nStr.push_back('\"');
-	for (string::const_iterator i=str.begin();i!=str.end();i++) {
+	for (std::string::const_iterator i=str.begin();i!=str.end();i++) {
 		const char *replaceWith = 0;
 		switch (*i) {
 			case '\\': replaceWith = "\\\\"; break;
@@ -219,7 +216,7 @@ string getJSString(const string &str) {
 	return nStr;
 }
 
-static inline string getIDString(const string& str) {
+static inline std::string getIDString(const std::string& str) {
 	if(isIDString(str.c_str()) && CScriptToken::isReservedWord(str)==LEX_ID)
 		return str;
 	return getJSString(str);
@@ -230,8 +227,8 @@ static inline string getIDString(const string& str) {
 /// CScriptException
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptException::toString() {
-	ostringstream msg;
+std::string CScriptException::toString() {
+	std::ostringstream msg;
 	msg << ERROR_NAME[errorType] << ": " << message;
 	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
 	if(column >=0) msg << " Column:" << column+1;
@@ -244,7 +241,7 @@ string CScriptException::toString() {
 /// CScriptLex
 //////////////////////////////////////////////////////////////////////////
 
-CScriptLex::CScriptLex(const char *Code, const string &File, int Line, int Column) : data(Code) {
+CScriptLex::CScriptLex(const char *Code, const std::string &File, int Line, int Column) : data(Code) {
 	currentFile = File;
 	pos.currentLineStart = pos.tokenStart = data;
 	pos.currentLine = Line;
@@ -266,7 +263,7 @@ void CScriptLex::reset(const POS &toPos) { ///< Reset this lex so we can start a
 void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
 	if (expected_tk==';' && tk==LEX_EOF) return; // ignore last missing ';'
 	if (tk!=expected_tk && tk!=alternate_tk) {
-		ostringstream errorString;
+		std::ostringstream errorString;
 		if(expected_tk == LEX_EOF)
 			errorString << "Got unexpected " << CScriptToken::getTokenStr(tk);
 		else
@@ -439,7 +436,7 @@ bool CScriptLex::getNextToken()
 			getNextCh();
 		}
 		if(currCh != endCh)
-			throw CScriptException(SyntaxError, "unterminated string literal", currentFile, pos.currentLine, currentColumn());
+			throw CScriptException(SyntaxError, "unterminated std::string literal", currentFile, pos.currentLine, currentColumn());
 		getNextCh();
 		tk = LEX_STR;
 	} else {
@@ -555,8 +552,8 @@ bool CScriptLex::getNextToken()
 				}
 				if(currCh == '/') {
 #ifndef NO_REGEXP
-					try { regex r(tkStr.substr(1), regex_constants::ECMAScript); } catch(regex_error e) {
-						throw CScriptException(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
+					try { std::regex r(tkStr.substr(1), std::regex_constants::ECMAScript); } catch(std::regex_error e) {
+						throw CScriptException(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
 					}
 #endif /* NO_REGEXP */
 					do {
@@ -611,7 +608,7 @@ bool CScriptLex::getNextToken()
 bool CScriptTokenDataForwards::compare_fnc_token_by_name::operator()(const CScriptToken& lhs, const CScriptToken& rhs) const {
 	return lhs.Fnc()->name < rhs.Fnc()->name;
 }
-bool CScriptTokenDataForwards::checkRedefinition(const string &Str, bool checkVarsInLetScope) {
+bool CScriptTokenDataForwards::checkRedefinition(const std::string &Str, bool checkVarsInLetScope) {
 	STRING_SET_it it = varNames[LETS].find(Str);
 	if(it!=varNames[LETS].end()) return false;
 	else if(checkVarsInLetScope) {
@@ -627,7 +624,7 @@ void CScriptTokenDataForwards::addVars( STRING_VECTOR_t &Vars ) {
 void CScriptTokenDataForwards::addConsts( STRING_VECTOR_t &Vars ) {
 	varNames[CONSTS].insert(Vars.begin(), Vars.end());
 }
-string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
+std::string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
 {
 	for(STRING_VECTOR_it it=Vars.begin(); it!=Vars.end(); ++it) {
 		if(!checkRedefinition(*it, false)) return *it;
@@ -636,7 +633,7 @@ string CScriptTokenDataForwards::addVarsInLetscope( STRING_VECTOR_t &Vars )
 	return "";
 }
 
-string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
+std::string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 {
 	for(STRING_VECTOR_it it=Lets.begin(); it!=Lets.end(); ++it) {
 		if(!checkRedefinition(*it, true)) return *it;
@@ -650,10 +647,10 @@ string CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 // CScriptTokenDataLoop
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
+std::string CScriptTokenDataLoop::getParsableString(const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
 	static const char *heads[] = {"for each(", "for(", "for(", "for(", "while(", "do "};
 	static const char *ops[] = {" in ", " in ", " of ", "; ", "", ""};
-	string out = heads[type];
+	std::string out = heads[type];
 	if(init.size() && type==FOR)	out.append(CScriptToken::getParsableString(init));
 	if(type<=WHILE)					out.append(CScriptToken::getParsableString(condition.begin(), condition.end()-(type>=FOR ? 0 : 7)));
 	if(type<=FOR)						out.append(ops[type]);
@@ -670,9 +667,9 @@ string CScriptTokenDataLoop::getParsableString(const string &IndentString/*=""*/
 // CScriptTokenDataIf
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataIf::getParsableString(const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
-	string out = "if(";
-	string nl = Indent.size() ? "\n"+IndentString : " ";
+std::string CScriptTokenDataIf::getParsableString(const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
+	std::string out = "if(";
+	std::string nl = Indent.size() ? "\n"+IndentString : " ";
 	out.append(CScriptToken::getParsableString(condition)).append(")");
 	if(if_body.size()!=1 || if_body.front().token != LEX_T_ARRAY_COMPREHENSIONS_BODY)
 		out.append(" ").append(CScriptToken::getParsableString(if_body, IndentString, Indent));
@@ -694,9 +691,9 @@ string CScriptTokenDataIf::getParsableString(const string &IndentString/*=""*/, 
 // CScriptTokenDataTry
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataTry::getParsableString( const string &IndentString/*=""*/, const string &Indent/*=""*/ ) {
-	string out = "try ";
-	string nl = Indent.size() ? "\n"+IndentString : " ";
+std::string CScriptTokenDataTry::getParsableString( const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
+	std::string out = "try ";
+	std::string nl = Indent.size() ? "\n"+IndentString : " ";
 
 	out.append(CScriptToken::getParsableString(tryBlock, IndentString, Indent));
 	for(CScriptTokenDataTry::CATCHBLOCKS_it catchBlock = catchBlocks.begin(); catchBlock!=catchBlocks.end(); catchBlock++) {
@@ -722,8 +719,8 @@ string CScriptTokenDataTry::getParsableString( const string &IndentString/*=""*/
 //////////////////////////////////////////////////////////////////////////
 
 
-string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
-	ostringstream destination;
+std::string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
+	std::ostringstream destination;
 	if(!forArrowFunction || arguments.size()!=1)
 		destination << "(";
 	if(arguments.size()) {
@@ -747,11 +744,11 @@ string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ 
 // CScriptTokenDataDestructuringVar
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataDestructuringVar::getParsableString()
+std::string CScriptTokenDataDestructuringVar::getParsableString()
 {
-	string out;
+	std::string out;
 	const char *comma = "";
-	vector<bool> isObject(1, false);
+	std::vector<bool> isObject(1, false);
 	for(DESTRUCTURING_VARS_it it=vars.begin(); it!=vars.end(); ++it) {
 		if(it->second == "}" || it->second == "]") {
 			out.append(it->second);
@@ -781,7 +778,7 @@ string CScriptTokenDataDestructuringVar::getParsableString()
 
 void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t &Names) {
 	for(DESTRUCTURING_VARS_it it = vars.begin(); it != vars.end(); ++it) {
-		if(it->second.size() && it->second.find_first_of("{[]}") == string::npos)
+		if(it->second.size() && it->second.find_first_of("{[]}") == std::string::npos)
 			Names.push_back(it->second);
 	}
 }
@@ -791,10 +788,10 @@ void CScriptTokenDataDestructuringVar::getVarNames(STRING_VECTOR_t &Names) {
 // CScriptTokenDataObjectLiteral
 //////////////////////////////////////////////////////////////////////////
 
-string CScriptTokenDataObjectLiteral::getParsableString() {
-	string out = type == OBJECT ? "{ " : "[";
+std::string CScriptTokenDataObjectLiteral::getParsableString() {
+	std::string out = type == OBJECT ? "{ " : "[";
 	const char *comma = "";
-	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
+	for(std::vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
 		out.append(comma); comma = (type <= ARRAY) ? ", " : " ";
 		if(it->value.empty()) continue;
 		if(type == OBJECT)
@@ -807,7 +804,7 @@ string CScriptTokenDataObjectLiteral::getParsableString() {
 
 void CScriptTokenDataObjectLiteral::setMode(bool Destructuring) {
 	structuring = !(destructuring = Destructuring);
-	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
+	for(std::vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
 		if(it->value.size() && it->value.front().token == LEX_T_OBJECT_LITERAL) {
 			auto &e = it->value.front().Object();
 			if(e->destructuring && e->structuring)
@@ -816,12 +813,12 @@ void CScriptTokenDataObjectLiteral::setMode(bool Destructuring) {
 	}
 }
 
-bool CScriptTokenDataObjectLiteral::toDestructuringVar(const shared_ptr<CScriptTokenDataDestructuringVar> &DestructuringVar ) {
+bool CScriptTokenDataObjectLiteral::toDestructuringVar(const std::shared_ptr<CScriptTokenDataDestructuringVar> &DestructuringVar ) {
 	if(!destructuring) return false;
 //	DestructuringVar.vars.clear();
 	auto d = DestructuringVar.get();
 	DestructuringVar->vars.push_back(DESTRUCTURING_VAR_t("", type == OBJECT ? "{" : "["));
-	for(vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
+	for(std::vector<ELEMENT>::iterator it=elements.begin(); it!=elements.end(); ++it) {
 		if(it->value.empty()) {
 			DestructuringVar->vars.push_back(DESTRUCTURING_VAR_t("",""));
 			continue;
@@ -966,11 +963,11 @@ struct token2str_cmp_t {
 };
 static bool tokens2str_sort() {
 //	printf("tokens2str_sort called\n");
-	sort(tokens2str_begin, tokens2str_end, token2str_cmp_t());
-	sort(reserved_words_begin, reserved_words_end, token2str_cmp_t());
+	std::sort(tokens2str_begin, tokens2str_end, token2str_cmp_t());
+	std::sort(reserved_words_begin, reserved_words_end, token2str_cmp_t());
 	for(unsigned int i=0; i<ARRAY_LENGTH(str2reserved_begin); i++)
 		str2reserved_begin[i] = &reserved_words_begin[i];
-	sort(str2reserved_begin, str2reserved_end, token2str_cmp_t());
+	std::sort(str2reserved_begin, str2reserved_end, token2str_cmp_t());
 	return true;
 }
 static bool tokens2str_sorted = tokens2str_sort();
@@ -1039,7 +1036,7 @@ CScriptToken::CScriptToken(uint16_t Tk, double FloatData) : line(0), column(0), 
 #endif
 }
 
-CScriptToken::CScriptToken(uint16_t Tk, const string &TkStr) : line(0), column(0), token(Tk)/*, data(0) needed??? */ {
+CScriptToken::CScriptToken(uint16_t Tk, const std::string &TkStr) : line(0), column(0), token(Tk)/*, data(0) needed??? */ {
 	if(LEX_TOKEN_DATA_STRING(token))
 		data = CScriptTokenDataString::create(TkStr);
 	else if (LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)) {
@@ -1055,18 +1052,18 @@ CScriptToken::CScriptToken(uint16_t Tk, const string &TkStr) : line(0), column(0
 }
 
 
-string CScriptToken::getParsableString(TOKEN_VECT &Tokens, const string &IndentString, const string &Indent) {
+std::string CScriptToken::getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString, const std::string &Indent) {
 	return getParsableString(Tokens.begin(), Tokens.end(), IndentString, Indent);
 }
-string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const string &IndentString, const string &Indent) {
-	ostringstream destination;
-	string nl = Indent.size() ? "\n" : " ";
-	string my_indentString = IndentString;
+std::string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString, const std::string &Indent) {
+	std::ostringstream destination;
+	std::string nl = Indent.size() ? "\n" : " ";
+	std::string my_indentString = IndentString;
 	bool add_nl=false, block_start=false, need_space=false;
 	int skip_collon = 0;
 
 	for(TOKEN_VECT_it it=Begin; it != End; ++it) {
-		string OutString;
+		std::string OutString;
 		if(add_nl) OutString.append(nl).append(my_indentString);
 		bool old_block_start = block_start;
 		bool old_need_space = need_space;
@@ -1113,7 +1110,7 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 			my_indentString.append(Indent);
 			add_nl = block_start = true;
 		} else if(it->token == '}') {
-			my_indentString.resize(my_indentString.size() - min(my_indentString.size(),Indent.size()));
+			my_indentString.resize(my_indentString.size() - std::min(my_indentString.size(),Indent.size()));
 			if(old_block_start)
 				OutString =  "}";
 			else
@@ -1144,18 +1141,18 @@ string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, c
 
 }
 
-string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bool *need_space/*=0 */ ) {
+std::string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bool *need_space/*=0 */ ) {
 	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
 	if(token == LEX_ID && tokenStr) {
 		if(need_space) *need_space=true;
 		return tokenStr;
 	}
-	token2str_t *found = lower_bound(reserved_words_begin, reserved_words_end, token, token2str_cmp_t());
+	token2str_t *found = std::lower_bound(reserved_words_begin, reserved_words_end, token, token2str_cmp_t());
 	if(found != reserved_words_end && found->id==token) {
 		if(need_space) *need_space=found->need_space;
 		return found->str;
 	}
-	found = lower_bound(tokens2str_begin, tokens2str_end, token, token2str_cmp_t());
+	found = std::lower_bound(tokens2str_begin, tokens2str_end, token, token2str_cmp_t());
 	if(found != tokens2str_end && found->id==token) {
 		if(need_space) *need_space=found->need_space;
 		return found->str;
@@ -1168,24 +1165,24 @@ string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bool *n
 		return buf;
 	}
 
-	ostringstream msg;
+	std::ostringstream msg;
 	msg << "?[" << token << "]";
 	return msg.str();
 }
 const char *CScriptToken::isReservedWord(int Token) {
 	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
-	token2str_t *found = lower_bound(reserved_words_begin, reserved_words_end, Token, token2str_cmp_t());
+	token2str_t *found = std::lower_bound(reserved_words_begin, reserved_words_end, Token, token2str_cmp_t());
 	if(found != reserved_words_end && found->id==Token) {
 		return found->str;
 	}
 	return 0;
 }
-int CScriptToken::isReservedWord(const string &Str) {
+int CScriptToken::isReservedWord(const std::string &Str) {
 	size_t len = Str.length();
 	if(len >= reserved_words_min_len && len <= reserved_words_max_len) {
 		const char *str = Str.c_str();
 		if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
-		token2str_t **found = lower_bound(str2reserved_begin, str2reserved_end, str, token2str_cmp_t());
+		token2str_t **found = std::lower_bound(str2reserved_begin, str2reserved_end, str, token2str_cmp_t());
 		if(found != str2reserved_end && strcmp((*found)->str, str)==0) {
 			return (*found)->id;
 		}
@@ -1204,7 +1201,7 @@ CScriptTokenizer::CScriptTokenizer(CScriptLex &Lexer) : l(0), prevPos(&tokens) {
 	tokenizeCode(Lexer);
 }
 
-static string &read_string_from_istream(istream &in, string &out)
+static std::string &read_string_from_istream(std::istream &in, std::string &out)
 {
 	char buffer[4096];
 	while (in.read(buffer, sizeof(buffer)))
@@ -1213,13 +1210,13 @@ static string &read_string_from_istream(istream &in, string &out)
 	return out;
 }
 
-CScriptTokenizer::CScriptTokenizer(const char *Code, const string &File, int Line, int Column) : l(0), prevPos(&tokens) {
+CScriptTokenizer::CScriptTokenizer(const char *Code, const std::string &File, int Line, int Column) : l(0), prevPos(&tokens) {
 	if(Code) {
 		CScriptLex lexer(Code, File, Line, Column);
 		tokenizeCode(lexer);
 	} else {
-		ifstream in(File.c_str(), fstream::in | fstream::binary);
-		string code;
+		std::ifstream in(File.c_str(), std::fstream::in | std::fstream::binary);
+		std::string code;
 		CScriptLex lexer(read_string_from_istream(in, code).c_str(), File);
 		tokenizeCode(lexer);
 	}
@@ -1273,7 +1270,7 @@ bool CScriptTokenizer::check(int ExpectedToken, int AlternateToken/*=-1*/) {
 	int currentToken = getToken().token;
 	if (ExpectedToken==';' && (currentToken==LEX_EOF || currentToken=='}')) return false; // ignore last missing ';'
 	if (currentToken!=ExpectedToken && currentToken!=AlternateToken) {
-		ostringstream errorString;
+		std::ostringstream errorString;
 		if(ExpectedToken == LEX_EOF)
 			errorString << "Got unexpected " << CScriptToken::getTokenStr(currentToken);
 		else {
@@ -1380,7 +1377,7 @@ void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
 	pushForwarder(State);
 
 
-	vector<int>::size_type MarksSize = State.Marks.size();
+	std::vector<int>::size_type MarksSize = State.Marks.size();
 	Flags |= TOKENIZE_FLAGS_canBreak;
 	for(bool hasDefault=false;;) {
 		if( l->tk == LEX_R_CASE || l->tk == LEX_R_DEFAULT) {
@@ -1681,12 +1678,12 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 	PopLoopLabels(label_count, State.LoopLabels);
 }
 
-static void tokenizeVarIdentifierDestructuring( CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const string &Path, STRING_VECTOR_t *VarNames );
+static void tokenizeVarIdentifierDestructuring( CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t *VarNames );
 static void tokenizeVarIdentifierDestructuringObject(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, STRING_VECTOR_t *VarNames) {
 	Lexer->match('{');
 	while(Lexer->tk != '}') {
 		CScriptLex::POS prev_pos = Lexer->pos;
-		string Path = Lexer->tkStr;
+		std::string Path = Lexer->tkStr;
 		Lexer->match(LEX_ID, LEX_STR);
 		if(Lexer->tk == ':') {
 			Lexer->match(':');
@@ -1708,13 +1705,13 @@ static void tokenizeVarIdentifierDestructuringArray(CScriptLex *Lexer, DESTRUCTU
 		if(Lexer->tk == ',')
 			Vars.push_back(DESTRUCTURING_VAR_t("", "")); // empty
 		else
-			tokenizeVarIdentifierDestructuring(Lexer, Vars, to_string(idx), VarNames);
+			tokenizeVarIdentifierDestructuring(Lexer, Vars, std::to_string(idx), VarNames);
 		++idx;
 		if (Lexer->tk!=']') Lexer->match(',',']');
 	}
 	Lexer->match(']');
 }
-static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const string &Path, STRING_VECTOR_t *VarNames ) {
+static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, const std::string &Path, STRING_VECTOR_t *VarNames ) {
 	if(Lexer->tk == '[') {
 		Vars.push_back(DESTRUCTURING_VAR_t(Path, "[")); // marks array begin
 		tokenizeVarIdentifierDestructuringArray(Lexer, Vars, VarNames);
@@ -1877,7 +1874,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 			break;
 	}
 	if(Expression) {
-		string redeclared = State.Forwarders.back()->addLets(vars);
+		std::string redeclared = State.Forwarders.back()->addLets(vars);
 		if(redeclared.size())
 			throw CScriptException(TypeError, "redeclaration of variable '"+redeclared+"'", l->currentFile, currLine, currColumn);
 		if(!foundIN) {
@@ -1896,7 +1893,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 	} else {
 		if(!noIN) pushToken(State.Tokens, ';');
 
-		string redeclared;
+		std::string redeclared;
 		if(State.Forwarders.size()<=1) {
 			// Currently it is allowed in javascript, to redeclare "let"-declared vars
 			// in root- or function-scopes. In this case, "let" handled like "var"
@@ -1956,7 +1953,7 @@ void CScriptTokenizer::tokenizeVarAndConst( ScriptTokenState &State, int Flags) 
 		State.Forwarders.front()->addVars(vars);
 	else
 		State.Forwarders.front()->addConsts(vars);
-	string redeclared;
+	std::string redeclared;
 	if(State.Forwarders.size()>1) // have let-scope
 		redeclared = State.Forwarders.back()->addVarsInLetscope(vars);
 #ifdef PREVENT_REDECLARATION_IN_FUNCTION_SCOPES
@@ -1980,7 +1977,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 	Objc->type = CScriptTokenDataObjectLiteral::OBJECT;
 	Objc->destructuring = Objc->structuring = true;
 
-	string msg, msgFile;
+	std::string msg, msgFile;
 	int msgLine=0, msgColumn=0;
 
 	l->match('{');
@@ -2023,7 +2020,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 			State.Tokens.swap(element.value);
 			Objc->destructuring = false;
 		} else if (l->tk == LEX_INT) {
-			element.id = to_string((int32_t)strtol(l->tkStr.c_str(),0,0));
+			element.id = std::to_string((int32_t)strtol(l->tkStr.c_str(),0,0));
 			l->match(LEX_INT);
 			assign = true;
 		} else if(l->tk == LEX_FLOAT) {
@@ -2088,7 +2085,7 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 	CScriptTokenDataObjectLiteral::ELEMENT element_arrayComprehensionsBody;
 	while (l->tk != ']') {
 		CScriptTokenDataObjectLiteral::ELEMENT element;
-		element.id = to_string(idx++);
+		element.id = std::to_string(idx++);
 		if(idx <= 2 && l->tk == LEX_R_FOR) {
 			if(idx==1) {
 				Objc->type = CScriptTokenDataObjectLiteral::ARRAY_COMPREHENSIONS;
@@ -2170,7 +2167,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 #endif
 	case LEX_ID:
 		{
-			string label = l->tkStr;
+			std::string label = l->tkStr;
 			l->match(LEX_ID);
 			if(label != "this" && l->tk == LEX_ARROW) { // Arrow-Function  // label => ...
 				TOKEN_VECT arguments;
@@ -2322,8 +2319,8 @@ constexpr void bubble_sort(T& arr) {
 
 void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags) {
 	constexpr auto Left2Right = [] {
-		array arr{ // Automatische Typ- & Größenableitung
-			/* Precedence 13 */		LEX_ASTERISKASTERISK,
+		std::array arr{ // Automatische Typ- & Größenableitung
+			    /* Precedence 13 */		LEX_ASTERISKASTERISK,
 				/* Precedence 12 */		LEX_ASTERISK, LEX_SLASH, LEX_PERCENT,
 				/* Precedence 11 */		LEX_PLUS, LEX_MINUS,
 				/* Precedence 10*/		LEX_LSHIFT, LEX_RSHIFT, LEX_RSHIFTU,
@@ -2382,7 +2379,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 		}
 		if(Flags&TOKENIZE_FLAGS_noIn && l->tk==LEX_R_IN)
 			break;
-		if (binary_search(Left2Right.begin(), Left2Right.end(), l->tk)) {
+		if (std::binary_search(Left2Right.begin(), Left2Right.end(), l->tk)) {
 			noLeftHand = true;
 			pushToken(State.Tokens); // Precedence 12-5
 		} else
@@ -2589,9 +2586,9 @@ void CScriptTokenizer::throwTokenNotExpected() {
 /// CScriptPropertyName
 //////////////////////////////////////////////////////////////////////////
 
-int64_t CScriptPropertyName::name2arrayIdx(const string &Name) {
+int64_t CScriptPropertyName::name2arrayIdx(const std::string &Name) {
 	const char *c_str = Name.c_str();
-	string::size_type size = Name.size();
+	std::string::size_type size = Name.size();
 	if (size == 0 || !isNumeric(*c_str) || (size > 1 && *c_str == '0') || (size > 9 && *c_str > '4')) return -1; // empty or (more as 1 digit and beginning with '0')
 	int64_t result = 0;
 	bool overflow = false;
@@ -2747,7 +2744,7 @@ CScriptVarPtr CScriptVar::callJS_valueOf(CScriptResult &execute) {
 		CScriptVarPtr FncValueOf = findChildWithPrototypeChain("valueOf").getter(execute);
 		if(FncValueOf && FncValueOf != context->objectPrototype_valueOf) { // custom valueOf in JavaScript
 			if(FncValueOf->isFunction()) { // no Error if toString not callable
-				vector<CScriptVarPtr> Params;
+				std::vector<CScriptVarPtr> Params;
 				return context->callFunction(execute, FncValueOf, Params, this);
 			}
 		} else
@@ -2764,7 +2761,7 @@ CScriptVarPtr CScriptVar::callJS_toString(CScriptResult &execute, int radix/*=0*
 		CScriptVarPtr FncToString = findChildWithPrototypeChain("toString").getter(execute);
 		if(FncToString && FncToString != context->objectPrototype_toString) { // custom valueOf in JavaScript
 			if(FncToString->isFunction()) { // no Error if toString not callable
-				vector<CScriptVarPtr> Params;
+				std::vector<CScriptVarPtr> Params;
 				Params.push_back(newScriptVar(radix));
 				return context->callFunction(execute, FncToString, Params, this);
 			}
@@ -2780,13 +2777,13 @@ CScriptVarPtr CScriptVar::toString_CallBack(CScriptResult &execute, int radix/*=
 CNumber CScriptVar::toNumber() { return toPrimitive_hintNumber()->toNumber_Callback(); };
 CNumber CScriptVar::toNumber(CScriptResult &execute) { return toPrimitive_hintNumber(execute)->toNumber_Callback(); };
 bool CScriptVar::toBoolean() { return true; }
-string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(radix); }
-string CScriptVar::toString(CScriptResult &execute, int32_t radix/*=0*/) { return toPrimitive_hintString(execute, radix)->toCString(radix); }
+std::string CScriptVar::toString(int32_t radix) { return toPrimitive_hintString(radix)->toCString(radix); }
+std::string CScriptVar::toString(CScriptResult &execute, int32_t radix/*=0*/) { return toPrimitive_hintString(execute, radix)->toCString(radix); }
 
 int CScriptVar::getInt() { return toNumber().toInt32(); }
 double CScriptVar::getDouble() { return toNumber().toDouble(); }
 bool CScriptVar::getBool() { return toBoolean(); }
-string CScriptVar::getString() { return toPrimitive_hintString()->toCString(); }
+std::string CScriptVar::getString() { return toPrimitive_hintString()->toCString(); }
 
 void CScriptVar::setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) {
 	link->setVarPtr(value);
@@ -2808,22 +2805,22 @@ CScriptVarPtr CScriptVar::toIterator(CScriptResult &execute, IteratorMode Mode/*
 	if(!execute) return constScriptVar(Undefined);
 	if(isIterator()) return this;
 	CScriptVarFunctionPtr Generator(findChildWithPrototypeChain("__iterator__").getter(execute));
-	vector<CScriptVarPtr> args;
+	std::vector<CScriptVarPtr> args;
 	if(Generator) return context->callFunction(execute, Generator, args, this);
 	return newScriptVarDefaultIterator(context, this, Mode);
 }
 
-string CScriptVar::getParsableString() {
+std::string CScriptVar::getParsableString() {
 	uint32_t UniqueID = context->allocUniqueID();
 	bool hasRecursion=false;
-	string ret = getParsableString("", "   ", UniqueID, hasRecursion);
+	std::string ret = getParsableString("", "   ", UniqueID, hasRecursion);
 	context->freeUniqueID();
 	return ret;
 }
 
-string CScriptVar::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
+std::string CScriptVar::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
-	string ret = indentString + toString();
+	std::string ret = indentString + toString();
 	getParsableStringRecursionsCheckEnd();
 	return ret;
 }
@@ -2857,7 +2854,7 @@ bool CScriptVar::isFrozen() const {
 
 ////// Childs
 
-CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const string &Name) {
+CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const std::string &Name) {
 	CScriptVarLinkPtr child = getOwnProperty(Name);
 	if(!child || child->getVarPtr()->isUndefined()) return constScriptVar(Undefined);
 	CScriptVarPtr ret = newScriptVar(Object);
@@ -2874,7 +2871,7 @@ CScriptVarPtr CScriptVar::getOwnPropertyDescriptor(const string &Name) {
 	ret->addChild("configurable", constScriptVar(child->isConfigurable()));
 	return ret;
 }
-const char *CScriptVar::defineProperty(const string &Name, CScriptVarPtr Attributes) {
+const char *CScriptVar::defineProperty(const std::string &Name, CScriptVarPtr Attributes) {
 	CScriptVarPtr attr;
 	CScriptVarLinkPtr child = getOwnProperty(Name);
 
@@ -2933,7 +2930,7 @@ cant_redefine:
 	return "can't redefine non-configurable property";
 }
 
-CScriptVarLinkPtr CScriptVar::findChild(const string &childName) {
+CScriptVarLinkPtr CScriptVar::findChild(const std::string &childName) {
 	if(Childs.empty()) return 0;
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it != Childs.end() && (*it)->getName() == childName)
@@ -2941,7 +2938,7 @@ CScriptVarLinkPtr CScriptVar::findChild(const string &childName) {
 	return 0;
 }
 
-CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const std::string &childName) {
 	return getOwnProperty(childName);
 /*
 
@@ -2952,7 +2949,7 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childNa
 	if (strVar && (Idx=isArrayIndex(childName))!=uint32_t(-1)) {
 		if (Idx<strVar->getLength()) {
 			int Char = strVar->getChar(Idx);
-			child(newScriptVar(string(1, (char)Char)), childName, SCRIPTVARLINK_ENUMERABLE);
+			child(newScriptVar(std::string(1, (char)Char)), childName, SCRIPTVARLINK_ENUMERABLE);
 		} else {
 			child(constScriptVar(Undefined), childName, SCRIPTVARLINK_ENUMERABLE);
 		}
@@ -2963,11 +2960,11 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithStringChars(const string &childNa
 */
 }
 
-CScriptVarLinkWorkPtr CScriptVar::getOwnProperty(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVar::getOwnProperty(const std::string &childName) {
 	return findChild(childName);
 }
 
-CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName) {
+CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const std::string &childName) {
 	unsigned int uniqueID = context->allocUniqueID();
 	// Look for links to actual parent classes
 	CScriptVarPtr object = this;
@@ -2985,7 +2982,7 @@ CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const string &childName)
 	return 0;
 }
 
-CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const std::string &childName) {
 	CScriptVarLinkWorkPtr child = getOwnProperty(childName);
 	if(child) return child;
 	child = findChildInPrototypeChain(childName);
@@ -2995,34 +2992,34 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const string &chil
 	}
 	return child;
 }
-CScriptVarLinkPtr CScriptVar::findChildByPath(const string &path) {
-	string::size_type p = path.find('.');
+CScriptVarLinkPtr CScriptVar::findChildByPath(const std::string &path) {
+	std::string::size_type p = path.find('.');
 	CScriptVarLinkPtr child;
-	if (p == string::npos)
+	if (p == std::string::npos)
 		return findChild(path);
 	if( (child = findChild(path.substr(0,p))) )
 		return child->getVarPtr()->findChildByPath(path.substr(p+1));
 	return 0;
 }
 
-CScriptVarLinkPtr CScriptVar::findChildOrCreate(const string &childName/*, int varFlags*/) {
+CScriptVarLinkPtr CScriptVar::findChildOrCreate(const std::string &childName/*, int varFlags*/) {
 	CScriptVarLinkPtr l = findChild(childName);
 	if (l) return l;
 	return addChild(childName, constScriptVar(Undefined));
 	//	return addChild(childName, new CScriptVar(context, TINYJS_BLANK_DATA, varFlags));
 }
 
-CScriptVarLinkPtr CScriptVar::findChildOrCreateByPath(const string &path) {
-	string::size_type p = path.find('.');
-	if (p == string::npos)
+CScriptVarLinkPtr CScriptVar::findChildOrCreateByPath(const std::string &path) {
+	std::string::size_type p = path.find('.');
+	if (p == std::string::npos)
 		return findChildOrCreate(path);
-	string childName(path, 0, p);
+	std::string childName(path, 0, p);
 	CScriptVarLinkPtr l = findChild(childName);
 	if (!l) l = addChild(childName, newScriptVar(Object));
 	return l->getVarPtr()->findChildOrCreateByPath(path.substr(p+1));
 }
 
-void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/) {
+void CScriptVar::keys(std::set<std::string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/) {
 	if(ID) setTemporaryMark(ID);
 	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
 		if(!OnlyEnumerable || (*it)->isEnumerable())
@@ -3032,14 +3029,14 @@ void CScriptVar::keys(set<string> &Keys, bool OnlyEnumerable/*=true*/, uint32_t 
 	if(isStringObj) {
 		size_t length = isStringObj->getLength();
 		for(size_t i=0; i<length; ++i)
-			Keys.insert(to_string(i));
+			Keys.insert(std::to_string(i));
 	}
 	if( ID && prototype && prototype->getTemporaryMark() != ID )
 		prototype->keys(Keys, OnlyEnumerable, ID);
 }
 
 /// add & remove
-CScriptVarLinkPtr CScriptVar::addChild(const string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
+CScriptVarLinkPtr CScriptVar::addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
 	CScriptVarLinkPtr link;
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
@@ -3055,13 +3052,13 @@ CScriptVarLinkPtr CScriptVar::addChild(const string &childName, const CScriptVar
 	return link;
 }
 CScriptVarLinkPtr CScriptVar::addChild(uint32_t childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
-	return addChild(to_string(childName), child, linkFlags);
+	return addChild(std::to_string(childName), child, linkFlags);
 }
 
-CScriptVarLinkPtr CScriptVar::addChildNoDup(const string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
+CScriptVarLinkPtr CScriptVar::addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
 	return addChildOrReplace(childName, child, linkFlags);
 }
-CScriptVarLinkPtr CScriptVar::addChildOrReplace(const string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
+CScriptVarLinkPtr CScriptVar::addChildOrReplace(const std::string &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		CScriptVarLinkPtr link(child, childName, linkFlags);
@@ -3074,7 +3071,7 @@ CScriptVarLinkPtr CScriptVar::addChildOrReplace(const string &childName, const C
 	}
 }
 CScriptVarLinkPtr CScriptVar::addChildOrReplace(uint32_t childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
-	return addChildOrReplace(to_string(childName), child, linkFlags);
+	return addChildOrReplace(std::to_string(childName), child, linkFlags);
 }
 
 bool CScriptVar::removeLink(CScriptVarLinkPtr &link) {
@@ -3091,7 +3088,7 @@ bool CScriptVar::removeLink(CScriptVarLinkPtr &link) {
 	return true;
 }
 
-bool CScriptVar::removeChild(const string &childName) {
+bool CScriptVar::removeChild(const std::string &childName) {
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it != Childs.end() && (*it)->getName() == childName) {
 		Childs.erase(it);
@@ -3107,15 +3104,15 @@ void CScriptVar::removeAllChildren() {
 	Childs.clear();
 }
 
-CScriptVarPtr CScriptVar::getProperty(const string &name) {
+CScriptVarPtr CScriptVar::getProperty(const std::string &name) {
 	return findChildWithPrototypeChain(name).getter();
 }
 
 CScriptVarPtr CScriptVar::getProperty(uint32_t idx) {
-	return findChildWithPrototypeChain(to_string(idx)).getter();
+	return findChildWithPrototypeChain(std::to_string(idx)).getter();
 }
 
-void CScriptVar::setProperty(const string &name, const CScriptVarPtr &rhs, bool ignoreReadOnly/*=false*/, bool ignoreNotExtensible/*=false*/)
+void CScriptVar::setProperty(const std::string &name, const CScriptVarPtr &rhs, bool ignoreReadOnly/*=false*/, bool ignoreNotExtensible/*=false*/)
 {
 	CScriptVarLinkWorkPtr lhs = findChildWithPrototypeChain(name);
 	if(lhs->isWritable()) {
@@ -3135,7 +3132,7 @@ void CScriptVar::setProperty(const string &name, const CScriptVarPtr &rhs, bool 
 }
 
 void CScriptVar::setProperty(uint32_t idx, const CScriptVarPtr &value, bool ignoreReadOnly/*=false*/, bool ignoreNotExtensible/*=false*/) {
-	setProperty(to_string(idx), value, ignoreReadOnly, ignoreNotExtensible);
+	setProperty(std::to_string(idx), value, ignoreReadOnly, ignoreNotExtensible);
 }
 
 uint32_t CScriptVar::getLength() {
@@ -3149,12 +3146,12 @@ uint32_t CScriptVar::getLength() {
 
 
 CScriptVarPtr CScriptVar::getArrayIndex(uint32_t idx) {
-	CScriptVarLinkPtr link = findChild(to_string(idx));
+	CScriptVarLinkPtr link = findChild(std::to_string(idx));
 	if (link) return link;
 	else return constScriptVar(Undefined); // undefined
 }
 void CScriptVar::setArrayIndex(uint32_t idx, const CScriptVarPtr &value) {
-	string sIdx = to_string(idx);
+	std::string sIdx = std::to_string(idx);
 	CScriptVarLinkPtr link = findChild(sIdx);
 
 	if (link) {
@@ -3173,14 +3170,14 @@ CScriptVarPtr CScriptVar::mathsOp(const CScriptVarPtr &b, int op) {
 	return context->mathsOp(execute, this, b, op);
 }
 
-void CScriptVar::trace(const string &name) {
-	string indentStr;
+void CScriptVar::trace(const std::string &name) {
+	std::string indentStr;
 	uint32_t uniqueID = context->allocUniqueID();
 	trace(indentStr, uniqueID, name);
 	context->freeUniqueID();
 }
-void CScriptVar::trace(string &indentStr, uint32_t uniqueID, const string &name) {
-	string indent = "  ";
+void CScriptVar::trace(std::string &indentStr, uint32_t uniqueID, const std::string &name) {
+	std::string indent = "  ";
 	const char *extra="";
 	if(getTemporaryMark() == uniqueID)
 		extra = " recursion detected";
@@ -3202,8 +3199,8 @@ void CScriptVar::trace(string &indentStr, uint32_t uniqueID, const string &name)
 	}
 }
 
-string CScriptVar::getFlagsAsString() {
-	string flagstr = "";
+std::string CScriptVar::getFlagsAsString() {
+	std::string flagstr = "";
 	if (isFunction()) flagstr = flagstr + "FUNCTION ";
 	if (isObject()) flagstr = flagstr + "OBJECT ";
 	if (isArray()) flagstr = flagstr + "ARRAY ";
@@ -3261,7 +3258,7 @@ void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
 /// CScriptVarLink
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/)
+CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const std::string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/)
 	: name(Name), owner(0), flags(Flags), refs(0) {
 #if DEBUG_MEMORY
 	mark_allocated(this);
@@ -3291,7 +3288,7 @@ void CScriptVarLink::unref() {
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
+CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const std::string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
 	if(link && link->refs == 1) { // the link is only refered by this
 		link->name = name;
 		link->owner = 0;
@@ -3304,12 +3301,12 @@ CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, con
 	return *this;
 }
 
-bool CScriptVarLinkPtr::operator <(const string &rhs) const {
+bool CScriptVarLinkPtr::operator <(const std::string &rhs) const {
 	uint32_t lhs_int = isArrayIndex(link->getName());
 	uint32_t rhs_int = isArrayIndex(rhs);
 	if(lhs_int==uint32_t(-1)) {				// lhs is not an array-idx
 		if(rhs_int==uint32_t(-1))			// and rhs is not an array-idx
-			return link->getName() < rhs;	// normal string compare
+			return link->getName() < rhs;	// normal std::string compare
 		else
 			return true;					// but rhs is an array-idx always true to sort array-idx at the end
 	} else if(rhs_int==uint32_t(-1))		// if lhs an array-idx but rhs not always false to sort array-idx at the end
@@ -3338,7 +3335,7 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::getter(CScriptResult &execute) {
 			const CScriptVarPtr &var = link->getVarPtr();
 			CScriptVarLinkPtr getter = var->findChild(TINYJS_ACCESSOR_GET_VAR);
 			if (getter) {
-				vector<CScriptVarPtr> Params;
+				std::vector<CScriptVarPtr> Params;
 				ASSERT(getReferencedOwner());
 				return getter->getVarPtr()->getContext()->callFunction(execute, getter->getVarPtr(), Params, getReferencedOwner());
 			} else
@@ -3364,7 +3361,7 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( CScriptResult &execute, con
 			const CScriptVarPtr &var = link->getVarPtr();
 			CScriptVarLinkPtr setter = var->findChild(TINYJS_ACCESSOR_SET_VAR);
 			if(setter) {
-				vector<CScriptVarPtr> Params;
+				std::vector<CScriptVarPtr> Params;
 				Params.push_back(Var);
 				ASSERT(getReferencedOwner());
 				setter->getVarPtr()->getContext()->callFunction(execute, setter->getVarPtr(), Params, getReferencedOwner());
@@ -3401,8 +3398,8 @@ CScriptVarUndefined::~CScriptVarUndefined() {}
 bool CScriptVarUndefined::isUndefined() { return true; }
 
 CNumber CScriptVarUndefined::toNumber_Callback() { return NaN; }
-string CScriptVarUndefined::toCString(int radix/*=0*/) { return "undefined"; }
-string CScriptVarUndefined::getVarType() { return "undefined"; }
+std::string CScriptVarUndefined::toCString(int radix/*=0*/) { return "undefined"; }
+std::string CScriptVarUndefined::getVarType() { return "undefined"; }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -3415,15 +3412,15 @@ CScriptVarNull::~CScriptVarNull() {}
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
-string CScriptVarNull::toCString(int radix/*=0*/) { return "null"; }
-string CScriptVarNull::getVarType() { return "null"; }
+std::string CScriptVarNull::toCString(int radix/*=0*/) { return "null"; }
+std::string CScriptVarNull::getVarType() { return "null"; }
 
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarString::CScriptVarString(CTinyJS *Context, const string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {
+CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {
 	addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
 /*
 	CScriptVarLinkPtr acc = addChild("length", newScriptVar(Accessor), 0);
@@ -3437,10 +3434,10 @@ bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
 CNumber CScriptVarString::toNumber_Callback() { return CNumber(data.c_str()); }
-string CScriptVarString::toCString(int radix/*=0*/) { return data; }
+std::string CScriptVarString::toCString(int radix/*=0*/) { return data; }
 
-string CScriptVarString::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) { return indentString+getJSString(data); }
-string CScriptVarString::getVarType() { return "string"; }
+std::string CScriptVarString::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) { return indentString+getJSString(data); }
+std::string CScriptVarString::getVarType() { return "std::string"; }
 
 CScriptVarPtr CScriptVarString::toObject() {
 	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(this), context->stringPrototype);
@@ -3452,12 +3449,12 @@ CScriptVarPtr CScriptVarString::toString_CallBack( CScriptResult &execute, int r
 	return this;
 }
 
-CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const std::string &childName) {
 	CScriptVarLinkWorkPtr child = CScriptVar::getOwnProperty(childName);
 	if(child) return child;
 	uint32_t Idx = isArrayIndex(childName);
 	if (Idx!=uint32_t(-1)) {
-		if((string::size_type)Idx < data.size())
+		if((std::string::size_type)Idx < data.size())
 			child(newScriptVar(data.substr(Idx, 1)), childName, SCRIPTVARLINK_ENUMERABLE);
 		else
 			child(constScriptVar(Undefined), childName, SCRIPTVARLINK_ENUMERABLE);
@@ -3469,16 +3466,16 @@ CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const string &childName) 
 
 void CScriptVarString::keys(STRING_SET_t &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/) {
 	if(ID) setTemporaryMark(ID);
-	string::size_type length = data.size();
-	for(string::size_type i=0; i<length; ++i)
-		Keys.insert(to_string(i));
+	std::string::size_type length = data.size();
+	for(std::string::size_type i=0; i<length; ++i)
+		Keys.insert(std::to_string(i));
 	CScriptVar::keys(Keys, OnlyEnumerable, ID);
 }
 
 uint32_t CScriptVarString::getLength() { return (uint32_t)data.length(); }
 
 int CScriptVarString::getChar(uint32_t Idx) {
-	if((string::size_type)Idx >= data.size())
+	if((std::string::size_type)Idx >= data.size())
 		return -1;
 	else
 		return (unsigned char)data[Idx];
@@ -3495,13 +3492,13 @@ Infinity InfinityPositive(1);
 Infinity InfinityNegative(-1);
 
 CNumber::CNumber(int64_t Value) {
-	if(numeric_limits<int32_t>::min()<=Value && Value<=numeric_limits<int32_t>::max())
+	if(std::numeric_limits<int32_t>::min()<=Value && Value<= std::numeric_limits<int32_t>::max())
 		type=tInt32, Int32=int32_t(Value);
 	else
 		type=tDouble, Double=(double)Value;
 }
 CNumber::CNumber(uint64_t Value) {
-	if(Value<=(uint32_t)numeric_limits<int32_t>::max())
+	if(Value<=(uint32_t)std::numeric_limits<int32_t>::max())
 		type=tInt32, Int32=int32_t(Value);
 	else
 		type=tDouble, Double=(double)Value;
@@ -3516,8 +3513,8 @@ CNumber::CNumber(double Value) {
 	else {
 		double truncated = trunc(Value);  // Ganzzahliger Anteil
 		if (Value == truncated &&
-			truncated >= numeric_limits<int32_t>::min() &&
-			truncated <= numeric_limits<int32_t>::max()) {
+			truncated >= std::numeric_limits<int32_t>::min() &&
+			truncated <= std::numeric_limits<int32_t>::max()) {
 			type = tInt32;
 			Int32 = static_cast<int32_t>(truncated);
 		} else {
@@ -3528,15 +3525,15 @@ CNumber::CNumber(double Value) {
 }
 
 // **String-Zuweisung**: Parst die Eingabe und speichert sie
-CNumber::CNumber(string_view str) : type(tNaN), Int32(0) {
+CNumber::CNumber(std::string_view str) : type(tNaN), Int32(0) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
-	if (left == string_view::npos) { // Falls nur Leerzeichen enthalten sind
+	if (left == std::string_view::npos) { // Falls nur Leerzeichen enthalten sind
 		return;
 	}
 	str.remove_prefix(left);
 
-	string_view endptr;
+	std::string_view endptr;
 
 	// 2. Prüfe auf Präfixe (0b, 0o, 0x) für Binär, Oktal und Hexadezimal
 	if (str.size() > 1 && str.front() == '0') {
@@ -3548,7 +3545,7 @@ CNumber::CNumber(string_view str) : type(tNaN), Int32(0) {
 		}
 	} else {
 		// 3. Prüfe, ob die Eingabe ein Gleitkommaformat hat
-		if (str.find_first_of(".eE") != string_view::npos) {
+		if (str.find_first_of(".eE") != std::string_view::npos) {
 			parseFloat(str, &endptr);
 		} else {
 			parseInt(str, 10, &endptr);
@@ -3557,16 +3554,16 @@ CNumber::CNumber(string_view str) : type(tNaN), Int32(0) {
 
 	// 4. Falls nach der Zahl noch Zeichen stehen ? NaN setzen
 	size_t right = endptr.find_last_not_of(" \t\n\r\f\v");
-	if (right != string_view::npos) {
+	if (right != std::string_view::npos) {
 		type = tNaN;
 		Int32 = 0;
 	}
 }
 
 // **Parsen einer Ganzzahl mit Basis 2-36**
-int32_t CNumber::parseInt(string_view str, int32_t radix, string_view* endptr) {
+int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view* endptr) {
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
-	if (left == string_view::npos) {
+	if (left == std::string_view::npos) {
 		type = tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
@@ -3607,7 +3604,7 @@ int32_t CNumber::parseInt(string_view str, int32_t radix, string_view* endptr) {
 		return 0;
 	}
 
-	int32_t maxSafe = numeric_limits<int32_t>::max() / radix;
+	int32_t maxSafe = std::numeric_limits<int32_t>::max() / radix;
 	int32_t result_i = 0;
 	double result_f = 0.0;
 	bool useFloat = false;
@@ -3641,10 +3638,10 @@ int32_t CNumber::parseInt(string_view str, int32_t radix, string_view* endptr) {
 }
 
 // **Parsen einer Gleitkommazahl**
-void CNumber::parseFloat(string_view str, string_view* endptr/*=0*/) {
+void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
-	if (left == string_view::npos) {
+	if (left == std::string_view::npos) {
 		type = tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
@@ -3664,7 +3661,7 @@ void CNumber::parseFloat(string_view str, string_view* endptr/*=0*/) {
 #else
 	if (str.substr(0, 8) == "Infinity") {
 #endif
-		* this = negative ? -numeric_limits<double>::infinity() : numeric_limits<double>::infinity();
+		* this = negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
 		str.remove_prefix(8);
 		if (endptr) *endptr = str;
 		return;
@@ -3672,9 +3669,9 @@ void CNumber::parseFloat(string_view str, string_view* endptr/*=0*/) {
 
 	// 3. Verwende `from_chars`, um den Float-Wert zu parsen
 	double value = 0.0;
-	auto [ptr, ec] = from_chars(str.data(), str.data() + str.size(), value);
+	auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
 
-	if (ec != errc{}) { // Fehler beim Parsen ? NaN
+	if (ec != std::errc{}) { // Fehler beim Parsen ? NaN
 		type = tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
@@ -3704,8 +3701,8 @@ CNumber CNumber::add(const CNumber &Value) const {
 	else if(type==tDouble || Value.type==tDouble)
 		return CNumber(toDouble()+Value.toDouble());
 	else {
-		int32_t range_max = numeric_limits<int32_t>::max();
-		int32_t range_min = numeric_limits<int32_t>::min();
+		int32_t range_max = std::numeric_limits<int32_t>::max();
+		int32_t range_min = std::numeric_limits<int32_t>::min();
 		if(Int32>0) range_max-=Int32;
 		else if(Int32<0) range_min-=Int32;
 		if(range_min<=Value.Int32 && Value.Int32<=range_max)
@@ -3798,10 +3795,10 @@ CNumber CNumber::modulo( const CNumber &Value ) const {
 	if(type==tNaN || type==tInfinity || Value.type==tNaN || Value.isZero()) return CNumber(tNaN);
 	if(Value.type==tInfinity) return CNumber(*this);
 	if(isZero()) return CNumber(0);
-	if(type==tDouble || Value.type==tDouble || (Int32==numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */ ) {
+	if(type==tDouble || Value.type==tDouble || (Int32== std::numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */ ) {
 		double n = toDouble(), d = Value.toDouble(), q;
 #if __cplusplus >= 201103L || _MSVC_LANG >= 201103L
-		ignore = modf(n/d, &q);
+		std::ignore = modf(n/d, &q);
 #else
 		modf(n / d, &q);
 #endif
@@ -4032,14 +4029,14 @@ static char *tiny_dtoa(double val, unsigned radix) {
 	*p = '\0';
 	return buf;
 }
-string CNumber::toString( uint32_t Radix/*=10*/ ) const {
+std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 	char *str;
 	if(2 > Radix || Radix > 36)
 		Radix = 10; // todo error;
 	switch(type) {
 	case tInt32:
 		if( (str = tiny_ltoa(Int32, Radix)) ) {
-			string ret(str); free(str);
+			std::string ret(str); free(str);
 			return ret;
 		}
 		break;
@@ -4047,17 +4044,17 @@ string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		return "0";
 	case tDouble:
 		if(Radix==10) {
-			ostringstream str;
-			str.unsetf(ios::floatfield);
+			std::ostringstream str;
+			str.unsetf(std::ios::floatfield);
 #if (defined(_MSC_VER) && _MSC_VER >= 1600) || __cplusplus >= 201103L
-			str.precision(numeric_limits<double>::max_digits10);
+			str.precision(std::numeric_limits<double>::max_digits10);
 #else
 			str.precision(numeric_limits<double>::digits10+2);
 #endif
 			str << Double;
 			return str.str();
 		} else if( (str = tiny_dtoa(Double, Radix)) ) {
-			string ret(str); free(str);
+			std::string ret(str); free(str);
 			return ret;
 		}
 		break;
@@ -4079,9 +4076,9 @@ double CNumber::toDouble() const
 	case tDouble:
 		return Double;
 	case tNaN:
-		return numeric_limits<double>::quiet_NaN();
+		return std::numeric_limits<double>::quiet_NaN();
 	case tInfinity:
-		return Int32<0 ? -numeric_limits<double>::infinity():numeric_limits<double>::infinity();
+		return Int32<0 ? -std::numeric_limits<double>::infinity(): std::numeric_limits<double>::infinity();
 	}
 	return 0.0;
 }
@@ -4101,9 +4098,9 @@ int CScriptVarNumber::isInfinity() { return data.isInfinity(); }
 
 bool CScriptVarNumber::toBoolean() { return data.toBoolean(); }
 CNumber CScriptVarNumber::toNumber_Callback() { return data; }
-string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(radix); }
+std::string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(radix); }
 
-string CScriptVarNumber::getVarType() { return "number"; }
+std::string CScriptVarNumber::getVarType() { return "number"; }
 
 CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->numberPrototype); }
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
@@ -4126,9 +4123,9 @@ bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
 CNumber CScriptVarBool::toNumber_Callback() { return data?1:0; }
-string CScriptVarBool::toCString(int radix/*=0*/) { return data ? "true" : "false"; }
+std::string CScriptVarBool::toCString(int radix/*=0*/) { return data ? "true" : "false"; }
 
-string CScriptVarBool::getVarType() { return "boolean"; }
+std::string CScriptVarBool::getVarType() { return "boolean"; }
 
 CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->booleanPrototype); }
 
@@ -4149,14 +4146,14 @@ void CScriptVarObject::removeAllChildren()
 CScriptVarPrimitivePtr CScriptVarObject::getRawPrimitive() { return value; }
 bool CScriptVarObject::isObject() { return true; }
 
-string CScriptVarObject::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
+std::string CScriptVarObject::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
-	string destination;
+	std::string destination;
 	const char *nl = indent.size() ? "\n" : " ";
 	const char *comma = "";
 	destination.append("{");
 	if(Childs.size()) {
-		string new_indentString = indentString + indent;
+		std::string new_indentString = indentString + indent;
 		for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it) {
 			if((*it)->isEnumerable()) {
 				destination.append(comma); comma=",";
@@ -4180,8 +4177,8 @@ string CScriptVarObject::getParsableString(const string &indentString, const str
 	getParsableStringRecursionsCheckEnd();
 	return destination;
 }
-string CScriptVarObject::getVarType() { return "object"; }
-string CScriptVarObject::getVarTypeTagName() { return "Object"; }
+std::string CScriptVarObject::getVarType() { return "object"; }
+std::string CScriptVarObject::getVarTypeTagName() { return "Object"; }
 
 CScriptVarPtr CScriptVarObject::toObject() { return this; }
 
@@ -4208,7 +4205,7 @@ void CScriptVarObject::setTemporaryMark_recursive( uint32_t ID) {
 
 declare_dummy_t(StopIteration);
 CScriptVarObjectTypeTagged::~CScriptVarObjectTypeTagged() {}
-string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
+std::string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -4229,13 +4226,13 @@ bool CScriptVarError::isError() { return true; }
 
 CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int radix) {
 	CScriptVarLinkPtr link;
-	string name = ERROR_NAME[Error];
+	std::string name = ERROR_NAME[Error];
 	link = findChildWithPrototypeChain("name"); if(link) name = link->toString(execute);
-	string message; link = findChildWithPrototypeChain("message"); if(link) message = link->toString(execute);
-	string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = link->toString(execute);
+	std::string message; link = findChildWithPrototypeChain("message"); if(link) message = link->toString(execute);
+	std::string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = link->toString(execute);
 	int lineNumber=-1; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = link->toNumber().toInt32();
 	int column=-1; link = findChildWithPrototypeChain("column"); if(link) column = link->toNumber().toInt32();
-	ostringstream msg;
+	std::ostringstream msg;
 	msg << name << ": " << message;
 	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
 	if(column >=0) msg << " Column:" << column+1;
@@ -4246,14 +4243,14 @@ CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int rad
 CScriptException CScriptVarError::toCScriptException()
 {
 	CScriptVarLinkPtr link;
-	string name = ERROR_NAME[Error];
+	std::string name = ERROR_NAME[Error];
 	link = findChildWithPrototypeChain("name"); if(link) name = link->toString();
 	int ErrorCode;
 	for(ErrorCode=(sizeof(ERROR_NAME)/sizeof(ERROR_NAME[0]))-1; ErrorCode>0; ErrorCode--) {
 		if(name == ERROR_NAME[ErrorCode]) break;
 	}
-	string message; link = findChildWithPrototypeChain("message"); if(link) message = link->toString();
-	string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = link->toString();
+	std::string message; link = findChildWithPrototypeChain("message"); if(link) message = link->toString();
+	std::string fileName; link = findChildWithPrototypeChain("fileName"); if(link) fileName = link->toString();
 	int lineNumber=-1; link = findChildWithPrototypeChain("lineNumber"); if(link) lineNumber = link->toNumber().toInt32()-1;
 	int column=-1; link = findChildWithPrototypeChain("column"); if(link) column = link->toNumber().toInt32()-1;
 	return CScriptException((enum ERROR_TYPES)ErrorCode, message, fileName, lineNumber, column);
@@ -4280,15 +4277,15 @@ CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, C
 
 CScriptVarArray::~CScriptVarArray() {}
 bool CScriptVarArray::isArray() { return true; }
-string CScriptVarArray::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
+std::string CScriptVarArray::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
-	string destination;
+	std::string destination;
 	const char *nl = indent.size() ? "\n" : " ";
 	const char *comma = "";
 	destination.append("[");
 	uint32_t len = getLength();
 	if(len) {
-		string new_indentString = indentString + indent;
+		std::string new_indentString = indentString + indent;
 		for (uint32_t i=0;i<len;i++) {
 			destination.append(comma); comma = ",";
 			destination.append(nl).append(new_indentString).append(getArrayElement(i)->getParsableString(new_indentString, indent, uniqueID, hasRecursion));
@@ -4300,7 +4297,7 @@ string CScriptVarArray::getParsableString(const string &indentString, const stri
 	return destination;
 }
 CScriptVarPtr CScriptVarArray::toString_CallBack( CScriptResult &execute, int radix/*=0*/ ) {
-	ostringstream destination;
+	std::ostringstream destination;
 	if(toStringRecursion) {
 		return newScriptVar("");
 	}
@@ -4308,7 +4305,7 @@ CScriptVarPtr CScriptVarArray::toString_CallBack( CScriptResult &execute, int ra
 	try {
 		uint32_t len = getLength();
 		for (uint32_t i=0;execute && i<len;i++) {
-			CScriptVarLinkWorkPtr element = findChildWithPrototypeChain(to_string(i));
+			CScriptVarLinkWorkPtr element = findChildWithPrototypeChain(std::to_string(i));
 			if(element && !(element = element.getter(execute))->getVarPtr()->isUndefined() )
 				destination << element->toString(execute);
 			if (i<len-1) destination  << ",";
@@ -4323,14 +4320,14 @@ CScriptVarPtr CScriptVarArray::toString_CallBack( CScriptResult &execute, int ra
 }
 
 void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &link, const CScriptVarPtr &value) {
-	const string &name = link->getName();
+	const std::string &name = link->getName();
 	uint32_t newlen;
 	if(name == "length") {
 		if(!execute) return;
 		if((value->toNumber(execute).isUInt32())) {
 			newlen = value->toNumber(execute).toUInt32();
 			if(newlen < link->getVarPtr()->toNumber()) {
-				SCRIPTVAR_CHILDS_it begin = lower_bound(Childs.begin(), Childs.end(), to_string(newlen));
+				SCRIPTVAR_CHILDS_it begin = std::lower_bound(Childs.begin(), Childs.end(), std::to_string(newlen));
 				//SCRIPTVAR_CHILDS_it end = Childs.end();
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L || _MSC_VER >= 1600) // Visual Studio? I do not know exactly! 2010 and above ???
 				Childs.erase(begin, Childs.end());
@@ -4359,7 +4356,7 @@ void CScriptVarArray::setter(CScriptResult &execute, const CScriptVarLinkPtr &li
 	CScriptVar::setter(execute, link, value);
 }
 CScriptVarLinkPtr &CScriptVarArray::getter(CScriptResult &execute, CScriptVarLinkPtr &link) {
-	const string &name = link->getName();
+	const std::string &name = link->getName();
 	if (name == "length") {
 		uint32_t len = isArrayIndex(Childs.back()->getName()) + 1;
 //		uint32_t val = link->getVarPtr()->toNumber().toUInt32();
@@ -4385,14 +4382,14 @@ uint32_t CScriptVarArray::getLength() {
 }
 
 CScriptVarPtr CScriptVarArray::getArrayElement(uint32_t idx) {
-	CScriptVarLinkPtr link = findChild(to_string(idx));
+	CScriptVarLinkPtr link = findChild(std::to_string(idx));
 	if (link) return link.getter();
 	else return constScriptVar(Undefined); // undefined
 }
 
 void CScriptVarArray::setArrayElement(uint32_t idx, const CScriptVarPtr &value) {
 	if(idx < (uint32_t)-1) {
-		addChildOrReplace(to_string(idx), value);
+		addChildOrReplace(std::to_string(idx), value);
 		auto length = findChild("length");
 		if (length && length->getVarPtr()->toNumber().toUInt32() < idx) 
 			length->setVarPtr(newScriptVar(idx + 1));
@@ -4424,7 +4421,7 @@ void CScriptVarArray::native_setLength(const CFunctionsScopePtr &c, void *data) 
 
 #ifndef NO_REGEXP
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const string &Regexp, const string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
 	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
 	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
 	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
@@ -4437,8 +4434,8 @@ bool CScriptVarRegExp::isRegExp() { return true; }
 //int CScriptVarRegExp::getInt() {return strtol(regexp.c_str(),0,0); }
 //bool CScriptVarRegExp::getBool() {return regexp.length()!=0;}
 //double CScriptVarRegExp::getDouble() {return strtod(regexp.c_str(),0);}
-//string CScriptVarRegExp::getString() { return "/"+regexp+"/"+flags; }
-//string CScriptVarRegExp::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) { return getString(); }
+//std::string CScriptVarRegExp::getString() { return "/"+regexp+"/"+flags; }
+//std::string CScriptVarRegExp::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) { return getString(); }
 CScriptVarPtr CScriptVarRegExp::toString_CallBack(CScriptResult &execute, int radix) {
 	return newScriptVar("/"+regexp+"/"+flags);
 }
@@ -4463,10 +4460,10 @@ unsigned int CScriptVarRegExp::LastIndex() {
 	return 0;
 }
 
-CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/ )
+CScriptVarPtr CScriptVarRegExp::exec( const std::string &Input, bool Test /*= false*/ )
 {
-	regex::flag_type flags = regex_constants::ECMAScript;
-	if(IgnoreCase()) flags |= regex_constants::icase;
+	std::regex::flag_type flags = std::regex_constants::ECMAScript;
+	if(IgnoreCase()) flags |= std::regex_constants::icase;
 	bool global = Global(), sticky = Sticky();
 	unsigned int lastIndex = LastIndex();
 	size_t offset = 0;
@@ -4475,18 +4472,18 @@ CScriptVarPtr CScriptVarRegExp::exec( const string &Input, bool Test /*= false*/
 		offset=lastIndex;
 	}
 	{
-		regex_constants::match_flag_type mflag = sticky?regex_constants::match_continuous:regex_constants::match_default;
-		if(offset) mflag |= regex_constants::match_prev_avail;
-		smatch match;
-		if(regex_search(Input.begin()+offset, Input.end(), match, regex(regexp, flags), mflag) ) {
+		std::regex_constants::match_flag_type mflag = sticky? std::regex_constants::match_continuous : std::regex_constants::match_default;
+		if(offset) mflag |= std::regex_constants::match_prev_avail;
+		std::smatch match;
+		if(std::regex_search(Input.begin()+offset, Input.end(), match, std::regex(regexp, flags), mflag) ) {
 			addChildOrReplace("lastIndex", newScriptVar(offset+match.position()+match.str().length()));
 			if(Test) return constScriptVar(true);
 
 			CScriptVarArrayPtr retVar = newScriptVar(Array);
 			retVar->addChild("input", newScriptVar(Input));
 			retVar->addChild("index", newScriptVar(match.position()));
-			for(smatch::size_type idx=0; idx<match.size(); idx++)
-				retVar->addChild(to_string(idx), newScriptVar(match[idx].str()));
+			for(std::smatch::size_type idx=0; idx<match.size(); idx++)
+				retVar->addChild(std::to_string(idx), newScriptVar(match[idx].str()));
 			return retVar;
 		}
 	}
@@ -4500,19 +4497,19 @@ failed:
 const char * CScriptVarRegExp::ErrorStr( int Error )
 {
 	switch(Error) {
-	case regex_constants::error_badbrace: return "the expression contained an invalid count in a { } expression";
-	case regex_constants::error_badrepeat: return "a repeat expression (one of '*', '?', '+', '{' in most contexts) was not preceded by an expression";
-	case regex_constants::error_brace: return "the expression contained an unmatched '{' or '}'";
-	case regex_constants::error_brack: return "the expression contained an unmatched '[' or ']'";
-	case regex_constants::error_collate: return "the expression contained an invalid collating element name";
-	case regex_constants::error_complexity: return "an attempted match failed because it was too complex";
-	case regex_constants::error_ctype: return "the expression contained an invalid character class name";
-	case regex_constants::error_escape: return "the expression contained an invalid escape sequence";
-	case regex_constants::error_paren: return "the expression contained an unmatched '(' or ')'";
-	case regex_constants::error_range: return "the expression contained an invalid character range specifier";
-	case regex_constants::error_space: return "parsing a regular expression failed because there were not enough resources available";
-	case regex_constants::error_stack: return "an attempted match failed because there was not enough memory available";
-	case regex_constants::error_backref: return "the expression contained an invalid back reference";
+	case std::regex_constants::error_badbrace: return "the expression contained an invalid count in a { } expression";
+	case std::regex_constants::error_badrepeat: return "a repeat expression (one of '*', '?', '+', '{' in most contexts) was not preceded by an expression";
+	case std::regex_constants::error_brace: return "the expression contained an unmatched '{' or '}'";
+	case std::regex_constants::error_brack: return "the expression contained an unmatched '[' or ']'";
+	case std::regex_constants::error_collate: return "the expression contained an invalid collating element name";
+	case std::regex_constants::error_complexity: return "an attempted match failed because it was too complex";
+	case std::regex_constants::error_ctype: return "the expression contained an invalid character class name";
+	case std::regex_constants::error_escape: return "the expression contained an invalid escape sequence";
+	case std::regex_constants::error_paren: return "the expression contained an unmatched '(' or ')'";
+	case std::regex_constants::error_range: return "the expression contained an invalid character range specifier";
+	case std::regex_constants::error_space: return "parsing a regular expression failed because there were not enough resources available";
+	case std::regex_constants::error_stack: return "an attempted match failed because there was not enough memory available";
+	case std::regex_constants::error_backref: return "the expression contained an invalid back reference";
 	default: return "";
 	}
 }
@@ -4582,15 +4579,15 @@ CScriptVarGenerator::~CScriptVarGenerator() {
 bool CScriptVarGenerator::isIterator()		{return true;}
 bool CScriptVarGenerator::isGenerator()	{return true;}
 
-string CScriptVarGenerator::getVarType() { return "generator"; }
-string CScriptVarGenerator::getVarTypeTagName() { return "Generator"; }
+std::string CScriptVarGenerator::getVarType() { return "generator"; }
+std::string CScriptVarGenerator::getVarTypeTagName() { return "Generator"; }
 
 void CScriptVarGenerator::setTemporaryMark_recursive( uint32_t ID ) {
 	CScriptVarObject::setTemporaryMark_recursive(ID);
 	functionRoot->setTemporaryMark_recursive(ID);
 	function->setTemporaryMark_recursive(ID);
 	if(yieldVar) yieldVar->setTemporaryMark_recursive(ID);
-	for(vector<CScriptVarScopePtr>::iterator it=generatorScopes.begin(); it != generatorScopes.end(); ++it)
+	for(std::vector<CScriptVarScopePtr>::iterator it=generatorScopes.begin(); it != generatorScopes.end(); ++it)
 		(*it)->setTemporaryMark_recursive(ID);
 }
 void CScriptVarGenerator::native_send(const CFunctionsScopePtr &c, void *data) {
@@ -4679,11 +4676,11 @@ bool CScriptVarFunction::isObject() { return true; }
 bool CScriptVarFunction::isFunction() { return true; }
 bool CScriptVarFunction::isPrimitive()	{ return false; }
 
-//string CScriptVarFunction::getString() {return "[ Function ]";}
-string CScriptVarFunction::getVarType() { return "function"; }
-string CScriptVarFunction::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
+//std::string CScriptVarFunction::getString() {return "[ Function ]";}
+std::string CScriptVarFunction::getVarType() { return "function"; }
+std::string CScriptVarFunction::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
-	string destination;
+	std::string destination;
 	if (!data->isArrowFunction()) {
 		if (data->type == LEX_T_GET) destination.append("get ");
 		else if (data->type == LEX_T_SET) destination.append("set ");
@@ -4743,7 +4740,7 @@ void CScriptVarFunction::setFunctionData(const std::shared_ptr<CScriptTokenDataF
 /// CScriptVarFunctionBounded
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const vector<CScriptVarPtr> &BoundedArguments)
+CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments)
 	: CScriptVarFunction(BoundedFunction->getContext(), CScriptTokenDataFnc::create(LEX_R_FUNCTION)) ,
 	boundedFunction(BoundedFunction),
 	boundedThis(BoundedThis),
@@ -4755,13 +4752,13 @@ bool CScriptVarFunctionBounded::isBounded() { return true; }
 void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
 	CScriptVarFunction::setTemporaryMark_recursive(ID);
 	boundedThis->setTemporaryMark_recursive(ID);
-	for(vector<CScriptVarPtr>::iterator it=boundedArguments.begin(); it!=boundedArguments.end(); ++it)
+	for(std::vector<CScriptVarPtr>::iterator it=boundedArguments.begin(); it!=boundedArguments.end(); ++it)
 		(*it)->setTemporaryMark_recursive(ID);
 }
 
-CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis/*=0*/ )
+CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis/*=0*/ )
 {
-	vector<CScriptVarPtr> newArgs=boundedArguments;
+	std::vector<CScriptVarPtr> newArgs=boundedArguments;
 	newArgs.insert(newArgs.end(), Arguments.begin(), Arguments.end());
 	return context->callFunction(execute, boundedFunction, newArgs, newThis ? This : boundedThis, newThis);
 }
@@ -4828,9 +4825,9 @@ CScriptVarAccessor::CScriptVarAccessor( CTinyJS *Context, const CScriptVarFuncti
 CScriptVarAccessor::~CScriptVarAccessor() {}
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; }
-string CScriptVarAccessor::getParsableString(const string &indentString, const string &indent, uint32_t uniqueID, bool &hasRecursion) {
+std::string CScriptVarAccessor::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
-	string destination;
+	std::string destination;
 	CScriptVarLinkPtr getter = findChild(TINYJS_ACCESSOR_GET_VAR);
 	CScriptVarLinkPtr setter = findChild(TINYJS_ACCESSOR_SET_VAR);
 	if (getter) destination.append(getter->getVarPtr()->getParsableString(indentString, indent, uniqueID, hasRecursion));
@@ -4839,7 +4836,7 @@ string CScriptVarAccessor::getParsableString(const string &indentString, const s
 	getParsableStringRecursionsCheckEnd();
 	return destination;
 }
-string CScriptVarAccessor::getVarType() { return "accessor"; }
+std::string CScriptVarAccessor::getVarType() { return "accessor"; }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -4851,7 +4848,7 @@ CScriptVarScope::~CScriptVarScope() {}
 bool CScriptVarScope::isObject() { return false; }
 CScriptVarPtr CScriptVarScope::scopeVar() { return this; }	///< to create var like: var a = ...
 CScriptVarPtr CScriptVarScope::scopeLet() { return this; }	///< to create var like: let a = ...
-CScriptVarLinkWorkPtr CScriptVarScope::findInScopes(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVarScope::findInScopes(const std::string &childName) {
 	return  CScriptVar::findChild(childName);
 }
 CScriptVarScopePtr CScriptVarScope::getParent() { return CScriptVarScopePtr(); } ///< no Parent
@@ -4863,7 +4860,7 @@ CScriptVarScopePtr CScriptVarScope::getParent() { return CScriptVarScopePtr(); }
 
 declare_dummy_t(ScopeFnc);
 CScriptVarScopeFnc::~CScriptVarScopeFnc() {}
-CScriptVarLinkWorkPtr CScriptVarScopeFnc::findInScopes(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVarScopeFnc::findInScopes(const std::string &childName) {
 	CScriptVarLinkWorkPtr ret = findChild(childName);
 	if( !ret ) {
 		if(closure) ret = CScriptVarScopePtr(closure)->findInScopes(childName);
@@ -4876,19 +4873,19 @@ void CScriptVarScopeFnc::setReturnVar(const CScriptVarPtr &var) {
 	addChildOrReplace(TINYJS_RETURN_VAR, var);
 }
 
-CScriptVarPtr CScriptVarScopeFnc::getParameter(const string &name) {
+CScriptVarPtr CScriptVarScopeFnc::getParameter(const std::string &name) {
 	return getArgument(name);
 }
 
 CScriptVarPtr CScriptVarScopeFnc::getParameter(int Idx) {
 	return getArgument(Idx);
 }
-CScriptVarPtr CScriptVarScopeFnc::getArgument(const string &name) {
+CScriptVarPtr CScriptVarScopeFnc::getArgument(const std::string &name) {
 	return findChildOrCreate(name);
 }
 CScriptVarPtr CScriptVarScopeFnc::getArgument(int Idx) {
 	CScriptVarLinkPtr arguments = findChildOrCreate(TINYJS_ARGUMENTS_VAR);
-	if(arguments) arguments = arguments->getVarPtr()->findChild(to_string(Idx));
+	if(arguments) arguments = arguments->getVarPtr()->findChild(std::to_string(Idx));
 	return arguments ? arguments->getVarPtr() : constScriptVar(Undefined);
 }
 int CScriptVarScopeFnc::getParameterLength() {
@@ -4901,7 +4898,7 @@ uint32_t CScriptVarScopeFnc::getArgumentsLength()
 	return arguments ? arguments.getter()->toNumber().toUInt32() : 0UL;
 }
 
-void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const string &message ) {
+void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const std::string &message ) {
 	throw newScriptVarError(context, ErrorType, message.c_str());
 }
 void CScriptVarScopeFnc::throwError( ERROR_TYPES ErrorType, const char *message ) {
@@ -4967,7 +4964,7 @@ CScriptVarPtr CScriptVarScopeLet::scopeVar() {						// to create var like: var a
 	return getParent()->scopeVar();
 }
 CScriptVarScopePtr CScriptVarScopeLet::getParent() { return (CScriptVarPtr)parent; }
-CScriptVarLinkWorkPtr CScriptVarScopeLet::findInScopes(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVarScopeLet::findInScopes(const std::string &childName) {
 	CScriptVarLinkWorkPtr ret;
 	if(letExpressionInitMode) {
 		return getParent()->findInScopes(childName);
@@ -4988,7 +4985,7 @@ CScriptVarScopeWith::~CScriptVarScopeWith() {}
 CScriptVarPtr CScriptVarScopeWith::scopeLet() { 							// to create var like: let a = ...
 	return getParent()->scopeLet();
 }
-CScriptVarLinkWorkPtr CScriptVarScopeWith::findInScopes(const string &childName) {
+CScriptVarLinkWorkPtr CScriptVarScopeWith::findInScopes(const std::string &childName) {
 	if(childName == "this") return with;
 	CScriptVarLinkWorkPtr ret = with->getVarPtr()->findChild(childName);
 	if( !ret ) {
@@ -5123,11 +5120,11 @@ CTinyJS::CTinyJS() {
 	link->setWritable(false);
 	CScriptVarFunctionPtr(var)->setConstructor(::newScriptVar(this, this, &CTinyJS::native_Number, (void*)1, "Number", "(value)"));
 
-	var->addChild("EPSILON", newScriptVarNumber(this, numeric_limits<double>::epsilon()), SCRIPTVARLINK_CONSTANT);
-	var->addChild("MAX_VALUE", newScriptVarNumber(this, numeric_limits<double>::max()), SCRIPTVARLINK_CONSTANT);
-	var->addChild("MIN_VALUE", newScriptVarNumber(this, numeric_limits<double>::min()), SCRIPTVARLINK_CONSTANT);
-	var->addChild("MAX_SAFE_INTEGER", newScriptVarNumber(this, (1LL << numeric_limits<double>::digits)-1), SCRIPTVARLINK_CONSTANT);
-	var->addChild("MIN_SAFE_INTEGER", newScriptVarNumber(this, 1-(1LL << numeric_limits<double>::digits)), SCRIPTVARLINK_CONSTANT);
+	var->addChild("EPSILON", newScriptVarNumber(this, std::numeric_limits<double>::epsilon()), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MAX_VALUE", newScriptVarNumber(this, std::numeric_limits<double>::max()), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MIN_VALUE", newScriptVarNumber(this, std::numeric_limits<double>::min()), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MAX_SAFE_INTEGER", newScriptVarNumber(this, (1LL << std::numeric_limits<double>::digits)-1), SCRIPTVARLINK_CONSTANT);
+	var->addChild("MIN_SAFE_INTEGER", newScriptVarNumber(this, 1-(1LL << std::numeric_limits<double>::digits)), SCRIPTVARLINK_CONSTANT);
 	var->addChild("NaN", constNaN = newScriptVarNumber(this, NaN), SCRIPTVARLINK_CONSTANT);
 	var->addChild("POSITIVE_INFINITY", constInfinityPositive = newScriptVarNumber(this, InfinityPositive), SCRIPTVARLINK_CONSTANT);
 	var->addChild("NEGATIVE_INFINITY", constInfinityNegative = newScriptVarNumber(this, InfinityNegative), SCRIPTVARLINK_CONSTANT);
@@ -5247,8 +5244,8 @@ CTinyJS::CTinyJS() {
 	addNative("function require(jsFile)", this, &CTinyJS::native_require);
 	addNative("function isNaN(objc)", this, &CTinyJS::native_isNAN);
 	addNative("function isFinite(objc)", this, &CTinyJS::native_isFinite);
-	addNative("function parseInt(string, radix)", this, &CTinyJS::native_parseInt);
-	addNative("function parseFloat(string)", this, &CTinyJS::native_parseFloat);
+	addNative("function parseInt(std::string, radix)", this, &CTinyJS::native_parseInt);
+	addNative("function parseFloat(std::string)", this, &CTinyJS::native_parseFloat);
 
 	root->addChild("JSON", newScriptVar(Object), SCRIPTVARLINK_BUILDINDEFAULT);
 	addNative("function JSON.parse(text, reviver)", this, &CTinyJS::native_JSON_parse);
@@ -5262,7 +5259,7 @@ CTinyJS::CTinyJS() {
 CTinyJS::~CTinyJS() {
 	ASSERT(!t);
 //	objectPrototype->setPrototype(0);
-	for (vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it != pseudo_refered.end(); ++it) {
+	for (std::vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it != pseudo_refered.end(); ++it) {
 		(**it)->cleanUp4Destroy();
 		**it = CScriptVarPtr();
 	}
@@ -5285,25 +5282,25 @@ CTinyJS::~CTinyJS() {
 /// throws an Error & Exception
 //////////////////////////////////////////////////////////////////////////
 
-void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const string &message ) {
+void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const std::string &message ) {
 	if(execute && haveTry) {
 		execute.set(CScriptResult::Throw, newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), t->currentLine(), t->currentColumn()));
 		return;
 	}
 	throw CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
-void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message ) {
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message ) {
 	throw CScriptException(ErrorType, message, t->currentFile, t->currentLine(), t->currentColumn());
 }
 
-void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+void CTinyJS::throwError(CScriptResult &execute, ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
 	if(execute && haveTry) {
 		execute.set(CScriptResult::Throw, newScriptVarError(this, ErrorType, message.c_str(), t->currentFile.c_str(), Pos.currentLine(), Pos.currentColumn()));
 		return;
 	}
 	throw CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
-void CTinyJS::throwException(ERROR_TYPES ErrorType, const string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
+void CTinyJS::throwException(ERROR_TYPES ErrorType, const std::string &message, CScriptTokenizer::ScriptTokenPosition &Pos ){
 	throw CScriptException(ErrorType, message, t->currentFile, Pos.currentLine(), Pos.currentColumn());
 }
 
@@ -5317,11 +5314,11 @@ void CTinyJS::execute(CScriptTokenizer &Tokenizer) {
 	evaluateComplex(Tokenizer);
 }
 
-void CTinyJS::execute(const char *Code, const string &File, int Line, int Column) {
+void CTinyJS::execute(const char *Code, const std::string &File, int Line, int Column) {
 	evaluateComplex(Code, File, Line, Column);
 }
 
-void CTinyJS::execute(const string &Code, const string &File, int Line, int Column) {
+void CTinyJS::execute(const std::string &Code, const std::string &File, int Line, int Column) {
 	evaluateComplex(Code, File, Line, Column);
 }
 
@@ -5356,27 +5353,27 @@ CScriptVarLinkPtr CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	// return undefined...
 	return CScriptVarLinkPtr(constScriptVar(Undefined));
 }
-CScriptVarLinkPtr CTinyJS::evaluateComplex(const char *Code, const string &File, int Line, int Column) {
+CScriptVarLinkPtr CTinyJS::evaluateComplex(const char *Code, const std::string &File, int Line, int Column) {
 	CScriptTokenizer Tokenizer(Code, File, Line, Column);
 	return evaluateComplex(Tokenizer);
 }
-CScriptVarLinkPtr CTinyJS::evaluateComplex(const string &Code, const string &File, int Line, int Column) {
+CScriptVarLinkPtr CTinyJS::evaluateComplex(const std::string &Code, const std::string &File, int Line, int Column) {
 	CScriptTokenizer Tokenizer(Code.c_str(), File, Line, Column);
 	return evaluateComplex(Tokenizer);
 }
 
-string CTinyJS::evaluate(CScriptTokenizer &Tokenizer) {
+std::string CTinyJS::evaluate(CScriptTokenizer &Tokenizer) {
 	return evaluateComplex(Tokenizer)->toString();
 }
-string CTinyJS::evaluate(const char *Code, const string &File, int Line, int Column) {
+std::string CTinyJS::evaluate(const char *Code, const std::string &File, int Line, int Column) {
 	return evaluateComplex(Code, File, Line, Column)->toString();
 }
-string CTinyJS::evaluate(const string &Code, const string &File, int Line, int Column) {
+std::string CTinyJS::evaluate(const std::string &Code, const std::string &File, int Line, int Column) {
 	return evaluate(Code.c_str(), File, Line, Column);
 }
 
 
-CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const string &funcDesc, string &name, string &args) {
+CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, std::string &args) {
 	CScriptLex lex(funcDesc.c_str());
 	CScriptVarPtr base = root;
 	lex.match(LEX_R_FUNCTION);
@@ -5397,8 +5394,8 @@ CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const string &funcDesc, string &n
 	return base;
 }
 
-CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
-	string name, args;
+CScriptVarFunctionNativePtr CTinyJS::addNative(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
+	std::string name, args;
 	CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);
 	base->addChild(name, ret = ::newScriptVar(this, ptr, userdata, name.c_str(), args.c_str()), LinkFlags);;
 	return ret;
@@ -5406,26 +5403,26 @@ CScriptVarFunctionNativePtr CTinyJS::addNative(const string &funcDesc, JSCallbac
 
 CScriptVarLinkWorkPtr CTinyJS::parseFunctionDefinition(const CScriptToken &FncToken) {
 	auto &Fnc = FncToken.Fnc();
-//	string fncName = (FncToken.token == LEX_T_FUNCTION_OPERATOR) ? TINYJS_TEMP_NAME : Fnc.name;
+//	std::string fncName = (FncToken.token == LEX_T_FUNCTION_OPERATOR) ? TINYJS_TEMP_NAME : Fnc.name;
 	CScriptVarLinkWorkPtr funcVar(newScriptVar(Fnc), Fnc->name);
 	if(scope() != root)
 		funcVar->getVarPtr()->addChild(TINYJS_FUNCTION_CLOSURE_VAR, scope(), 0);
 	return funcVar;
 }
 
-CScriptVarLinkWorkPtr CTinyJS::parseFunctionsBodyFromString(const string &ArgumentList, const string &FncBody) {
-	string Fnc = "function ("+ArgumentList+"){"+FncBody+"}";
+CScriptVarLinkWorkPtr CTinyJS::parseFunctionsBodyFromString(const std::string &ArgumentList, const std::string &FncBody) {
+	std::string Fnc = "function ("+ArgumentList+"){"+FncBody+"}";
 	CScriptTokenizer tokenizer(Fnc.c_str());
 	return parseFunctionDefinition(tokenizer.getToken());
 }
-CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 	CScriptResult execute;
 	CScriptVarPtr retVar = callFunction(execute, Function, Arguments, This, newThis);
 	execute.cThrow();
 	return retVar;
 }
 
-CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
 	ASSERT(Function && Function->isFunction());
 
 	if(Function->isBounded()) return CScriptVarFunctionBoundedPtr(Function)->callFunction(execute, Arguments, This, newThis);
@@ -5448,7 +5445,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	CScriptResult function_execute;
 	size_t length_proto = Fnc->arguments.size();
 	size_t length_arguments = Arguments.size();
-	size_t length = max(length_proto, length_arguments);
+	size_t length = std::max(length_proto, length_arguments);
 
 	STRING_VECTOR_t arg_names;
 	for(size_t arguments_idx = 0; arguments_idx<length_proto; ++arguments_idx) {
@@ -5459,7 +5456,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 		tmpArgsScope->addChildOrReplace(*it, constUndefined);
 
 	for(size_t arguments_idx = 0; execute && arguments_idx<length; ++arguments_idx) {
-		string arguments_idx_str = to_string(arguments_idx);
+		std::string arguments_idx_str = std::to_string(arguments_idx);
 		CScriptVarLinkWorkPtr value;
 		if(arguments_idx < length_arguments)
 			value = arguments->addChild(arguments_idx_str, Arguments[arguments_idx]);
@@ -5514,7 +5511,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 		/* we just want to execute the block, but something could
 			* have messed up and left us with the wrong ScriptLex, so
 			* we want to be careful here... */
-		string oldFile = t->currentFile;
+		std::string oldFile = t->currentFile;
 		t->currentFile = Fnc->file;
 		t->pushTokenScope(Fnc->body);
 		if(Fnc->body.front().token == '{')
@@ -5726,13 +5723,13 @@ inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPt
 	bool b_isString = b->isString();
 	// both a String or one a String and op='+'
 	if( (a_isString && b_isString) || ((a_isString || b_isString) && op == '+')) {
-		string da = a->isNull() ? "" : a->toString(execute);
-		string db = b->isNull() ? "" : b->toString(execute);
+		std::string da = a->isNull() ? "" : a->toString(execute);
+		std::string db = b->isNull() ? "" : b->toString(execute);
 		switch (op) {
 		case '+': case LEX_PLUSEQUAL:
 			try{
 				return newScriptVar(da+db);
-			} catch(exception& e) {
+			} catch(std::exception& e) {
 				throwError(execute, Error, e.what());
 				return constUndefined;
 			}
@@ -5794,7 +5791,7 @@ void CTinyJS::assign_destructuring_var(CScriptResult &execute, const std::shared
 		}
 	} else {
 		DESTRUCTURING_VARS_cit it=Objc->vars.begin();
-		vector<CScriptVarPtr> Path(1, Val);
+		std::vector<CScriptVarPtr> Path(1, Val);
 		STRING_VECTOR_t PathStr(1,(it++)->second == "{" ? "." : "[");
 
 		if(Val->isNullOrUndefined() && it->second != "}" && it->second != "]") {
@@ -5813,7 +5810,7 @@ void CTinyJS::assign_destructuring_var(CScriptResult &execute, const std::shared
 				if(var) var = var.getter(execute); else var = constUndefined;
 				if(!execute) return;
 				if(it->second == "{" || it->second == "[") {
-					string newPathStr = PathStr.back() +  it->first;
+					std::string newPathStr = PathStr.back() +  it->first;
 					if(*PathStr.back().rbegin() == '[') newPathStr += "]";
 					if(var->getVarPtr()->isNullOrUndefined() && (it+1)->second != "}" && (it+1)->second != "]") {
 						throwError(execute, TypeError, newPathStr+" is "+(var->getVarPtr()->isNull() ? "null" : "undefined"));
@@ -5859,14 +5856,14 @@ void CTinyJS::execute_destructuring(CScriptResult &execute, const std::shared_pt
 	}
 	const char *ObjcOpener = (Objc->type==CScriptTokenDataObjectLiteral::OBJECT ? ".":"[");
 	const char *ObjcCloser = (Objc->type==CScriptTokenDataObjectLiteral::OBJECT ? "":"]");
-	for(vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc->elements.begin(); execute && it!=Objc->elements.end(); ++it) {
+	for(std::vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc->elements.begin(); execute && it!=Objc->elements.end(); ++it) {
 		if(it->value.empty()) continue;
 		CScriptToken &token = it->value.front();
 		CScriptVarPtr rhs = Val->getOwnProperty(it->id).getter(execute);
 		if(!rhs) rhs=constUndefined;
 		if(token.token == LEX_T_OBJECT_LITERAL && token.Object()->destructuring) {
 			auto &Objc = token.Object();
-			string newPath = Path;
+			std::string newPath = Path;
 			if(newPath.empty()) newPath += "(intermediate value)";
 			newPath += ObjcOpener + it->id + ObjcCloser;
 			if(rhs->isNullOrUndefined() && Objc->elements.size())
@@ -5940,9 +5937,9 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 #ifndef NO_REGEXP
 	case LEX_REGEXP:
 		{
-			string::size_type pos = t->getToken().String().find_last_of('/');
-			string source = t->getToken().String().substr(1, pos-1);
-			string flags = t->getToken().String().substr(pos+1);
+			std::string::size_type pos = t->getToken().String().find_last_of('/');
+			std::string source = t->getToken().String().substr(1, pos-1);
+			std::string flags = t->getToken().String().substr(pos+1);
 			CScriptVarPtr a = newScriptVar(source, flags);
 			t->match(LEX_REGEXP);
 			return a;
@@ -5967,7 +5964,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 					t->pushTokenScope(Objc->elements[Objc->type - CScriptTokenDataObjectLiteral::ARRAY_COMPREHENSIONS].value);
 					execute_statement(execute);
 				} else {
-					for(vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc->elements.begin(); execute && it!=Objc->elements.end(); ++it) {
+					for(std::vector<CScriptTokenDataObjectLiteral::ELEMENT>::iterator it=Objc->elements.begin(); execute && it!=Objc->elements.end(); ++it) {
 						if(it->value.empty()) continue;
 						CScriptToken &tk = it->value.front();
 						if(tk.token==LEX_T_GET || tk.token==LEX_T_SET) {
@@ -6057,7 +6054,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 						if(&dummy < stackBase)
 							throwError(execute, Error, "too much recursion");
 					}
-					vector<CScriptVarPtr> arguments;
+					std::vector<CScriptVarPtr> arguments;
 					if (t->tk == '(') {
 						t->match('(');
 						while(t->tk!=')') {
@@ -6128,7 +6125,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &pare
 					throwError(execute, ReferenceError, parent->getName() + " is " + parent->toString(execute));
 			}
 		}
-		string name;
+		std::string name;
 		if (t->tk == '.' || t->tk == LEX_OPTIONAL_CHAINING_MEMBER) {
 			t->match(t->tk);
 			name = t->tkStr();
@@ -6185,7 +6182,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 			t->match(t->tk); // path += '(';
 
 			// grab in all parameters
-			vector<CScriptVarPtr> arguments;
+			std::vector<CScriptVarPtr> arguments;
 			while(t->tk!=')') {
 				CScriptVarLinkWorkPtr value = execute_assignment(execute).getter(execute);
 //				path += (*value)->getString();
@@ -6277,7 +6274,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(CScriptResult &execute) {
 			a = execute_function_call(execute);
 			if (execute) {
 				if(a->getName().empty())
-					throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", ErrorPos);
+					throwError(execute, SyntaxError, std::string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", ErrorPos);
 				else if(!a->isOwned() && !a.hasReferencedOwner() && !a->getName().empty())
 					throwError(execute, ReferenceError, a->getName() + " is not defined", ErrorPos);
 				CScriptVarPtr res = newScriptVar(a.getter(execute)->getVarPtr()->toNumber(execute).add(op==LEX_PLUSPLUS ? 1 : -1));
@@ -6301,7 +6298,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_unary(CScriptResult &execute) {
 		t->match(op);
 		if (execute) {
 			if(a->getName().empty())
-				throwError(execute, SyntaxError, string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", t->getPrevPos());
+				throwError(execute, SyntaxError, std::string("invalid ")+(op==LEX_PLUSPLUS ? "increment" : "decrement")+" operand", t->getPrevPos());
 			else if(!a->isOwned() && !a.hasReferencedOwner() && !a->getName().empty())
 				throwError(execute, ReferenceError, a->getName() + " is not defined", t->getPrevPos());
 			CNumber num = a.getter(execute)->getVarPtr()->toNumber(execute);
@@ -6404,7 +6401,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_relation(CScriptResult &execute, i
 			CScriptVarLinkWorkPtr b = set_n ? execute_relation(execute, set_n, 0) : execute_binary_shift(execute); // L->R
 			if (execute) {
 				CheckRightHandVar(execute, b);
-				string nameOf_b = b->getName();
+				std::string nameOf_b = b->getName();
 				b = b.getter(execute);
 				if(op == LEX_R_IN) {
 					if(!b->getVarPtr()->isObject())
@@ -6800,7 +6797,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 		if (execute)
 		{
 			CScriptResult::TYPE type = t->tk==LEX_R_BREAK ? CScriptResult::Break : CScriptResult::Continue;
-			string label;
+			std::string label;
 			t->match(t->tk);
 			if(t->tk == LEX_ID) {
 				label = t->tkStr();
@@ -7014,7 +7011,7 @@ end_while:
 
 
 /// Finds a child, looking recursively up the scopes
-CScriptVarLinkPtr CTinyJS::findInScopes(const string &childName) {
+CScriptVarLinkPtr CTinyJS::findInScopes(const std::string &childName) {
 	return scope()->findInScopes(childName);
 }
 
@@ -7098,7 +7095,7 @@ void CTinyJS::native_Object_keys(const CFunctionsScopePtr &c, void *data) {
 
 	uint32_t idx=0;
 	for(STRING_SET_it it=keys.begin(); it!=keys.end(); ++it, ++idx)
-		returnVar->addChildOrReplace(to_string(idx), newScriptVar(*it));
+		returnVar->addChildOrReplace(std::to_string(idx), newScriptVar(*it));
 }
 
 void CTinyJS::native_Object_getOwnPropertyDescriptor(const CFunctionsScopePtr &c, void *data) {
@@ -7110,7 +7107,7 @@ void CTinyJS::native_Object_getOwnPropertyDescriptor(const CFunctionsScopePtr &c
 void CTinyJS::native_Object_defineProperty(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr obj = c->getArgument(0);
 	if(!obj->isObject()) c->throwError(TypeError, "argument is not an object");
-	string name = c->getArgument(1)->toString();
+	std::string name = c->getArgument(1)->toString();
 	CScriptVarPtr attributes = c->getArgument(2);
 	if(!attributes->isObject()) c->throwError(TypeError, "attributes is not an object");
 	const char *err = obj->defineProperty(name, attributes);
@@ -7152,7 +7149,7 @@ void CTinyJS::native_Object_defineProperties(const CFunctionsScopePtr &c, void *
 
 void CTinyJS::native_Object_prototype_hasOwnProperty(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr This = c->getArgument("this");
-	string PropStr = c->getArgument("prop")->toString();
+	std::string PropStr = c->getArgument("prop")->toString();
 	CScriptVarLinkPtr Prop = This->findChild(PropStr);
 	bool res = Prop && !Prop->getVarPtr()->isUndefined();
 	if(!res) {
@@ -7220,17 +7217,17 @@ void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
 
 void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	int arglen = c->getArgumentsLength();
-	string RegExp, Flags;
+	std::string RegExp, Flags;
 	if(arglen>=1) {
 		RegExp = c->getArgument(0)->toString();
-		try { regex r(RegExp, regex_constants::ECMAScript); } catch(regex_error e) {
-			c->throwError(SyntaxError, string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
+		try { std::regex r(RegExp, std::regex_constants::ECMAScript); } catch(std::regex_error e) {
+			c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 		}
 		if(arglen>=2) {
 			Flags = c->getArgument(1)->toString();
-			string::size_type pos = Flags.find_first_not_of("gimy");
-			if(pos != string::npos) {
-				c->throwError(SyntaxError, string("invalid regular expression flag ")+Flags[pos]);
+			std::string::size_type pos = Flags.find_first_not_of("gimy");
+			if(pos != std::string::npos) {
+				c->throwError(SyntaxError, std::string("invalid regular expression flag ")+Flags[pos]);
 			}
 		}
 	}
@@ -7289,7 +7286,7 @@ void CTinyJS::native_Generator_prototype_next(const CFunctionsScopePtr &c, void 
 	CScriptVarGeneratorPtr Generator(c->getArgument("this"));
 	if(!Generator) {
 		static const char *fnc[] = {"next","send","close","throw"};
-		c->throwError(TypeError, string(fnc[(ptrdiff_t)data])+" method called on incompatible Object");
+		c->throwError(TypeError, std::string(fnc[(ptrdiff_t)data])+" method called on incompatible Object");
 	}
 	if((ptrdiff_t)data >=2)
 		Generator->native_throw(c, (void*)(((ptrdiff_t)data)-2));
@@ -7305,7 +7302,7 @@ void CTinyJS::native_Generator_prototype_next(const CFunctionsScopePtr &c, void 
 
 void CTinyJS::native_Function(const CFunctionsScopePtr &c, void *data) {
 	int length = c->getArgumentsLength();
-	string params, body;
+	std::string params, body;
 	if(length>=1)
 		body = c->getArgument(length-1)->toString();
 	if(length>=2) {
@@ -7324,7 +7321,7 @@ void CTinyJS::native_Function_prototype_call(const CFunctionsScopePtr &c, void *
 	CScriptVarPtr Fnc = c->getArgument("this");
 	if(!Fnc->isFunction()) c->throwError(TypeError, "Function.prototype.call called on incompatible Object");
 	CScriptVarPtr This = c->getArgument(0);
-	vector<CScriptVarPtr> Args;
+	std::vector<CScriptVarPtr> Args;
 	for(int i=1; i<length; i++)
 		Args.push_back(c->getArgument(i));
 	c->setReturnVar(callFunction(Fnc, Args, This));
@@ -7343,9 +7340,9 @@ void CTinyJS::native_Function_prototype_apply(const CFunctionsScopePtr &c, void 
 		if(!Length) c->throwError(TypeError, "second argument to Function.prototype.apply must be an array or an array like object");
 		length = Length.getter()->toNumber().toInt32();
 	}
-	vector<CScriptVarPtr> Args;
+	std::vector<CScriptVarPtr> Args;
 	for(int i=0; i<length; i++) {
-		CScriptVarLinkPtr value = Array->findChild(to_string(i));
+		CScriptVarLinkPtr value = Array->findChild(std::to_string(i));
 		if(value) Args.push_back(value);
 		else Args.push_back(constScriptVar(Undefined));
 	}
@@ -7357,7 +7354,7 @@ void CTinyJS::native_Function_prototype_bind(const CFunctionsScopePtr &c, void *
 	if(!Fnc->isFunction()) c->throwError(TypeError, "Function.prototype.bind called on incompatible Object");
 	CScriptVarPtr This = c->getArgument(0);
 	if(This->isUndefined() || This->isNull()) This = root;
-	vector<CScriptVarPtr> Args;
+	std::vector<CScriptVarPtr> Args;
 	for(int i=1; i<length; i++) Args.push_back(c->getArgument(i));
 	c->setReturnVar(newScriptVarFunctionBounded(Fnc, This, Args));
 }
@@ -7372,7 +7369,7 @@ void CTinyJS::native_Function_prototype_isGenerator(const CFunctionsScopePtr &c,
 
 static CScriptVarPtr _newError(CTinyJS *context, ERROR_TYPES type, const CFunctionsScopePtr &c) {
 	int i = c->getArgumentsLength();
-	string message, fileName;
+	std::string message, fileName;
 	int line=-1, column=-1;
 	if(i>0) message	= c->getArgument(0)->toString();
 	if(i>1) fileName	= c->getArgument(1)->toString();
@@ -7391,7 +7388,7 @@ void CTinyJS::native_TypeError(const CFunctionsScopePtr &c, void *data){ c->setR
 /// global functions
 //////////////////////////////////////////////////////////////////////////
 void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
-	string Code = c->getArgument("jsCode")->toString();
+	std::string Code = c->getArgument("jsCode")->toString();
 	CScriptVarScopePtr scEvalScope = scopes.back(); // save scope
 	scopes.pop_back(); // go back to the callers scope
 	CScriptResult execute;
@@ -7422,12 +7419,12 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 		c->setReturnVar(execute.value);
 }
 
-static int _native_require_read(const string &Fname, string &Data) {
-	ifstream in(Fname.c_str(), ios::in | ios::binary);
+static int _native_require_read(const std::string &Fname, std::string &Data) {
+	std::ifstream in(Fname.c_str(), std::ios::in | std::ios::binary);
 	if (in) {
-		in.seekg(0, ios::end);
-		Data.resize((string::size_type)in.tellg());
-		in.seekg(0, ios::beg);
+		in.seekg(0, std::ios::end);
+		Data.resize((std::string::size_type)in.tellg());
+		in.seekg(0, std::ios::beg);
 		in.read(&Data[0], Data.size());
 		in.close();
 		return(0);
@@ -7436,14 +7433,14 @@ static int _native_require_read(const string &Fname, string &Data) {
 }
 
 void CTinyJS::native_require(const CFunctionsScopePtr &c, void *data) {
-	string File = c->getArgument("jsFile")->toString();
-	string Code;
+	std::string File = c->getArgument("jsFile")->toString();
+	std::string Code;
 	int ErrorNo;
 	if(!native_require_read)
 		native_require_read = _native_require_read; // use builtin if no callback
 
 	if((ErrorNo = native_require_read(File, Code))) {
-		ostringstream msg;
+		std::ostringstream msg;
 		msg << "can't read \"" << File << "\" (Error=" << ErrorNo << ")";
 		c->throwError(Error, msg.str());
 	}
@@ -7461,20 +7458,20 @@ void CTinyJS::native_isFinite(const CFunctionsScopePtr &c, void *data) {
 
 void CTinyJS::native_parseInt(const CFunctionsScopePtr &c, void *) {
 	CNumber result;
-	result.parseInt(c->getArgument("string")->toString(), c->getArgument("radix")->toNumber().toInt32());
+	result.parseInt(c->getArgument("std::string")->toString(), c->getArgument("radix")->toNumber().toInt32());
 	c->setReturnVar(c->newScriptVar(result));
 }
 
 void CTinyJS::native_parseFloat(const CFunctionsScopePtr &c, void *) {
 	CNumber result;
-	result.parseFloat(c->getArgument("string")->toString());
+	result.parseFloat(c->getArgument("std::string")->toString());
 	c->setReturnVar(c->newScriptVar(result));
 }
 
 
 
 void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
-	string Code = "§" + c->getArgument("text")->toString();
+	std::string Code = "§" + c->getArgument("text")->toString();
 	// "§" is a spezal-token - it's for the tokenizer and means the code begins not in Statement-level
 	CScriptVarLinkWorkPtr returnVar;
 	CScriptTokenizer *oldTokenizer = t; t=0;
@@ -7495,7 +7492,7 @@ void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
 }
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {
-	for(vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
+	for(std::vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
 		if(**it) (**it)->setTemporaryMark_recursive(ID);
 	for(int i=Error; i<ERROR_COUNT; i++)
 		if(errorPrototypes[i]) errorPrototypes[i]->setTemporaryMark_recursive(ID);

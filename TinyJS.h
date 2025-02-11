@@ -452,32 +452,7 @@ public:
 private:
 };
 
-#ifdef old
-class CScriptTokenDataForwardsPtr {
-public:
-	CScriptTokenDataForwardsPtr() : ptr(0) {}
-	CScriptTokenDataForwardsPtr(const CScriptTokenDataForwardsPtr &Copy) : ptr(0) { *this=Copy; }
-	CScriptTokenDataForwardsPtr &operator=(const CScriptTokenDataForwardsPtr &Copy) {
-		if(ptr != Copy.ptr) {
-			if(ptr) ptr->unref();
-			if((ptr = Copy.ptr)) ptr->ref();
-		}
-		return *this;
-	}
-	CScriptTokenDataForwardsPtr(CScriptTokenDataForwards &Init) { (ptr=&Init)->ref(); }
-	~CScriptTokenDataForwardsPtr() { if(ptr) ptr->unref(); }
-	CScriptTokenDataForwards *operator->() { return ptr; }
-	operator bool() { return ptr!=0; }
-	bool operator==(const CScriptTokenDataForwardsPtr& rhs) { return ptr==rhs.ptr; }
-
-private:
-	CScriptTokenDataForwards *ptr;
-};
-#else
-//typedef CScriptTokenDataPtr<CScriptTokenDataForwards> CScriptTokenDataForwardsPtr;
 typedef std::shared_ptr<CScriptTokenDataForwards> CScriptTokenDataForwardsPtr;
-#endif
-
 typedef std::vector<CScriptTokenDataForwardsPtr> FORWARDER_VECTOR_t;
 
 class CScriptTokenDataLoop : public fixed_size_object<CScriptTokenDataLoop> {
@@ -556,7 +531,6 @@ public:
 
 	TOKEN_VECT body;
 };
-
 
 class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry> {
 	CScriptTokenDataTry() = default;
@@ -637,12 +611,7 @@ private:
 	std::variant<std::monostate, int32_t, double, std::shared_ptr<CScriptTokenDataString>, std::shared_ptr<CScriptTokenDataFnc>, 
 		std::shared_ptr<CScriptTokenDataObjectLiteral>, std::shared_ptr<CScriptTokenDataDestructuringVar>, 
 		std::shared_ptr<CScriptTokenDataArrayComprehensionsBody>, std::shared_ptr<CScriptTokenDataLoop>, std::shared_ptr<CScriptTokenDataIf>,
-		std::shared_ptr<CScriptTokenDataTry>, std::shared_ptr<CScriptTokenDataForwards>/*, std::shared_ptr<CScriptTokenData>*/> data;
-//	union {
-//		int32_t									intData;
-//		double									*floatData;
-// 		std::shared_ptr<CScriptTokenData>		tokenData;
-// 	};
+		std::shared_ptr<CScriptTokenDataTry>, std::shared_ptr<CScriptTokenDataForwards>> data;
 };
 
 

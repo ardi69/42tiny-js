@@ -41,9 +41,6 @@
 #	include <sys/time.h>
 #endif
 
-
-using namespace std;
-
 #ifndef _MSC_VER
 
 #define localtime_s(tm, time) localtime_r(time, tm)
@@ -67,7 +64,7 @@ public:
 	static int64_t now();
 	static bool ParseISODate(const char *s, int64_t *result);
 	static bool ParseDate(const char *s, int64_t *result);
-	static bool Parse(const string &DateString, int64_t *result) { return ParseDate(DateString.c_str(), result); }
+	static bool Parse(const std::string &DateString, int64_t *result) { return ParseDate(DateString.c_str(), result); }
 
 	bool isValid() { return tm_isvalid; }
 	void setInvalide() { setTime(0); tm_isvalid= false; }
@@ -128,13 +125,13 @@ public:
 
 	int32_t getTimezoneOffset()					{ return tm_offset/60; }
 
-	string toDateString() const;
-	string toTimeString() const;
+	std::string toDateString() const;
+	std::string toTimeString() const;
 
-	string castToString() const;
-	operator string() const							{ return castToString(); }
-	string toUTCString() const						{ return CScriptTime(*this, false).castToString(); } // corresponds toGMTString()
-	string toISOString() const;					// corresponds toJSON()
+	std::string castToString() const;
+	operator std::string() const							{ return castToString(); }
+	std::string toUTCString() const						{ return CScriptTime(*this, false).castToString(); } // corresponds toGMTString()
+	std::string toISOString() const;					// corresponds toJSON()
 
 
 
@@ -583,12 +580,12 @@ bool CScriptTime::ParseDate(const char *s, int64_t *result)
 
 static const char *day_names[] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
 static const char *month_names[] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
-string CScriptTime::toDateString() const {
+std::string CScriptTime::toDateString() const {
 	char buffer[100];
 	sprintf_s(buffer, "%s %s %02d %04d", day_names[tm_wday], month_names[tm_mon], tm_mday, tm_year);
 	return buffer;
 }
-string CScriptTime::toTimeString() const {
+std::string CScriptTime::toTimeString() const {
 	char buffer[100];
 	const char *sign;
 	long offset;
@@ -598,7 +595,7 @@ string CScriptTime::toTimeString() const {
 	sprintf_s(buffer, "%02d:%02d:%02d GMT%s%04ld", tm_hour, tm_min, tm_sec, sign, offset);
 	return buffer;
 }
-string CScriptTime::castToString() const {
+std::string CScriptTime::castToString() const {
 	char buffer[100];
 	const char *sign;
 	long offset;
@@ -611,7 +608,7 @@ string CScriptTime::castToString() const {
 		sprintf_s(buffer, "%s, %02d %s %04d %02d:%02d:%02d GMT", day_names[tm_wday], tm_mday, month_names[tm_mon], tm_year, tm_hour, tm_min, tm_sec);
 	return buffer;
 }
-string CScriptTime::toISOString() const {
+std::string CScriptTime::toISOString() const {
 	char buffer[100];
 	CScriptTime utc(*this, false);
 	sprintf_s(buffer, "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ", utc.tm_year, utc.tm_mon+1, utc.tm_mday, utc.tm_hour, utc.tm_min, utc.tm_sec, utc.tm_msec);
@@ -810,7 +807,7 @@ void test() {
 	tm.setTime(tm.getTime());
 	tm.setTime(1970, 2, 29, 2, 59, 59);
 	tm.setTime(tm.getTime());
-	string s = tm.castToString();
+	std::string s = tm.castToString();
 	tm.setTime(1970, 3, 29, 3);
 	tm.setTime(tm.getTime());
 	tm.setTime(1970, 9, 25, 1, 59, 59, 999);
@@ -906,7 +903,7 @@ static void scDate_parse(const CFunctionsScopePtr &c, void *data) {
 	else
 		c->setReturnVar(c->constScriptVar(NaN));
 }
-static inline void scDateThrowTypeError(const CFunctionsScopePtr &c, const string &Fnc) {
+static inline void scDateThrowTypeError(const CFunctionsScopePtr &c, const std::string &Fnc) {
 	c->throwError(TypeError, Fnc + " method called on incompatible Object");
 }
 #define DATE_PROTOTYPE_GET(FNC) \

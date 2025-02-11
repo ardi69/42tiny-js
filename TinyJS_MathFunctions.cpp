@@ -1,4 +1,4 @@
-/*
+﻿/*
  * TinyJS
  *
  * A single-file Javascript-alike engine
@@ -44,23 +44,21 @@
 #include <ctime>
 #include "TinyJS.h"
 
-using namespace std;
-
-#define k_E                 exp(1.0)
-#define k_PI                3.1415926535897932384626433832795
-#define k_LN2               log((double)2)
-#define k_LN10              log((double)10)
-#define k_LOG2E             (log(k_E)/log((double)2))
-#define k_LOG10E            log10(k_E)
-#define k_SQRT1_2           sqrt((double)0.5)
-#define k_SQRT2             sqrt((double)2)
-
+inline constexpr double k_PI		= 3.1415926535897932384626433832795;  // π
+inline constexpr double k_E			= 2.7182818284590452353602874713527;  // exp(1.0)
+inline constexpr double k_LN2		= 0.69314718055994530941723212145818; // log(2.0)
+inline constexpr double k_LN10		= 2.3025850929940456840179914546844;  // log(10.0)
+inline constexpr double k_LOG2E		= 1.4426950408889634073599246810019;  // log(E) / log(2.0)
+inline constexpr double k_LOG10E	= 0.43429448190325182765112891891661; // log10(E)
+inline constexpr double k_SQRT1_2	= 0.70710678118654752440084436210485; // sqrt(0.5)
+inline constexpr double k_SQRT2		= 1.4142135623730950488016887242097;  // sqrt(2.0)
+/*
 #define F_ABS(a)            ((a)>=0 ? (a) : (-(a)))
 #define F_MIN(a,b)          ((a)>(b) ? (b) : (a))
 #define F_MAX(a,b)          ((a)>(b) ? (a) : (b))
 #define F_SGN(a)            ((a)>0 ? 1 : ((a)<0 ? -1 : 0 ))
 #define F_RNG(a,min,max)    ((a)<(min) ? min : ((a)>(max) ? max : a ))
- 
+ */
 #if defined(_MSC_VER) && _MSC_VER <= 1700
 namespace
 {

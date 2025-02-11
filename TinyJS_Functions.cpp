@@ -44,7 +44,6 @@
 #include <time.h>
 #include "TinyJS.h"
 
-using namespace std;
 // ----------------------------------------------- Actual Functions
 
 static void scTrace(const CFunctionsScopePtr &c, void * userdata) {
@@ -104,7 +103,7 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 			offset++;
 		}
 		if(offset && it != arr->Childs.end())
-			(*it)->reName(to_string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
+			(*it)->reName(std::to_string((uint32_t)strtoul((*it)->getName().c_str(), 0, 10)-offset) );
 	}
 	if (offset) {
 		arr->setProperty("length", c->newScriptVar(arr->getLength() - offset));
@@ -113,10 +112,10 @@ static void scArrayRemove(const CFunctionsScopePtr &c, void *data) {
 }
 
 static void scArrayJoin(const CFunctionsScopePtr &c, void *data) {
-	string sep = c->getArgument("separator")->toString();
+	std::string sep = c->getArgument("separator")->toString();
 	CScriptVarPtr arr = c->getArgument("this");
 
-	ostringstream sstr;
+	std::ostringstream sstr;
 	uint32_t l = arr->getLength();
 	for (uint32_t i=0;i<l;i++) {
 		if (i>0) sstr << sep;
@@ -146,7 +145,7 @@ static void scArrayPop(const CFunctionsScopePtr &c, void *data) {
 	uint32_t len = c->getLength(arr);
 	if(len) {
 		c->setReturnVar(c->getPropertyValue(arr, len-1));
-		arr->removeChild(to_string(len-1));
+		arr->removeChild(std::to_string(len-1));
 	} else
 		c->setReturnVar(c->constScriptVar(Undefined));
 }
@@ -169,7 +168,7 @@ namespace {
 			} else if(b->getVarPtr()->isUndefined())
 				return true;
 			else if(fnc) {
-				vector<CScriptVarPtr> arguments;
+				std::vector<CScriptVarPtr> arguments;
 				arguments.push_back(a);
 				arguments.push_back(b);
 				return c->getContext()->callFunction(fnc, arguments)->toNumber().toInt32() < 0;
@@ -211,7 +210,7 @@ static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 		sort(begin, arr->Childs.end(), ::cmp_fnc(c, cmp_fnc));
 		uint32_t idx = 0;
 		for(SCRIPTVAR_CHILDS_it it=begin; it != arr->Childs.end(); ++it, ++idx)
-			(*it)->reName(to_string(idx));
+			(*it)->reName(std::to_string(idx));
 		sort(begin, arr->Childs.end(), cmp_by_name);
 	}
 	c->setReturnVar(arr);
