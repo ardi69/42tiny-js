@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-11 17:40)
+Version 0.10.0 (2025-02-12 23:45)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -108,3 +108,5 @@ Version 0.10.0 (2025-02-11 17:40)
 * removed: dynamic_cast<CScriptTokenData...> now std::variant is used no RTTI overhead
 * added: all CScriptTokenData... now hold in std::shared_ptr
 * removed global using namespace std; in all cpp-files
+* replaced dynamic_cast with CScriptVarDynamicCast (useing of custom RTTI) ca. 7x faster then dynamic_cast
+* removed unneeded deleted copy-constructors

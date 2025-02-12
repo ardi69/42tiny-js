@@ -3394,7 +3394,6 @@ CScriptVarPtr CScriptVarPrimitive::toString_CallBack( CScriptResult &execute, in
 
 declare_dummy_t(Undefined);
 CScriptVarUndefined::CScriptVarUndefined(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
-CScriptVarUndefined::~CScriptVarUndefined() {}
 bool CScriptVarUndefined::isUndefined() { return true; }
 
 CNumber CScriptVarUndefined::toNumber_Callback() { return NaN; }
@@ -3408,7 +3407,6 @@ std::string CScriptVarUndefined::getVarType() { return "undefined"; }
 
 declare_dummy_t(Null);
 CScriptVarNull::CScriptVarNull(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
-CScriptVarNull::~CScriptVarNull() {}
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
@@ -3429,7 +3427,6 @@ CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : 
 	acc->getVarPtr()->addChild(TINYJS_ACCESSOR_GET_VAR, getter, 0);
 */
 }
-CScriptVarString::~CScriptVarString() {}
 bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
@@ -3437,7 +3434,7 @@ CNumber CScriptVarString::toNumber_Callback() { return CNumber(data.c_str()); }
 std::string CScriptVarString::toCString(int radix/*=0*/) { return data; }
 
 std::string CScriptVarString::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) { return indentString+getJSString(data); }
-std::string CScriptVarString::getVarType() { return "std::string"; }
+std::string CScriptVarString::getVarType() { return "string"; }
 
 CScriptVarPtr CScriptVarString::toObject() {
 	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(this), context->stringPrototype);
@@ -4088,7 +4085,6 @@ double CNumber::toDouble() const
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarNumber::CScriptVarNumber(CTinyJS *Context, const CNumber &Data) : CScriptVarPrimitive(Context, Context->numberPrototype), data(Data) {}
-CScriptVarNumber::~CScriptVarNumber() {}
 bool CScriptVarNumber::isNumber() { return true; }
 bool CScriptVarNumber::isInt() { return data.isInt32(); }
 bool CScriptVarNumber::isDouble() { return data.isDouble(); }
@@ -4118,7 +4114,6 @@ define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarBool::CScriptVarBool(CTinyJS *Context, bool Data) : CScriptVarPrimitive(Context, Context->booleanPrototype), data(Data) {}
-CScriptVarBool::~CScriptVarBool() {}
 bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
@@ -4135,7 +4130,6 @@ CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimiti
 
 declare_dummy_t(Object);
 CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
-CScriptVarObject::~CScriptVarObject() {}
 
 void CScriptVarObject::removeAllChildren()
 {
@@ -4204,7 +4198,6 @@ void CScriptVarObject::setTemporaryMark_recursive( uint32_t ID) {
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(StopIteration);
-CScriptVarObjectTypeTagged::~CScriptVarObjectTypeTagged() {}
 std::string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName; }
 
 
@@ -4221,7 +4214,6 @@ CScriptVarError::CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char 
 	if(column>=0) addChild("column", newScriptVar(column+1));
 }
 
-CScriptVarError::~CScriptVarError() {}
 bool CScriptVarError::isError() { return true; }
 
 CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int radix) {
@@ -4274,8 +4266,6 @@ CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, C
 	acc->getVarPtr()->addChild(TINYJS_ACCESSOR_SET_VAR, setter, 0);
 */
 }
-
-CScriptVarArray::~CScriptVarArray() {}
 bool CScriptVarArray::isArray() { return true; }
 std::string CScriptVarArray::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
@@ -4429,7 +4419,6 @@ CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, 
 	addChild("regexp", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
 	addChild("lastIndex", newScriptVar(0));
 }
-CScriptVarRegExp::~CScriptVarRegExp() {}
 bool CScriptVarRegExp::isRegExp() { return true; }
 //int CScriptVarRegExp::getInt() {return strtol(regexp.c_str(),0,0); }
 //bool CScriptVarRegExp::getBool() {return regexp.length()!=0;}
@@ -4528,7 +4517,6 @@ CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS *Context, const CSc
 	pos = keys.begin();
 	addChild("next", ::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
 }
-CScriptVarDefaultIterator::~CScriptVarDefaultIterator() {}
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
 void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *data) {
 	if(pos==keys.end()) throw constScriptVar(StopIteration);
@@ -4747,7 +4735,6 @@ CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr Bound
 	boundedArguments(BoundedArguments) {
 		getFunctionData()->name = BoundedFunction->getFunctionData()->name;
 }
-CScriptVarFunctionBounded::~CScriptVarFunctionBounded(){}
 bool CScriptVarFunctionBounded::isBounded() { return true; }
 void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
 	CScriptVarFunction::setTemporaryMark_recursive(ID);
@@ -4788,7 +4775,6 @@ CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, void *Userd
 	}
 	setFunctionData(FncData);
 }
-CScriptVarFunctionNative::~CScriptVarFunctionNative() {}
 bool CScriptVarFunctionNative::isNative() { return true; }
 
 
@@ -4796,7 +4782,6 @@ bool CScriptVarFunctionNative::isNative() { return true; }
 /// CScriptVarFunctionNativeCallback
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunctionNativeCallback::~CScriptVarFunctionNativeCallback() {}
 void CScriptVarFunctionNativeCallback::callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
 
@@ -4822,7 +4807,6 @@ CScriptVarAccessor::CScriptVarAccessor( CTinyJS *Context, const CScriptVarFuncti
 		addChild(TINYJS_ACCESSOR_SET_VAR, setter, 0);
 }
 
-CScriptVarAccessor::~CScriptVarAccessor() {}
 bool CScriptVarAccessor::isAccessor() { return true; }
 bool CScriptVarAccessor::isPrimitive()	{ return false; }
 std::string CScriptVarAccessor::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
@@ -4844,7 +4828,6 @@ std::string CScriptVarAccessor::getVarType() { return "accessor"; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Scope);
-CScriptVarScope::~CScriptVarScope() {}
 bool CScriptVarScope::isObject() { return false; }
 CScriptVarPtr CScriptVarScope::scopeVar() { return this; }	///< to create var like: var a = ...
 CScriptVarPtr CScriptVarScope::scopeLet() { return this; }	///< to create var like: let a = ...
@@ -4859,7 +4842,6 @@ CScriptVarScopePtr CScriptVarScope::getParent() { return CScriptVarScopePtr(); }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(ScopeFnc);
-CScriptVarScopeFnc::~CScriptVarScopeFnc() {}
 CScriptVarLinkWorkPtr CScriptVarScopeFnc::findInScopes(const std::string &childName) {
 	CScriptVarLinkWorkPtr ret = findChild(childName);
 	if( !ret ) {
@@ -4959,7 +4941,6 @@ CScriptVarScopeLet::CScriptVarScopeLet(const CScriptVarScopePtr &Parent) // cons
 	: CScriptVarScope(Parent->getContext()), parent(addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0))
 	, letExpressionInitMode(false) {}
 
-CScriptVarScopeLet::~CScriptVarScopeLet() {}
 CScriptVarPtr CScriptVarScopeLet::scopeVar() {						// to create var like: var a = ...
 	return getParent()->scopeVar();
 }
@@ -4981,7 +4962,6 @@ CScriptVarLinkWorkPtr CScriptVarScopeLet::findInScopes(const std::string &childN
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(ScopeWith);
-CScriptVarScopeWith::~CScriptVarScopeWith() {}
 CScriptVarPtr CScriptVarScopeWith::scopeLet() { 							// to create var like: let a = ...
 	return getParent()->scopeLet();
 }
@@ -5244,8 +5224,8 @@ CTinyJS::CTinyJS() {
 	addNative("function require(jsFile)", this, &CTinyJS::native_require);
 	addNative("function isNaN(objc)", this, &CTinyJS::native_isNAN);
 	addNative("function isFinite(objc)", this, &CTinyJS::native_isFinite);
-	addNative("function parseInt(std::string, radix)", this, &CTinyJS::native_parseInt);
-	addNative("function parseFloat(std::string)", this, &CTinyJS::native_parseFloat);
+	addNative("function parseInt(string, radix)", this, &CTinyJS::native_parseInt);
+	addNative("function parseFloat(string)", this, &CTinyJS::native_parseFloat);
 
 	root->addChild("JSON", newScriptVar(Object), SCRIPTVARLINK_BUILDINDEFAULT);
 	addNative("function JSON.parse(text, reviver)", this, &CTinyJS::native_JSON_parse);
@@ -7458,13 +7438,13 @@ void CTinyJS::native_isFinite(const CFunctionsScopePtr &c, void *data) {
 
 void CTinyJS::native_parseInt(const CFunctionsScopePtr &c, void *) {
 	CNumber result;
-	result.parseInt(c->getArgument("std::string")->toString(), c->getArgument("radix")->toNumber().toInt32());
+	result.parseInt(c->getArgument("string")->toString(), c->getArgument("radix")->toNumber().toInt32());
 	c->setReturnVar(c->newScriptVar(result));
 }
 
 void CTinyJS::native_parseFloat(const CFunctionsScopePtr &c, void *) {
 	CNumber result;
-	result.parseFloat(c->getArgument("std::string")->toString());
+	result.parseFloat(c->getArgument("string")->toString());
 	c->setReturnVar(c->newScriptVar(result));
 }
 
