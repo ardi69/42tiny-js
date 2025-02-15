@@ -2365,8 +2365,9 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 					pushToken(State.Tokens); // Precedence 14
 					if (l->tk == LEX_ID && l->tkStr == "this")
 						throw CScriptException(SyntaxError, tk == LEX_PLUSPLUS ? "invalid increment operand" : "invalid decrement operand", l->currentFile, l->currentLine(), l->currentColumn());
-					[[fallthrough]];
+//					[[fallthrough]];
 				}
+			   [[fallthrough]]; // fall
 			default:
 				right2left_end = true;
 			}
@@ -2606,7 +2607,7 @@ int64_t CScriptPropertyName::name2arrayIdx(const std::string &Name) {
 #if _DEBUG
 static uint32_t currentDebugID = 0;
 #endif
-CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
+CScriptVar::CScriptVar(CTinyJS* Context, const CScriptVarPtr& Prototype) : prototype(Prototype) {
 	extensible = true;
 	context = Context;
 	memset(temporaryMark, 0, sizeof(temporaryMark));
@@ -2618,11 +2619,6 @@ CScriptVar::CScriptVar(CTinyJS *Context, const CScriptVarPtr &Prototype) {
 	}
 	context->first = this;
 	prev = 0;
-	refs = 0;
-	if (Prototype) {
-		prototype = Prototype->ref();
-	} else
-		prototype = 0;
 #if DEBUG_MEMORY
 	mark_allocated(this);
 #endif
@@ -2637,7 +2633,6 @@ CScriptVar::~CScriptVar(void) {
 	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it)
 		(*it)->setOwner(0);
 	removeAllChildren();
-	if (prototype) prototype->unref();
 	if(prev)
 		prev->next = next;
 	else
@@ -2651,8 +2646,7 @@ CScriptVarPtr CScriptVar::getPrototype() {
 }
 
 void CScriptVar::setPrototype(const CScriptVarPtr &Prototype) {
-	if (prototype) { prototype->unref(); }
-	if((prototype = Prototype.getVar())) prototype->ref();
+	prototype = Prototype;
 }
 
 /// Type
@@ -2713,7 +2707,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintString(CScriptResult &execute
 			}
 			return ret;
 		}
-		return this;
+		return shared_from_this();
 	}
 	return constScriptVar(Undefined);
 }
@@ -2734,7 +2728,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintNumber(CScriptResult &execute
 			}
 			return ret;
 		}
-		return this;
+		return shared_from_this();
 	}
 	return constScriptVar(Undefined);
 }
@@ -2745,15 +2739,15 @@ CScriptVarPtr CScriptVar::callJS_valueOf(CScriptResult &execute) {
 		if(FncValueOf && FncValueOf != context->objectPrototype_valueOf) { // custom valueOf in JavaScript
 			if(FncValueOf->isFunction()) { // no Error if toString not callable
 				std::vector<CScriptVarPtr> Params;
-				return context->callFunction(execute, FncValueOf, Params, this);
+				return context->callFunction(execute, FncValueOf, Params, shared_from_this());
 			}
 		} else
 			return valueOf_CallBack();
 	}
-	return this;
+	return shared_from_this();
 }
 CScriptVarPtr CScriptVar::valueOf_CallBack() {
-	return this;
+	return shared_from_this();
 }
 
 CScriptVarPtr CScriptVar::callJS_toString(CScriptResult &execute, int radix/*=0*/) {
@@ -2763,15 +2757,15 @@ CScriptVarPtr CScriptVar::callJS_toString(CScriptResult &execute, int radix/*=0*
 			if(FncToString->isFunction()) { // no Error if toString not callable
 				std::vector<CScriptVarPtr> Params;
 				Params.push_back(newScriptVar(radix));
-				return context->callFunction(execute, FncToString, Params, this);
+				return context->callFunction(execute, FncToString, Params, shared_from_this());
 			}
 		} else
 			return toString_CallBack(execute, radix);
 	}
-	return this;
+	return shared_from_this();
 }
 CScriptVarPtr CScriptVar::toString_CallBack(CScriptResult &execute, int radix/*=0*/) {
-	return this;
+	return shared_from_this();
 }
 
 CNumber CScriptVar::toNumber() { return toPrimitive_hintNumber()->toNumber_Callback(); };
@@ -2803,11 +2797,11 @@ CScriptVarPtr CScriptVar::toIterator(IteratorMode Mode/*=RETURN_ARRAY*/) {
 }
 CScriptVarPtr CScriptVar::toIterator(CScriptResult &execute, IteratorMode Mode/*=RETURN_ARRAY*/) {
 	if(!execute) return constScriptVar(Undefined);
-	if(isIterator()) return this;
+	if (isIterator()) return shared_from_this();
 	CScriptVarFunctionPtr Generator(findChildWithPrototypeChain("__iterator__").getter(execute));
 	std::vector<CScriptVarPtr> args;
-	if(Generator) return context->callFunction(execute, Generator, args, this);
-	return newScriptVarDefaultIterator(context, this, Mode);
+	if (Generator) return context->callFunction(execute, Generator, args, shared_from_this());
+	return newScriptVarDefaultIterator(context, shared_from_this(), Mode);
 }
 
 std::string CScriptVar::getParsableString() {
@@ -2967,7 +2961,7 @@ CScriptVarLinkWorkPtr CScriptVar::getOwnProperty(const std::string &childName) {
 CScriptVarLinkPtr CScriptVar::findChildInPrototypeChain(const std::string &childName) {
 	unsigned int uniqueID = context->allocUniqueID();
 	// Look for links to actual parent classes
-	CScriptVarPtr object = this;
+	CScriptVarPtr object = shared_from_this();
 	CScriptVarPtr __proto__;
 	while( object->getTemporaryMark() != uniqueID && (__proto__ = object->getPrototype()) ) {
 		CScriptVarLinkPtr implementation = __proto__->findChild(childName);
@@ -2988,7 +2982,7 @@ CScriptVarLinkWorkPtr CScriptVar::findChildWithPrototypeChain(const std::string 
 	child = findChildInPrototypeChain(childName);
 	if(child) {
 		child(child->getVarPtr(), child->getName(), child->getFlags()); // recreate implementation
-		child.setReferencedOwner(this); // fake referenced Owner
+		child.setReferencedOwner(shared_from_this()); // fake referenced Owner
 	}
 	return child;
 }
@@ -3041,8 +3035,7 @@ CScriptVarLinkPtr CScriptVar::addChild(const std::string &childName, const CScri
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		link = CScriptVarLinkPtr(child?child:constScriptVar(Undefined), childName, linkFlags);
-		link->setOwner(this);
-
+		link->setOwner(shared_from_this());
 		Childs.insert(it, 1, link);
 #ifdef _DEBUG
 	} else {
@@ -3062,7 +3055,7 @@ CScriptVarLinkPtr CScriptVar::addChildOrReplace(const std::string &childName, co
 	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		CScriptVarLinkPtr link(child, childName, linkFlags);
-		link->setOwner(this);
+		link->setOwner(shared_from_this());
 		Childs.insert(it, 1, link);
 		return link;
 	} else {
@@ -3167,7 +3160,7 @@ uint32_t CScriptVar::getArrayLength() {
 
 CScriptVarPtr CScriptVar::mathsOp(const CScriptVarPtr &b, int op) {
 	CScriptResult execute;
-	return context->mathsOp(execute, this, b, op);
+	return context->mathsOp(execute, shared_from_this(), b, op);
 }
 
 void CScriptVar::trace(const std::string &name) {
@@ -3215,31 +3208,9 @@ std::string CScriptVar::getFlagsAsString() {
 	return flagstr;
 }
 
-CScriptVar *CScriptVar::ref() {
-	refs++;
-	return this;
-}
-void CScriptVar::unref() {
-	refs--;
-	if (refs<0)
-		do
-		{
-		} while (0);
-	ASSERT(refs>=0); // printf("OMFG, we have unreffed too far!\n");
-	if (refs==0)
-		delete this;
-}
-
-int CScriptVar::getRefs() const {
-	return refs;
-}
-
 void CScriptVar::cleanUp4Destroy() {
 	removeAllChildren();
-	if (prototype) {
-		prototype->unref();
-		prototype = 0;
-	}
+	prototype.reset();
 }
 
 void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
@@ -3259,7 +3230,7 @@ void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const std::string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/)
-	: name(Name), owner(0), flags(Flags), refs(0) {
+	: name(Name), flags(Flags), refs(0) {
 #if DEBUG_MEMORY
 	mark_allocated(this);
 #endif
@@ -3291,7 +3262,7 @@ void CScriptVarLink::unref() {
 CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const std::string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
 	if(link && link->refs == 1) { // the link is only refered by this
 		link->name = name;
-		link->owner = 0;
+		link->owner.reset();
 		link->flags = flags;
 		link->var = var;
 	} else {
@@ -3380,9 +3351,9 @@ CScriptVarLinkWorkPtr CScriptVarLinkWorkPtr::setter( CScriptResult &execute, con
 CScriptVarPrimitive::~CScriptVarPrimitive(){}
 
 bool CScriptVarPrimitive::isPrimitive() { return true; }
-CScriptVarPrimitivePtr CScriptVarPrimitive::getRawPrimitive() { return this; }
+CScriptVarPrimitivePtr CScriptVarPrimitive::getRawPrimitive() { return shared_from_this(); }
 bool CScriptVarPrimitive::toBoolean() { return false; }
-CScriptVarPtr CScriptVarPrimitive::toObject() { return this; }
+CScriptVarPtr CScriptVarPrimitive::toObject() { return shared_from_this(); }
 CScriptVarPtr CScriptVarPrimitive::toString_CallBack( CScriptResult &execute, int radix/*=0*/ ) {
 	return newScriptVar(toCString(radix));
 }
@@ -3393,7 +3364,8 @@ CScriptVarPtr CScriptVarPrimitive::toString_CallBack( CScriptResult &execute, in
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Undefined);
-CScriptVarUndefined::CScriptVarUndefined(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
+CScriptVarUndefined::CScriptVarUndefined(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
+
 bool CScriptVarUndefined::isUndefined() { return true; }
 
 CNumber CScriptVarUndefined::toNumber_Callback() { return NaN; }
@@ -3406,7 +3378,7 @@ std::string CScriptVarUndefined::getVarType() { return "undefined"; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Null);
-CScriptVarNull::CScriptVarNull(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
+CScriptVarNull::CScriptVarNull(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
@@ -3417,16 +3389,7 @@ std::string CScriptVarNull::getVarType() { return "null"; }
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
 //////////////////////////////////////////////////////////////////////////
-
-CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {
-	addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
-/*
-	CScriptVarLinkPtr acc = addChild("length", newScriptVar(Accessor), 0);
-	CScriptVarFunctionPtr getter(::newScriptVar(Context, this, &CScriptVarString::native_Length, 0));
-	getter->setFunctionData(new CScriptTokenDataFnc);
-	acc->getVarPtr()->addChild(TINYJS_ACCESSOR_GET_VAR, getter, 0);
-*/
-}
+CScriptVarString::CScriptVarString(CTinyJS* Context, const std::string& Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {}
 bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
@@ -3437,13 +3400,13 @@ std::string CScriptVarString::getParsableString(const std::string &indentString,
 std::string CScriptVarString::getVarType() { return "string"; }
 
 CScriptVarPtr CScriptVarString::toObject() {
-	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(this), context->stringPrototype);
+	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->stringPrototype);
 	ret->addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
 	return ret;
 }
 
 CScriptVarPtr CScriptVarString::toString_CallBack( CScriptResult &execute, int radix/*=0*/ ) {
-	return this;
+	return shared_from_this();
 }
 
 CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const std::string &childName) {
@@ -3455,10 +3418,10 @@ CScriptVarLinkWorkPtr CScriptVarString::getOwnProperty(const std::string &childN
 			child(newScriptVar(data.substr(Idx, 1)), childName, SCRIPTVARLINK_ENUMERABLE);
 		else
 			child(constScriptVar(Undefined), childName, SCRIPTVARLINK_ENUMERABLE);
-		child.setReferencedOwner(this); // fake referenced Owner
+		child.setReferencedOwner(shared_from_this()); // fake referenced Owner
 		return child;
 	}
-	return 0;
+	return CScriptVarLinkWorkPtr();
 }
 
 void CScriptVarString::keys(STRING_SET_t &Keys, bool OnlyEnumerable/*=true*/, uint32_t ID/*=0*/) {
@@ -3490,39 +3453,39 @@ Infinity InfinityNegative(-1);
 
 CNumber::CNumber(int64_t Value) {
 	if(std::numeric_limits<int32_t>::min()<=Value && Value<= std::numeric_limits<int32_t>::max())
-		type=tInt32, Int32=int32_t(Value);
+		type= CNumber::NType::tInt32, Int32=int32_t(Value);
 	else
-		type=tDouble, Double=(double)Value;
+		type= CNumber::NType::tDouble, Double=(double)Value;
 }
 CNumber::CNumber(uint64_t Value) {
 	if(Value<=(uint32_t)std::numeric_limits<int32_t>::max())
-		type=tInt32, Int32=int32_t(Value);
+		type= CNumber::NType::tInt32, Int32=int32_t(Value);
 	else
-		type=tDouble, Double=(double)Value;
+		type= CNumber::NType::tDouble, Double=(double)Value;
 }
 CNumber::CNumber(double Value) {
 	if(Value == 0.0 && signbit(Value))
-		type=tnNULL, Int32=0;
+		type= CNumber::NType::tnNULL, Int32=0;
 	else if(isinf(Value))
-		type=tInfinity, Int32=Value > 0 ? 1 : -1;
+		type= CNumber::NType::tInfinity, Int32=Value > 0 ? 1 : -1;
 	else if(isnan(Value))
-		type=tNaN, Int32=0;
+		type= CNumber::NType::tNaN, Int32=0;
 	else {
 		double truncated = trunc(Value);  // Ganzzahliger Anteil
 		if (Value == truncated &&
 			truncated >= std::numeric_limits<int32_t>::min() &&
 			truncated <= std::numeric_limits<int32_t>::max()) {
-			type = tInt32;
+			type = CNumber::NType::tInt32;
 			Int32 = static_cast<int32_t>(truncated);
 		} else {
-			type = tDouble;
+			type = CNumber::NType::tDouble;
 			Double = Value;
 		}
 	}
 }
 
 // **String-Zuweisung**: Parst die Eingabe und speichert sie
-CNumber::CNumber(std::string_view str) : type(tNaN), Int32(0) {
+CNumber::CNumber(std::string_view str) : type(CNumber::NType::tNaN), Int32(0) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) { // Falls nur Leerzeichen enthalten sind
@@ -3552,7 +3515,7 @@ CNumber::CNumber(std::string_view str) : type(tNaN), Int32(0) {
 	// 4. Falls nach der Zahl noch Zeichen stehen ? NaN setzen
 	size_t right = endptr.find_last_not_of(" \t\n\r\f\v");
 	if (right != std::string_view::npos) {
-		type = tNaN;
+		type = CNumber::NType::tNaN;
 		Int32 = 0;
 	}
 }
@@ -3561,7 +3524,7 @@ CNumber::CNumber(std::string_view str) : type(tNaN), Int32(0) {
 int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view* endptr) {
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) {
-		type = tNaN;
+		type = CNumber::NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return 0;
@@ -3595,7 +3558,7 @@ int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view*
 	}
 
 	if (radix < 2 || radix > 36) { // Ungültige Basis ? NaN
-		type = tNaN;
+		type = CNumber::NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return 0;
@@ -3625,10 +3588,10 @@ int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view*
 		str.remove_prefix(1);
 	}
 	if (useFloat) {
-		type = tDouble;
+		type = CNumber::NType::tDouble;
 		Double = negative ? -result_f : result_f;
 	} else {
-		type = tInt32;
+		type = CNumber::NType::tInt32;
 		Int32 = negative ? -result_i : result_i;
 	}
 	return radix;
@@ -3639,7 +3602,7 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) {
-		type = tNaN;
+		type = CNumber::NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return;
@@ -3669,7 +3632,7 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
 
 	if (ec != std::errc{}) { // Fehler beim Parsen ? NaN
-		type = tNaN;
+		type = CNumber::NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return;
@@ -3682,20 +3645,20 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 }
 
 CNumber CNumber::add(const CNumber &Value) const {
-	if(type==tNaN || Value.type==tNaN)
-		return CNumber(tNaN);
-	else if(type==tInfinity || Value.type==tInfinity) {
-		if(type!=tInfinity)
+	if(type== CNumber::NType::tNaN || Value.type== CNumber::NType::tNaN)
+		return CNumber(CNumber::NType::tNaN);
+	else if(type== CNumber::NType::tInfinity || Value.type== CNumber::NType::tInfinity) {
+		if(type!= CNumber::NType::tInfinity)
 			return Value;
-		else if(Value.type!=tInfinity || sign()==Value.sign())
+		else if(Value.type!= CNumber::NType::tInfinity || sign()==Value.sign())
 			return *this;
 		else
-			return CNumber(tNaN);
-	} else if(type==tnNULL)
+			return CNumber(CNumber::NType::tNaN);
+	} else if(type== CNumber::NType::tnNULL)
 		return Value;
-	else if(Value.type==tnNULL)
+	else if(Value.type== CNumber::NType::tnNULL)
 		return *this;
-	else if(type==tDouble || Value.type==tDouble)
+	else if(type== CNumber::NType::tDouble || Value.type== CNumber::NType::tDouble)
 		return CNumber(toDouble()+Value.toDouble());
 	else {
 		int32_t range_max = std::numeric_limits<int32_t>::max();
@@ -3711,18 +3674,18 @@ CNumber CNumber::add(const CNumber &Value) const {
 
 CNumber CNumber::operator-() const {
 	switch(type) {
-	case tInt32:
+	case CNumber::NType::tInt32:
 		if(Int32==0)
 			return CNumber(NegativeZero);
 		[[fallthrough]];
-	case tnNULL:
+	case CNumber::NType::tnNULL:
 		return CNumber(-Int32);
-	case tDouble:
+	case CNumber::NType::tDouble:
 		return CNumber(-Double);
-	case tInfinity:
-		return CNumber(tInfinity, -Int32);
+	case CNumber::NType::tInfinity:
+		return CNumber(CNumber::NType::tInfinity, -Int32);
 	default:
-		return CNumber(tNaN);
+		return CNumber(CNumber::NType::tNaN);
 	}
 }
 
@@ -3741,19 +3704,20 @@ static inline int bits(int32_t Value) {
 }
 
 CNumber CNumber::multi(const CNumber &Value) const {
-	if(type==tNaN || Value.type==tNaN)
-		return CNumber(tNaN);
-	else if(type==tInfinity || Value.type==tInfinity) {
+	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN)
+		return CNumber(CNumber::NType::tNaN);
+	else if(type== CNumber::NType::tInfinity || Value.type== CNumber::NType::tInfinity) {
 		if(isZero() || Value.isZero())
-			return CNumber(tNaN);
+			return CNumber(CNumber::NType::tNaN);
 		else
-			return CNumber(tInfinity, sign()==Value.sign()?1:-1);
+			return CNumber(CNumber::NType::tInfinity, sign()==Value.sign()?1:-1);
 	} else if(isZero() || Value.isZero()) {
 		if(sign()==Value.sign())
 			return CNumber(0);
 		else
 			return CNumber(NegativeZero);
-	} else if(type==tDouble || Value.type==tDouble)
+	}
+	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble)
 		return CNumber(toDouble()*Value.toDouble());
 	else {
 		// Int32*Int32
@@ -3766,18 +3730,18 @@ CNumber CNumber::multi(const CNumber &Value) const {
 
 
 CNumber CNumber::div( const CNumber &Value ) const {
-	if(type==tNaN || Value.type==tNaN) return CNumber(tNaN);
+	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return CNumber(CNumber::NType::tNaN);
 	int Sign = sign()*Value.sign();
-	if(type==tInfinity) {
-		if(Value.type==tInfinity) return CNumber(tNaN);
-		else return CNumber(tInfinity, Sign);
+	if(type== CNumber::NType::tInfinity) {
+		if (Value.type == CNumber::NType::tInfinity) return CNumber(CNumber::NType::tNaN);
+		else return CNumber(CNumber::NType::tInfinity, Sign);
 	}
-	if(Value.type==tInfinity) {
+	if (Value.type == CNumber::NType::tInfinity) {
 		if(Sign<0) return CNumber(NegativeZero);
 		else return CNumber(0);
 	} else if(Value.isZero()) {
-		if(isZero()) return CNumber(tNaN);
-		else return CNumber(tInfinity, Sign);
+		if(isZero()) return CNumber(CNumber::NType::tNaN);
+		else return CNumber(CNumber::NType::tInfinity, Sign);
 	} else
 		return CNumber(toDouble() / Value.toDouble());
 }
@@ -3789,10 +3753,10 @@ CNumber CNumber::pow(const CNumber& Value) const {
 }
 
 CNumber CNumber::modulo( const CNumber &Value ) const {
-	if(type==tNaN || type==tInfinity || Value.type==tNaN || Value.isZero()) return CNumber(tNaN);
-	if(Value.type==tInfinity) return CNumber(*this);
+	if (type == CNumber::NType::tNaN || type == CNumber::NType::tInfinity || Value.type == CNumber::NType::tNaN || Value.isZero()) return CNumber(CNumber::NType::tNaN);
+	if (Value.type == CNumber::NType::tInfinity) return CNumber(*this);
 	if(isZero()) return CNumber(0);
-	if(type==tDouble || Value.type==tDouble || (Int32== std::numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */ ) {
+	if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble || (Int32 == std::numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */) {
 		double n = toDouble(), d = Value.toDouble(), q;
 #if __cplusplus >= 201103L || _MSVC_LANG >= 201103L
 		std::ignore = modf(n/d, &q);
@@ -3805,19 +3769,19 @@ CNumber CNumber::modulo( const CNumber &Value ) const {
 }
 
 CNumber CNumber::round() const {
-	if(type != tDouble) return CNumber(*this);
+	if(type != CNumber::NType::tDouble) return CNumber(*this);
 	if(Double < 0.0 && Double >= -0.5)
 		return CNumber(NegativeZero);
 	return CNumber(::floor(Double+0.5));
 }
 
 CNumber CNumber::floor() const {
-	if(type != tDouble) return CNumber(*this);
+	if (type != CNumber::NType::tDouble) return CNumber(*this);
 	return CNumber(::floor(Double));
 }
 
 CNumber CNumber::ceil() const {
-	if(type != tDouble) return CNumber(*this);
+	if(type != CNumber::NType::tDouble) return CNumber(*this);
 	return CNumber(::ceil(Double));
 }
 
@@ -3856,37 +3820,36 @@ CNumber CNumber::clamp(const CNumber &min, const CNumber &max) const {
 }
 
 int CNumber::less( const CNumber &Value ) const {
-	if(type==tNaN || Value.type==tNaN) return 0;
-	else if(type==tInfinity) {
-		if(Value.type==tInfinity) return Int32<Value.Int32 ? 1 : -1;
+	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return 0;
+	else if (type == CNumber::NType::tInfinity) {
+		if (Value.type == CNumber::NType::tInfinity) return Int32 < Value.Int32 ? 1 : -1;
 		return -Int32;
-	} else if(Value.type==tInfinity)
+	} else if (Value.type == CNumber::NType::tInfinity)
 		return Value.Int32;
-	else if(isZero() && Value.isZero()) return -1;
-	else if(type==tDouble || Value.type==tDouble) return toDouble() < Value.toDouble() ? 1 : -1;
+	else if (isZero() && Value.isZero()) return -1;
+	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble) return toDouble() < Value.toDouble() ? 1 : -1;
 	return toInt32() < Value.toInt32() ? 1 : -1;
 }
 
 bool CNumber::equal( const CNumber &Value ) const {
-	if(type==tNaN || Value.type==tNaN) return false;
-	else if(type==tInfinity) {
-		if(Value.type==tInfinity) return Int32==Value.Int32;
+	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return false;
+	else if (type == CNumber::NType::tInfinity) {
+		if (Value.type == CNumber::NType::tInfinity) return Int32 == Value.Int32;
 		return false;
-	} else if(Value.type==tInfinity)
-		return false;
-	else if(isZero() && Value.isZero()) return true;
-	else if(type==tDouble || Value.type==tDouble) return toDouble() == Value.toDouble();
+	} else if (Value.type == CNumber::NType::tInfinity) return false;
+	else if (isZero() && Value.isZero()) return true;
+	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble) return toDouble() == Value.toDouble();
 	return toInt32() == Value.toInt32();
 }
 
 bool CNumber::isZero() const
 {
 	switch(type) {
-	case tInt32:
+	case CNumber::NType::tInt32:
 		return Int32==0;
-	case tnNULL:
+	case CNumber::NType::tnNULL:
 		return true;
-	case tDouble:
+	case CNumber::NType::tDouble:
 		return Double==0.0;
 	default:
 		return false;
@@ -3897,10 +3860,10 @@ bool CNumber::isInteger() const
 {
 	double integral;
 	switch(type) {
-	case tInt32:
-	case tnNULL:
+	case CNumber::NType::tInt32:
+	case CNumber::NType::tnNULL:
 		return true;
-	case tDouble:
+	case CNumber::NType::tDouble:
 		return modf(Double, &integral)==0.0;
 	default:
 		return false;
@@ -3909,12 +3872,12 @@ bool CNumber::isInteger() const
 
 int CNumber::sign() const {
 	switch(type) {
-	case tInt32:
-	case tInfinity:
+	case CNumber::NType::tInt32:
+	case CNumber::NType::tInfinity:
 		return Int32<0?-1:1;
-	case tnNULL:
+	case CNumber::NType::tnNULL:
 		return -1;
-	case tDouble:
+	case CNumber::NType::tDouble:
 		return Double<0.0?-1:1;
 	default:
 		return 1;
@@ -4031,15 +3994,15 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 	if(2 > Radix || Radix > 36)
 		Radix = 10; // todo error;
 	switch(type) {
-	case tInt32:
+	case CNumber::NType::tInt32:
 		if( (str = tiny_ltoa(Int32, Radix)) ) {
 			std::string ret(str); free(str);
 			return ret;
 		}
 		break;
-	case tnNULL:
+	case CNumber::NType::tnNULL:
 		return "0";
-	case tDouble:
+	case CNumber::NType::tDouble:
 		if(Radix==10) {
 			std::ostringstream str;
 			str.unsetf(std::ios::floatfield);
@@ -4055,9 +4018,9 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 			return ret;
 		}
 		break;
-	case tInfinity:
+	case CNumber::NType::tInfinity:
 		return Int32<0?"-Infinity":"Infinity";
-	case tNaN:
+	case CNumber::NType::tNaN:
 		return "NaN";
 	}
 	return "";
@@ -4066,15 +4029,15 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 double CNumber::toDouble() const
 {
 	switch(type) {
-	case tnNULL:
+	case CNumber::NType::tnNULL:
 		return -0.0;
-	case tInt32:
+	case CNumber::NType::tInt32:
 		return double(Int32);
-	case tDouble:
+	case CNumber::NType::tDouble:
 		return Double;
-	case tNaN:
+	case CNumber::NType::tNaN:
 		return std::numeric_limits<double>::quiet_NaN();
-	case tInfinity:
+	case CNumber::NType::tInfinity:
 		return Int32<0 ? -std::numeric_limits<double>::infinity(): std::numeric_limits<double>::infinity();
 	}
 	return 0.0;
@@ -4098,14 +4061,14 @@ std::string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(
 
 std::string CScriptVarNumber::getVarType() { return "number"; }
 
-CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->numberPrototype); }
+CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->numberPrototype); }
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
 	if(!Obj.isInt32() && !Obj.isDouble()) {
 		if(Obj.isNaN()) return Context->constScriptVar(NaN);
 		if(Obj.isInfinity()) return Context->constScriptVar(Infinity(Obj.sign()));
 		if(Obj.isNegativeZero()) return Context->constScriptVar(NegativeZero);
 	}
-	return new CScriptVarNumber(Context, Obj);
+	return CScriptVarPtr(new CScriptVarNumber(Context, Obj));
 }
 
 
@@ -4122,7 +4085,7 @@ std::string CScriptVarBool::toCString(int radix/*=0*/) { return data ? "true" : 
 
 std::string CScriptVarBool::getVarType() { return "boolean"; }
 
-CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(this), context->booleanPrototype); }
+CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->booleanPrototype); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarObject
@@ -4134,7 +4097,7 @@ CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Conte
 void CScriptVarObject::removeAllChildren()
 {
 	CScriptVar::removeAllChildren();
-	value.clear();
+	value.reset();
 }
 
 CScriptVarPrimitivePtr CScriptVarObject::getRawPrimitive() { return value; }
@@ -4174,7 +4137,7 @@ std::string CScriptVarObject::getParsableString(const std::string &indentString,
 std::string CScriptVarObject::getVarType() { return "object"; }
 std::string CScriptVarObject::getVarTypeTagName() { return "Object"; }
 
-CScriptVarPtr CScriptVarObject::toObject() { return this; }
+CScriptVarPtr CScriptVarObject::toObject() { return shared_from_this(); }
 
 CScriptVarPtr CScriptVarObject::valueOf_CallBack() {
 	if(value)
@@ -4207,13 +4170,7 @@ std::string CScriptVarObjectTypeTagged::getVarTypeTagName() { return typeTagName
 
 const char *ERROR_NAME[] = {"Error", "EvalError", "RangeError", "ReferenceError", "SyntaxError", "TypeError"};
 
-CScriptVarError::CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column) : CScriptVarObject(Context, Context->getErrorPrototype(type)) {
-	if(message && *message) addChild("message", newScriptVar(message));
-	if(file && *file) addChild("fileName", newScriptVar(file));
-	if(line>=0) addChild("lineNumber", newScriptVar(line+1));
-	if(column>=0) addChild("column", newScriptVar(column+1));
-}
-
+CScriptVarError::CScriptVarError(CTinyJS *Context, ERROR_TYPES type) : CScriptVarObject(Context, Context->getErrorPrototype(type)) {}
 bool CScriptVarError::isError() { return true; }
 
 CScriptVarPtr CScriptVarError::toString_CallBack(CScriptResult &execute, int radix) {
@@ -4254,18 +4211,7 @@ CScriptException CScriptVarError::toCScriptException()
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Array);
-CScriptVarArray::CScriptVarArray(CTinyJS *Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false) {
-	CScriptVarLinkPtr acc = addChild("length", newScriptVar(0), SCRIPTVARLINK_WRITABLE);
-/*
-	CScriptVarLinkPtr acc = addChild("length", newScriptVar(Accessor), SCRIPTVARLINK_WRITABLE);
-	CScriptVarFunctionPtr getter(::newScriptVar(Context, this, &CScriptVarArray::native_getLength, 0));
-	CScriptVarFunctionPtr setter(::newScriptVar(Context, this, &CScriptVarArray::native_setLength, 0));
-	getter->setFunctionData(new CScriptTokenDataFnc);
-	setter->setFunctionData(new CScriptTokenDataFnc);
-	acc->getVarPtr()->addChild(TINYJS_ACCESSOR_GET_VAR, getter, 0);
-	acc->getVarPtr()->addChild(TINYJS_ACCESSOR_SET_VAR, setter, 0);
-*/
-}
+CScriptVarArray::CScriptVarArray(CTinyJS* Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false) {}
 bool CScriptVarArray::isArray() { return true; }
 std::string CScriptVarArray::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
@@ -4411,14 +4357,18 @@ void CScriptVarArray::native_setLength(const CFunctionsScopePtr &c, void *data) 
 
 #ifndef NO_REGEXP
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {
-	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
-	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
-	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
-	addChild("sticky", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
-	addChild("regexp", ::newScriptVarAccessor<CScriptVarRegExp>(Context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {}
+
+CScriptVarPtr CScriptVarRegExp::init() {
+	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
+	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
+	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
+	addChild("sticky", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
+	addChild("regexp", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
 	addChild("lastIndex", newScriptVar(0));
+	return shared_from_this();
 }
+
 bool CScriptVarRegExp::isRegExp() { return true; }
 //int CScriptVarRegExp::getInt() {return strtol(regexp.c_str(),0,0); }
 //bool CScriptVarRegExp::getBool() {return regexp.length()!=0;}
@@ -4511,11 +4461,13 @@ const char * CScriptVarRegExp::ErrorStr( int Error )
 //////////////////////////////////////////////////////////////////////////
 
 //declare_dummy_t(DefaultIterator);
-CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode)
-	: CScriptVarObject(Context, Context->iteratorPrototype), mode(Mode), object(Object) {
+CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS* Context, const CScriptVarPtr& Object, IteratorMode Mode)
+	: CScriptVarObject(Context, Context->iteratorPrototype), mode(Mode), object(Object) {}
+CScriptVarPtr CScriptVarDefaultIterator::init() {
 	object->keys(keys, true);
 	pos = keys.begin();
 	addChild("next", ::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
+	return shared_from_this();
 }
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
 void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *data) {
@@ -4547,10 +4499,6 @@ CScriptVarGenerator::CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &
 	: CScriptVarObject(Context, Context->generatorPrototype), functionRoot(FunctionRoot), function(Function),
 	closed(false), yieldVarIsException(false), coroutine(this), 
 	callersStackBase(nullptr), callersScopeSize(0) , callersTokenizer(nullptr), callersHaveTry(false) {
-//		addChild("next", ::newScriptVar(context, this, &CScriptVarGenerator::native_send, 0, "Generator.next"));
-	//	addChild("send", ::newScriptVar(context, this, &CScriptVarGenerator::native_send, (void*)1, "Generator.send"));
-		//addChild("close", ::newScriptVar(context, this, &CScriptVarGenerator::native_throw, (void*)0, "Generator.close"));
-		//addChild("throw", ::newScriptVar(context, this, &CScriptVarGenerator::native_throw, (void*)1, "Generator.throw"));
 }
 #if _MSC_VER == 1600
 #pragma warning(pop)
@@ -4640,8 +4588,7 @@ int CScriptVarGenerator::Coroutine()
 	return 0;
 }
 
-CScriptVarPtr CScriptVarGenerator::yield( CScriptResult &execute, CScriptVar *YieldIn )
-{
+CScriptVarPtr CScriptVarGenerator::yield(CScriptResult& execute, const CScriptVarPtr& YieldIn) {
 	yieldVar = YieldIn;
 	coroutine.yield();
 	if(yieldVarIsException) {
@@ -4657,9 +4604,7 @@ CScriptVarPtr CScriptVarGenerator::yield( CScriptResult &execute, CScriptVar *Yi
 // CScriptVarFunction
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunction::CScriptVarFunction(CTinyJS *Context, const std::shared_ptr<CScriptTokenDataFnc> &Data) : CScriptVarObject(Context, Context->functionPrototype), data(0) {
-	setFunctionData(Data);
-}
+CScriptVarFunction::CScriptVarFunction(CTinyJS *Context) : CScriptVarObject(Context, Context->functionPrototype), data(0) {}
 bool CScriptVarFunction::isObject() { return true; }
 bool CScriptVarFunction::isFunction() { return true; }
 bool CScriptVarFunction::isPrimitive()	{ return false; }
@@ -4719,7 +4664,7 @@ void CScriptVarFunction::setFunctionData(const std::shared_ptr<CScriptTokenDataF
 		addChildOrReplace("length", newScriptVar((int)data->arguments.size()), SCRIPTVARLINK_READONLY);
 		addChildOrReplace("name", newScriptVar(data->name), SCRIPTVARLINK_READONLY);
 		CScriptVarLinkPtr prototype = addChildOrReplace(TINYJS_PROTOTYPE_CLASS, newScriptVar(Object));
-		prototype->getVarPtr()->addChildOrReplace(TINYJS_CONSTRUCTOR_VAR, this, SCRIPTVARLINK_WRITABLE);
+		prototype->getVarPtr()->addChildOrReplace(TINYJS_CONSTRUCTOR_VAR, shared_from_this(), SCRIPTVARLINK_WRITABLE);
 	}
 }
 
@@ -4729,12 +4674,10 @@ void CScriptVarFunction::setFunctionData(const std::shared_ptr<CScriptTokenDataF
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarFunctionBounded::CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments)
-	: CScriptVarFunction(BoundedFunction->getContext(), CScriptTokenDataFnc::create(LEX_R_FUNCTION)) ,
+	: CScriptVarFunction(BoundedFunction->getContext()) ,
 	boundedFunction(BoundedFunction),
 	boundedThis(BoundedThis),
-	boundedArguments(BoundedArguments) {
-		getFunctionData()->name = BoundedFunction->getFunctionData()->name;
-}
+	boundedArguments(BoundedArguments) {}
 bool CScriptVarFunctionBounded::isBounded() { return true; }
 void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
 	CScriptVarFunction::setTemporaryMark_recursive(ID);
@@ -4755,26 +4698,7 @@ CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, s
 /// CScriptVarFunctionNative
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name, const char *Args) : CScriptVarFunction(Context, 0), jsUserData(Userdata) {
-	std::shared_ptr<CScriptTokenDataFnc> FncData = CScriptTokenDataFnc::create(LEX_R_FUNCTION);
-	if (Name) FncData->name = Name;
-	if (Args) {
-		CScriptLex lex(Args);
-		int end_tk = LEX_EOF;
-		if (lex.tk == '(') {
-			end_tk = ')';
-			lex.match('(');
-		}
-		while (lex.tk != end_tk) {
-			FncData->arguments.push_back(CScriptToken(LEX_T_DESTRUCTURING_VAR, lex.tkStr));
-			lex.match(LEX_ID);
-			if (lex.tk != end_tk) lex.match(',', end_tk);
-		}
-		lex.match(end_tk);
-		if(end_tk != LEX_EOF) lex.match(LEX_EOF);
-	}
-	setFunctionData(FncData);
-}
+CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, void *Userdata) : CScriptVarFunction(Context), jsUserData(Userdata) {}
 bool CScriptVarFunctionNative::isNative() { return true; }
 
 
@@ -4790,21 +4714,20 @@ void CScriptVarFunctionNativeCallback::callFunction(const CFunctionsScopePtr &c)
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Accessor);
-CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context) : CScriptVarObject(Context, Context->objectPrototype) { }
-CScriptVarAccessor::CScriptVarAccessor(CTinyJS *Context, JSCallback getterFnc, void *getterData, JSCallback setterFnc, void *setterData)
-	: CScriptVarObject(Context)
-{
-	if(getterFnc)
-		addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, getterFnc, getterData), 0);
-	if(setterFnc)
-		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, setterFnc, setterData), 0);
+CScriptVarPtr CScriptVarAccessor::init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData) {
+	if (getterFnc)
+		addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(context, getterFnc, getterData), 0);
+	if (setterFnc)
+		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(context, setterFnc, setterData), 0);
+	return shared_from_this();
 }
 
-CScriptVarAccessor::CScriptVarAccessor( CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) : CScriptVarObject(Context, Context->objectPrototype) {
+CScriptVarPtr CScriptVarAccessor::init(const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) {
 	if(getter)
 		addChild(TINYJS_ACCESSOR_GET_VAR, getter, 0);
 	if(setter)
 		addChild(TINYJS_ACCESSOR_SET_VAR, setter, 0);
+	return shared_from_this();
 }
 
 bool CScriptVarAccessor::isAccessor() { return true; }
@@ -4829,8 +4752,8 @@ std::string CScriptVarAccessor::getVarType() { return "accessor"; }
 
 declare_dummy_t(Scope);
 bool CScriptVarScope::isObject() { return false; }
-CScriptVarPtr CScriptVarScope::scopeVar() { return this; }	///< to create var like: var a = ...
-CScriptVarPtr CScriptVarScope::scopeLet() { return this; }	///< to create var like: let a = ...
+CScriptVarPtr CScriptVarScope::scopeVar() { return shared_from_this(); }	///< to create var like: var a = ...
+CScriptVarPtr CScriptVarScope::scopeLet() { return shared_from_this(); }	///< to create var like: let a = ...
 CScriptVarLinkWorkPtr CScriptVarScope::findInScopes(const std::string &childName) {
 	return  CScriptVar::findChild(childName);
 }
@@ -4938,8 +4861,11 @@ void CScriptVarScopeFnc::setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVa
 
 declare_dummy_t(ScopeLet);
 CScriptVarScopeLet::CScriptVarScopeLet(const CScriptVarScopePtr &Parent) // constructor for LetScope
-	: CScriptVarScope(Parent->getContext()), parent(addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0))
-	, letExpressionInitMode(false) {}
+	: CScriptVarScope(Parent->getContext()), letExpressionInitMode(false) {}
+CScriptVarPtr CScriptVarScopeLet::init(const CScriptVarScopePtr& Parent) {
+	parent = addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0);
+	return shared_from_this();
+}
 
 CScriptVarPtr CScriptVarScopeLet::scopeVar() {						// to create var like: var a = ...
 	return getParent()->scopeVar();
@@ -5305,16 +5231,16 @@ void CTinyJS::execute(const std::string &Code, const std::string &File, int Line
 CScriptVarLinkPtr CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	t = &Tokenizer;
 	CScriptResult execute;
-	try {
+	/*try*/ {
 		do {
 			execute_statement(execute);
 			while (t->tk==';') t->match(';'); // skip empty statements
 		} while (t->tk!=LEX_EOF);
-	} catch (...) {
+	} /*catch (...) {
 		haveTry = false;
 		t=0; // clean up Tokenizer
 		throw; //
-	}
+	}*/
 	t=0;
 	ClearUnreferedVars(execute.value);
 
@@ -5470,7 +5396,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	// execute function!
 	ScopeControl.clear(); 	// remove tmpArgsScope from scope-chain
 	// add the function's execute space to the symbol table so we can recurse
-	ScopeControl.addFncScope(functionRoot);
+	ScopeControl.addFncScope(functionRoot.to_varPtr());
 	if (Function->isNative()) {
 		try {
 			CScriptVarFunctionNativePtr(Function)->callFunction(functionRoot);
@@ -5594,8 +5520,7 @@ void CTinyJS::generator_start(CScriptVarGenerator *Generator)
 	// restore callers haveTry
 	haveTry = Generator->callersHaveTry;
 }
-CScriptVarPtr CTinyJS::generator_yield(CScriptResult &execute, CScriptVar *YieldIn)
-{
+CScriptVarPtr CTinyJS::generator_yield(CScriptResult& execute, const CScriptVarPtr &YieldIn) {
 	if(!execute) return constUndefined;
 	CScriptVarGenerator *Generator = generatorStack.back();
 	if(Generator->isClosed()) {
@@ -5878,7 +5803,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 				/* Variable doesn't exist! JavaScript says we should create it
 				 * (we won't add it here. This is done in the assignment operator)*/
 				if(t->tkStr() == "this")
-					a = root; // fake this
+					a = root.to_varPtr(); // fake this
 				else
 					a = CScriptVarLinkPtr(constScriptVar(Undefined), t->tkStr());
 			}
@@ -6006,7 +5931,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 			if (t->tk != ';')
 				result = execute_base(execute);
 			if(execute)
-				return generator_yield(execute, result.getVar());
+				return generator_yield(execute, result);
 			else
 				return constUndefined;
 		} else
@@ -7489,7 +7414,7 @@ void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/)
 	{
 		if(p->getTemporaryMark() != UniqueID)
 		{
-			CScriptVarPtr var = p;
+			CScriptVarPtr var = p->shared_from_this();
 			var->cleanUp4Destroy();
 			p = var->next;
 		}

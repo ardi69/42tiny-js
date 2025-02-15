@@ -203,7 +203,7 @@ static void scStringReplace(const CFunctionsScopePtr &c, void *) {
 	CScriptVarPtr newsubstrVar = c->getArgument("newsubstr");
 	std::string substr, ret_str;
 	bool global, ignoreCase, sticky;
-	bool isRegExp = getRegExpData(c, "substr", false, "flags", substr, global, ignoreCase, sticky);
+	bool isRegExp = (bool)getRegExpData(c, "substr", false, "flags", substr, global, ignoreCase, sticky);
 	if(isRegExp && !newsubstrVar->isFunction()) {
 #ifndef NO_REGEXP
 		std::regex::flag_type flags = std::regex_constants::ECMAScript;

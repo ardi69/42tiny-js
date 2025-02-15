@@ -756,7 +756,11 @@ define_ScriptVarPtr_Type(Date);
 class CScriptVarDate : public CScriptVarObject, public CScriptTime {
 protected:
 	CScriptVarDate(CTinyJS *Context);
-	CScriptVarDate(const CScriptVarDate& Copy) =delete;
+	// custom RTTI
+	static constexpr uint32_t classHash = fnv1aHash("CScriptVarDate");
+	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
+	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual ~CScriptVarDate();
 	virtual bool isDate(); // { return true; }
@@ -768,7 +772,7 @@ public:
 	friend inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context);
 private:
 };
-inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context) { return new CScriptVarDate(Context); }
+inline define_newScriptVar_NamedFnc(Date, CTinyJS* Context) { return CScriptVarPtr(new CScriptVarDate(Context)); }
 
 //////////////////////////////////////////////////////////////////////////
 // CScriptVarDate

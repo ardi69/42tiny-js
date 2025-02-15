@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-12 23:45)
+Version 0.10.0 (2025-02-15 14:50)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -110,3 +110,5 @@ Version 0.10.0 (2025-02-12 23:45)
 * removed global using namespace std; in all cpp-files
 * replaced dynamic_cast with CScriptVarDynamicCast (useing of custom RTTI) ca. 7x faster then dynamic_cast
 * removed unneeded deleted copy-constructors
+* changed CScriptVarPtr is replaced by std::shared_ptr<CScriptVar>
+* changed enum NType to enum class NType

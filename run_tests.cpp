@@ -253,7 +253,7 @@ bool run_test(const char *filename) {
   OutputDebugString(out);
 #endif
   struct stat results;
-  if (!stat(filename, &results) == 0) {
+  if (stat(filename, &results) != 0) {
     printf("Cannot stat file! '%s'\n", filename);
     return false;
   }

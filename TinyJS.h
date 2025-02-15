@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-
+#define test_CScriptVarLinkPtr 0
 #define TINY_JS_VERSION 0.10.0
 
 #include <string>
@@ -64,7 +64,6 @@
 #	include "pool_allocator.h"
 #endif
 #include "TinyJS_Threading.h"
-
 
 #ifdef _MSC_VER
 #	if defined(_DEBUG) && defined(_DEBUG_NEW)
@@ -724,11 +723,14 @@ private:
 
 class CNumber;
 class CScriptVar;
-class CScriptVarPtr;
-//using CScriptVarPtr = std::shared_ptr<CScriptVar>;
+typedef std::shared_ptr<CScriptVar> CScriptVarPtr;
 template<typename C> class CScriptVarPointer;
 class CScriptVarLink;
+#if test_CScriptVarLinkPtr
+typedef std::shared_ptr<CScriptVarLink> CScriptVarLinkPtr;
+#else
 class CScriptVarLinkPtr;
+#endif
 class CScriptVarLinkWorkPtr;
 
 class CScriptVarPrimitive;
@@ -792,7 +794,7 @@ constexpr uint64_t fnv1aHash64(const char* str, uint64_t hash = 0xcbf29ce4842223
 }
 
 
-typedef	std::vector<class CScriptVarLinkPtr> SCRIPTVAR_CHILDS_t;
+typedef	std::vector<CScriptVarLinkPtr> SCRIPTVAR_CHILDS_t;
 typedef	SCRIPTVAR_CHILDS_t::iterator SCRIPTVAR_CHILDS_it;
 typedef	SCRIPTVAR_CHILDS_t::reverse_iterator SCRIPTVAR_CHILDS_rit;
 typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
@@ -802,16 +804,18 @@ typedef	SCRIPTVAR_CHILDS_t::const_iterator SCRIPTVAR_CHILDS_cit;
 
 // CScriptVar is the base class of all variable values.
 //
-class CScriptVar : public fixed_size_object<CScriptVar> {
+class CScriptVar : public std::enable_shared_from_this<CScriptVar>, public fixed_size_object<CScriptVar> {
 protected:
 	CScriptVar(CTinyJS* Context, const CScriptVarPtr& Prototype); ///< Create
 	CScriptVar(const CScriptVar& Copy) = delete; ///< Copy protected
 	CScriptVar(CScriptVar&& Move) = delete; ///< Copy protected
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVar");
-	virtual bool isDerivedFrom(uint32_t parentHash) const {	return classHash == parentHash;  /*Prüft nur sich selbst*/ }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr) {
+
+	virtual bool isDerivedFrom(uint32_t parentHash) const {	return classHash == parentHash;  /* Prüft nur sich selbst*/ }
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr) {
 		if (basePtr && basePtr->isDerivedFrom(T::classHash)) {
-			return static_cast<T*>(basePtr);
+			return std::static_pointer_cast<T>(basePtr);
 		}
 		return nullptr;
 	}
@@ -979,19 +983,7 @@ public:
 
 	SCRIPTVAR_CHILDS_t Childs;
 
-private:
-	CScriptVar *ref(); ///< Add reference to this variable
-	void unref(); ///< Remove a reference, and delete this variable if required
 public:
-	int getRefs() const; ///< Get the number of references to this script variable
-
-	// cast template
-	//template<class T>
-	//operator T *(){ T *ret = dynamic_cast<T*>(this); ASSERT(ret!=0); return ret; }
-	//template<class T>
-	//T *get(){ T *ret = dynamic_cast<T*>(this); ASSERT(ret!=0); return ret; }
-
-	
 	/// newScriptVar
 	template<typename T>	CScriptVarPtr newScriptVar(T t); /// { return ::newScriptVar(context, t); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2); // { return ::newScriptVar(context, t); }
@@ -1005,13 +997,11 @@ public:
 protected:
 	bool extensible;
 	CTinyJS *context;
-	int refs; ///< The number of references held to this - used for garbage collection
-	CScriptVar *prototype;
+	CScriptVarPtr prototype;
 	CScriptVar *prev;
 	CScriptVar *next;
 	uint32_t temporaryMark[TEMPORARY_MARK_SLOTS];
 	friend class CTinyJS;
-	friend class CScriptVarPtr;
 #if _DEBUG
 	uint32_t debugID;
 #endif
@@ -1019,102 +1009,57 @@ protected:
 
 
 //////////////////////////////////////////////////////////////////////////
-/// CScriptVarPtr
-//////////////////////////////////////////////////////////////////////////
-
-/// CScriptVarPtr is the Pointer Class for instances of CScriptVar aka JS values
-#if 0
-using CScriptVarPtr = std::shared_ptr<CScriptVar> ;
-#else
-class CScriptVarPtr {
-public:
-	// construct
-	CScriptVarPtr() : var(0) {} ///< 0-Pointer
-	CScriptVarPtr(CScriptVar *Var) : var(Var) { if(var) var->ref(); } // creates a new CScriptVar (from new);
-
-	// copy
-	CScriptVarPtr(const CScriptVarPtr &Copy) : var(Copy.var) { if(var) var->ref(); }
-	CScriptVarPtr& operator=(const CScriptVarPtr &Copy) {
-		if(var != Copy.var) { // if old_var == new_var do nothing
-			if(var) var->unref();	// unref old_var
-			var = Copy.var; if(var) var->ref(); // ref new_var
-		}
-		return *this;
-	}
-	// move
-	CScriptVarPtr(CScriptVarPtr &&Other) noexcept : var(Other.var) { Other.var=0; }
-	CScriptVarPtr& operator=(CScriptVarPtr &&Other) noexcept { if(var) var->unref(); var = Other.var; Other.var=0; return *this; }
-
-	// deconstruct
-	~CScriptVarPtr() noexcept { if(var) var->unref(); }
-
-	// if
-	operator bool() const { return var!=0; }
-
-	bool operator ==(const CScriptVarPtr &Other) const { return var == Other.var; }
-	bool operator !=(const CScriptVarPtr &Other) const { return var != Other.var; }
-
-	// access
-	CScriptVar * operator ->() const { return var; }
-	CScriptVar *getVar() const { return var; }
-
-	void clear() { if(var) var->unref(); var=0; }
-protected:
-	CScriptVar *var;
-};
-#endif
-//////////////////////////////////////////////////////////////////////////
 /// CScriptVarPointer - template
 //////////////////////////////////////////////////////////////////////////
 
 template<typename C>
-class CScriptVarPointer : public CScriptVarPtr {
+class CScriptVarPointer : public std::shared_ptr<C> {
 public:
 	CScriptVarPointer() {}
-	CScriptVarPointer(CScriptVar* Var) : CScriptVarPtr(CScriptVarDynamicCast<C>(Var)) {}
-	CScriptVarPointer(const CScriptVarPtr &Copy) : CScriptVarPtr(dynamic_cast<C*>(Copy.getVar())) {}
-	CScriptVarPointer<C> &operator=(const CScriptVarPtr &Copy) { CScriptVarPtr::operator=(CScriptVarDynamicCast<C>(Copy.getVar())); return *this; }
-	C* operator ->() const { C* Var = CScriptVarDynamicCast<C>(var); ASSERT(var && Var); return Var; }
+ 	template<typename O>
+ 	CScriptVarPointer(const CScriptVarPointer<O>& Copy) : std::shared_ptr<C>(CScriptVarDynamicCast<C>(Copy)) {}
+	CScriptVarPointer(const CScriptVarPtr& Copy) : std::shared_ptr<C>(CScriptVarDynamicCast<C>(Copy)) {}
+	CScriptVarPointer<C>& operator=(const CScriptVarPtr& Copy) { std::shared_ptr<C>::operator=(CScriptVarDynamicCast<C>(Copy)); return *this; }
+ 	template<typename O>
+ 	CScriptVarPointer<C>& operator=(const CScriptVarPointer<O>& Copy) { std::shared_ptr<C>::operator=(CScriptVarDynamicCast<C>(Copy)); return *this; }
+	CScriptVarPtr to_varPtr() { return *this; }
+//	C* operator ->() const { C* Var = CScriptVarDynamicCast<C>(*this).get(); ASSERT(get() && Var); return Var; }
 };
 
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLink
 //////////////////////////////////////////////////////////////////////////
+///
+/// eine Variable teilt sich in den Wert (CScriptVar) und den Bezeichner (CScriptVarLink)
+/// Ein Bezeichner verweist auf einen Wert. Der Wert wiederum kann eine Liste von weiteren
+/// Bezeichnern (Childs) enthalten, die wieder auf einen Wert verweilsen
+///
+//////////////////////////////////////////////////////////////////////////
 
-/*!
- *  CScriptVarLink is the real javascript variable. This class holds a pointer of CScriptVarLink
- *  1. a name
- *  2. a CScriptVarPtr as value
- *  3. an owner (scope or object)
- */
-class CScriptVarLink : public fixed_size_object<CScriptVarLink>
+class CScriptVarLink : public std::enable_shared_from_this<CScriptVarLink>, public fixed_size_object<CScriptVarLink>
 {
 private: // prevent gloabal creating
-	/*!
-	 *  Constructor.
-	 *
-	 *      @param [in] var   
-	 *      @param [in] name  
-	 *      @param [in] flags 
-	 */
 	CScriptVarLink(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
 private: // prevent Copy
-	CScriptVarLink(const CScriptVarLink &link) =delete; ///< Copy constructor
+	CScriptVarLink(const CScriptVarLink& link) = delete; ///< Copy constructor
+	CScriptVarLink &operator=(const CScriptVarLink& link) = delete; ///< Copy constructor
 public:
+	std::shared_ptr<CScriptVarLink> create(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
+		return std::shared_ptr<CScriptVarLink>(new CScriptVarLink(var, name, flags));
+
+	}
 	~CScriptVarLink();
 
-	const std::string &getName() const { return name; }
+	const std::string &getName() const { return name; } ///< das Herzstück der Name
 
 	void reName(const std::string newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array
 
-	int getFlags() const { return flags; }
 	const CScriptVarPtr &getVarPtr() const { return var; }
 	const CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; } ///< simple Replace the Variable pointed to
 
-
-	bool isOwned() const { return owner!=0; }
-
+	bool isOwned() const { return owner.lock()!=nullptr; }
+	int getFlags() const { return flags; } ///< siehe enum SCRIPTVARLINK_FLAGS
 	bool isWritable() const { return (flags & SCRIPTVARLINK_WRITABLE) != 0; }
 	void setWritable(bool On) { On ? (flags |= SCRIPTVARLINK_WRITABLE) : (flags &= ~SCRIPTVARLINK_WRITABLE); }
 	bool isConfigurable() const { return (flags & SCRIPTVARLINK_CONFIGURABLE) != 0; }
@@ -1122,9 +1067,8 @@ public:
 	bool isEnumerable() const { return (flags & SCRIPTVARLINK_ENUMERABLE) != 0; }
 	void setEnumerable(bool On) { On ? (flags |= SCRIPTVARLINK_ENUMERABLE) : (flags &= ~SCRIPTVARLINK_ENUMERABLE); }
 
-	CScriptVar *getOwner() { return owner; };
-	void setOwner(CScriptVar *Owner) { owner = Owner; }
-
+	CScriptVarPtr getOwner() { return owner.lock(); };
+	void setOwner(const CScriptVarPtr &Owner) { owner = Owner; }
 	/// forward to ScriptVar
 
 	CScriptVarPrimitivePtr toPrimitive() { ///< by default call getDefaultValue_hintNumber by a Date-object calls getDefaultValue_hintString
@@ -1151,17 +1095,20 @@ public:
 
 private:
 	std::string name;
-	CScriptVar *owner; // pointer to the owner CScriptVar
+	std::weak_ptr<CScriptVar> owner;
 	uint32_t flags;
 	CScriptVarPtr var;
 #ifdef _DEBUG
-	char dummy[24];
+	char dummy[24] = {};
 #endif
 	CScriptVarLink *ref();
 	void unref();
 private:
 	int refs;
+#if test_CScriptVarLinkPtr
+#else
 	friend class CScriptVarLinkPtr;
+#endif
 };
 
 
@@ -1169,7 +1116,8 @@ private:
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
-
+#if test_CScriptVarLinkPtr
+#else
 /*!
  *  CScriptVarLinkPtr holds a pointer of CScriptVarLink
  */
@@ -1179,12 +1127,12 @@ public:
 	CScriptVarLinkPtr() : link(0) {} ///< 0-Pointer
 
 	CScriptVarLinkPtr(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) { link = (new CScriptVarLink(var, name, flags))->ref(); }
-	CScriptVarLinkPtr(CScriptVarLink *Link) : link(Link) { if(link) link->ref(); } // creates a new CScriptVarLink (from new);
+//	CScriptVarLinkPtr(CScriptVarLink *Link) : link(Link) { if(link) link->ref(); } // creates a new CScriptVarLink (from new);
 
 	// reconstruct
 
 	CScriptVarLinkPtr& operator()(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
-	CScriptVarLinkPtr &operator=(const CScriptVarPtr &var) { return operator()(var); }
+//	CScriptVarLinkPtr &operator=(const CScriptVarPtr &var) { return operator()(var); }
 	// deconstruct
 	~CScriptVarLinkPtr() { if(link) link->unref(); }
 
@@ -1207,11 +1155,6 @@ public:
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
 	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
 
-	/*!
-	 *  Operators the bool.
-	 *
-	 *      @return 
-	 */
 	operator bool() const { return link!=0; }
 
 	// for sorting in child-list
@@ -1226,7 +1169,7 @@ public:
 protected:
 	CScriptVarLink *link;
 };
-
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLinkWorkPtr
@@ -1242,11 +1185,11 @@ public:
 	// construct
 	CScriptVarLinkWorkPtr() {}
 	CScriptVarLinkWorkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLinkPtr(var, name, flags) {}
-	CScriptVarLinkWorkPtr(CScriptVarLink *Link) : CScriptVarLinkPtr(Link) { if(link) referencedOwner = link->getOwner(); } // creates a new CScriptVarLink (from new);
+//	CScriptVarLinkWorkPtr(CScriptVarLink *Link) : CScriptVarLinkPtr(Link) { if(link) referencedOwner = link->getOwner(); } // creates a new CScriptVarLink (from new);
 	CScriptVarLinkWorkPtr(const CScriptVarLinkPtr &Copy) : CScriptVarLinkPtr(Copy) { if(link) referencedOwner = link->getOwner(); }
 
 	// reconstruct
-	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.clear(); return *this; }
+	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.reset(); return *this; }
 
 	// copy
 	CScriptVarLinkWorkPtr(const CScriptVarLinkWorkPtr &Copy) : CScriptVarLinkPtr(Copy), referencedOwner(Copy.referencedOwner) {}
@@ -1272,10 +1215,10 @@ public:
 		CScriptVarLink *_link=link; link=Link.link; Link.link=_link;
 	}
 
-	void clear() { CScriptVarLinkPtr::clear(); referencedOwner.clear(); }
+	void clear() { CScriptVarLinkPtr::clear(); referencedOwner.reset(); }
 	void setReferencedOwner(const CScriptVarPtr &Owner) { referencedOwner = Owner; }
 	const CScriptVarPtr &getReferencedOwner() const { return referencedOwner; }
-	bool hasReferencedOwner() const { return referencedOwner; }
+	bool hasReferencedOwner() const { return (bool)referencedOwner; }
 private:
 	CScriptVarPtr referencedOwner;
 };
@@ -1299,14 +1242,14 @@ inline CScriptVarLinkWorkPtr CScriptVarLinkPtr::setter( CScriptResult &execute, 
 /// CScriptVarPrimitive
 //////////////////////////////////////////////////////////////////////////
 
-define_ScriptVarPtr_Type(Primitive);
+//define_ScriptVarPtr_Type(Primitive);
 class CScriptVarPrimitive : public CScriptVar {
 protected:
 	CScriptVarPrimitive(CTinyJS *Context, const CScriptVarPtr &Prototype) : CScriptVar(Context, Prototype) { setExtensible(false); }
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarPrimitive");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVar::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual ~CScriptVarPrimitive() override;
 
@@ -1328,16 +1271,16 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 define_dummy_t(Undefined);
-define_ScriptVarPtr_Type(Undefined);
+//define_ScriptVarPtr_Type(Undefined);
 class CScriptVarUndefined : public CScriptVarPrimitive {
 protected:
-	CScriptVarUndefined(CTinyJS *Context);
+	CScriptVarUndefined(CTinyJS* Context);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarUndefined");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
-	static struct _Undefined_t {} Undefined;
+//	static inline struct Undefined_t {} Undefined;
 
 
 	virtual bool isUndefined() override; // { return true; }
@@ -1346,29 +1289,28 @@ public:
 	virtual std::string toCString(int radix=0) override;// { return "undefined"; }
 
 	virtual std::string getVarType() override; // { return "undefined"; }
-	friend define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS *, Undefined_t);
-	friend define_newScriptVar_NamedFnc(Undefined, CTinyJS *Context);
+	friend inline define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS* Context, Undefined_t) { return CScriptVarPtr(new CScriptVarUndefined(Context)); }
+	friend inline define_newScriptVar_NamedFnc(Undefined, CTinyJS* Context) { return CScriptVarPtr(new CScriptVarUndefined(Context)); }
 
-	friend inline CScriptVarPtr newScriptVarUndefined_ein_test(CTinyJS* Context) { return new CScriptVarUndefined(Context); }
+	//friend inline CScriptVarPtr newScriptVarUndefined_ein_test(CTinyJS* Context) { return new CScriptVarUndefined(Context); }
 
 };
-inline define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS *Context, Undefined_t) { return new CScriptVarUndefined(Context); }
-inline define_newScriptVar_NamedFnc(Undefined, CTinyJS* Context) { return new CScriptVarUndefined(Context); }
-
+//using Undefined_t = CScriptVarUndefined::Undefined_t;
+//static inline Undefined_t Undefined;
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarNull
 //////////////////////////////////////////////////////////////////////////
 
 define_dummy_t(Null);
-define_ScriptVarPtr_Type(Null);
+//define_ScriptVarPtr_Type(Null);
 class CScriptVarNull : public CScriptVarPrimitive {
 protected:
-	CScriptVarNull(CTinyJS *Context);
+	CScriptVarNull(CTinyJS* Context);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarNull");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isNull() override; // { return true; }
@@ -1378,12 +1320,9 @@ public:
 
 	virtual std::string getVarType() override; // { return "null"; }
 
-	friend define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t);
-	friend define_newScriptVar_NamedFnc(Null, CTinyJS *Context);
+	friend inline define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS* Context, Null_t) { return CScriptVarPtr(new CScriptVarNull(Context)); }
+	friend inline define_newScriptVar_NamedFnc(Null, CTinyJS* Context) { return CScriptVarPtr(new CScriptVarNull(Context)); }
 };
-inline define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS *Context, Null_t) { return new CScriptVarNull(Context); }
-inline define_newScriptVar_NamedFnc(Null, CTinyJS *Context) { return new CScriptVarNull(Context); }
-
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
@@ -1392,11 +1331,15 @@ inline define_newScriptVar_NamedFnc(Null, CTinyJS *Context) { return new CScript
 define_ScriptVarPtr_Type(String);
 class CScriptVarString : public CScriptVarPrimitive {
 protected:
-	CScriptVarString(CTinyJS *Context, const std::string &Data);
+	CScriptVarString(CTinyJS* Context, const std::string& Data);
+	auto init() {
+		addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
+		return shared_from_this();
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarString");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isString() override; // { return true; }
@@ -1425,9 +1368,9 @@ private:
 	friend define_newScriptVar_Fnc(String, CTinyJS *Context, const char *);
 	friend define_newScriptVar_Fnc(String, CTinyJS *Context, char *);
 };
-inline define_newScriptVar_Fnc(String, CTinyJS *Context, const std::string &Obj) { return new CScriptVarString(Context, Obj); }
-inline define_newScriptVar_Fnc(String, CTinyJS *Context, const char *Obj) { return new CScriptVarString(Context, Obj); }
-inline define_newScriptVar_Fnc(String, CTinyJS *Context, char *Obj) { return new CScriptVarString(Context, Obj); }
+inline define_newScriptVar_Fnc(String, CTinyJS* Context, const std::string& Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
+inline define_newScriptVar_Fnc(String, CTinyJS* Context, const char* Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
+inline define_newScriptVar_Fnc(String, CTinyJS* Context, char* Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1441,37 +1384,37 @@ extern Infinity InfinityNegative;
 
 class CNumber {
 private:
-	enum NType {
+	enum class NType {
 		tnNULL, tInt32, tDouble, tNaN, tInfinity
 	};
 	CNumber(NType Type, int32_t InfinitySign=0) : type(Type) { Int32 = InfinitySign; }
 public:
 
 	CNumber(const CNumber &Copy) { *this=Copy; }
-	CNumber(NegativeZero_t) : type(tnNULL), Int32(0) {}
-	CNumber(NaN_t) : type(tNaN), Int32(0) {}
-	CNumber(Infinity v) : type(tInfinity), Int32(v.Sig()) {}
-	CNumber(int32_t Value=0) : type(tInt32), Int32(Value) {}
-	CNumber(uint32_t Value) : type(tInt32) {
+	CNumber(NegativeZero_t) : type(CNumber::NType::tnNULL), Int32(0) {}
+	CNumber(NaN_t) : type(CNumber::NType::tNaN), Int32(0) {}
+	CNumber(Infinity v) : type(CNumber::NType::tInfinity), Int32(v.Sig()) {}
+	CNumber(int32_t Value=0) : type(CNumber::NType::tInt32), Int32(Value) {}
+	CNumber(uint32_t Value) : type(CNumber::NType::tInt32) {
 		if (Value <= 0x7ffffffUL) 
 			Int32 = Value;
 		else
-			type = tDouble, Double = Value;
+			type = CNumber::NType::tDouble, Double = Value;
 	}
 	CNumber(uint64_t Value);
 	CNumber(int64_t Value);
 	CNumber(double Value);
-	CNumber(unsigned char Value) : type(tInt32), Int32(Value) {}
+	CNumber(unsigned char Value) : type(CNumber::NType::tInt32), Int32(Value) {}
 	
 	CNumber(std::string_view);
 
 	int32_t parseInt(std::string_view str, int32_t radix, std::string_view* endptr=0);
 
-	void parseFloat(std::string_view str, std::string_view* endptr=0);
+	void parseFloat(std::string_view str, std::string_view* endptr = 0);
 
 	CNumber add(const CNumber &Value) const;
 	CNumber operator-() const;
-	CNumber operator~() const { if(type==tNaN) return *this; else return ~toInt32(); }
+	CNumber operator~() const { if(type== CNumber::NType::tNaN) return *this; else return ~toInt32(); }
 	bool operator!() const { return isZero(); }
 	CNumber multi(const CNumber &Value) const;
 	CNumber div(const CNumber& Value) const;
@@ -1493,14 +1436,14 @@ public:
 	bool equal(const CNumber &Value) const;
 
 
-	bool isInt32() const { return type == tInt32; }
-	bool isUInt32() const { return (type == tInt32 && Int32 >= 0) || (type == tDouble && Double <= std::numeric_limits<uint32_t>::max()) || (type == tnNULL); }
-	bool isDouble() const { return type == tDouble; }
+	bool isInt32() const { return type == CNumber::NType::tInt32; }
+	bool isUInt32() const { return (type == CNumber::NType::tInt32 && Int32 >= 0) || (type == CNumber::NType::tDouble && Double <= std::numeric_limits<uint32_t>::max()) || (type == CNumber::NType::tnNULL); }
+	bool isDouble() const { return type == CNumber::NType::tDouble; }
 
-	bool isNaN() const { return type == tNaN; }
-	int isInfinity() const { return type == tInfinity ? Int32 : 0; }
-	bool isFinite() const { return type != tInfinity && type != tNaN; }
-	bool isNegativeZero() const { return type==tnNULL; }
+	bool isNaN() const { return type == CNumber::NType::tNaN; }
+	int isInfinity() const { return type == CNumber::NType::tInfinity ? Int32 : 0; }
+	bool isFinite() const { return type != CNumber::NType::tInfinity && type != CNumber::NType::tNaN; }
+	bool isNegativeZero() const { return type== CNumber::NType::tnNULL; }
 	bool isZero() const; ///< is 0, -0
 	bool isInteger() const;
 	int sign() const;
@@ -1508,14 +1451,14 @@ public:
 	int32_t		toInt32() const { return cast<int32_t>(); }
 	uint32_t	toUInt32() const { return cast<uint32_t>(); }
 	double		toDouble() const;
-	bool		toBoolean() const { return !isZero() && type!=tNaN; }
+	bool		toBoolean() const { return !isZero() && type!= CNumber::NType::tNaN; }
 	std::string	toString(uint32_t Radix=10) const;
 private:
 	template<typename T> T cast() const {
 		switch(type) {
-		case tInt32:
+		case CNumber::NType::tInt32:
 			return T(Int32);
-		case tDouble:
+		case CNumber::NType::tDouble:
 			return T(Double);
 		default:
 			return T(0);
@@ -1565,7 +1508,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarNumber");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isNumber() override; // { return true; }
@@ -1588,7 +1531,7 @@ private:
 	friend define_newScriptVar_NamedFnc(Number, CTinyJS *Context, const CNumber &);
 };
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj);
-inline define_newScriptVar_NamedFnc(Number, CTinyJS *Context, const CNumber &Obj) { return new CScriptVarNumber(Context, Obj); }
+inline define_newScriptVar_NamedFnc(Number, CTinyJS* Context, const CNumber& Obj) { return CScriptVarPtr(new CScriptVarNumber(Context, Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, char Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, int32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
 inline define_newScriptVar_Fnc(Number, CTinyJS *Context, uint32_t Obj) { return newScriptVarNumber(Context, CNumber(Obj)); }
@@ -1610,7 +1553,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarBool");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isBool() override; // { return true; }
@@ -1628,9 +1571,8 @@ protected:
 	friend define_DEPRECATED_newScriptVar_Fnc(Bool, CTinyJS *, bool);
 	friend define_newScriptVar_NamedFnc(Bool, CTinyJS *Context, bool);
 };
-inline define_DEPRECATED_newScriptVar_Fnc(Bool, CTinyJS *Context, bool Obj) { return new CScriptVarBool(Context, Obj); }
-inline define_newScriptVar_NamedFnc(Bool, CTinyJS *Context, bool Obj) { return new CScriptVarBool(Context, Obj); }
-
+inline define_DEPRECATED_newScriptVar_Fnc(Bool, CTinyJS* Context, bool Obj) { return CScriptVarPtr(new CScriptVarBool(Context, Obj)); }
+inline define_newScriptVar_NamedFnc(Bool, CTinyJS* Context, bool Obj) { return CScriptVarPtr(new CScriptVarBool(Context, Obj)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarObject
@@ -1647,7 +1589,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarObject");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVar::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual void removeAllChildren() override;
@@ -1671,11 +1613,11 @@ private:
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &);
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPrimitivePtr &, const CScriptVarPtr &);
 };
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t) { return new CScriptVarObject(Context); }
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Prototype); }
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Prototype); }
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPrimitivePtr &Value, const CScriptVarPtr &Prototype) { return new CScriptVarObject(Context, Value, Prototype); }
 
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, Object_t) { return CScriptVarPtr(new CScriptVarObject(Context)); }
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, Object_t, const CScriptVarPtr& Prototype) { return CScriptVarPtr(new CScriptVarObject(Context, Prototype)); }
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, const CScriptVarPtr& Prototype) { return CScriptVarPtr(new CScriptVarObject(Context, Prototype)); }
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, const CScriptVarPrimitivePtr& Value, const CScriptVarPtr& Prototype) { return CScriptVarPtr(new CScriptVarObject(Context, Value, Prototype)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarObjectTyped (simple Object with TypeTagName)
@@ -1690,7 +1632,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarObjectTypeTagged");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual std::string getVarTypeTagName() override;
@@ -1700,9 +1642,8 @@ private:
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &, const std::string &);
 	friend define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &, const std::string &);
 };
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, Object_t, const CScriptVarPtr &Prototype, const std::string &TypeTagName) { return new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName); }
-inline define_newScriptVar_Fnc(Object, CTinyJS *Context, const CScriptVarPtr &Prototype, const std::string &TypeTagName) { return new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName); }
-
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, Object_t, const CScriptVarPtr& Prototype, const std::string& TypeTagName) { return CScriptVarPtr(new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName)); }
+inline define_newScriptVar_Fnc(Object, CTinyJS* Context, const CScriptVarPtr& Prototype, const std::string& TypeTagName) { return CScriptVarPtr(new CScriptVarObjectTypeTagged(Context, Prototype, TypeTagName)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarError
@@ -1712,11 +1653,19 @@ define_ScriptVarPtr_Type(Error);
 
 class CScriptVarError : public CScriptVarObject {
 protected:
-	CScriptVarError(CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);// : CScriptVarObject(Context), value(Value) {}
+	CScriptVarError(CTinyJS *Context, ERROR_TYPES type);
+	auto init(const char* message, const char* file, int line, int column) {
+		if (message && *message) addChild("message", newScriptVar(message));
+		if (file && *file) addChild("fileName", newScriptVar(file));
+		if (line >= 0) addChild("lineNumber", newScriptVar(line + 1));
+		if (column >= 0) addChild("column", newScriptVar(column + 1));
+		return shared_from_this();
+	}
+
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarError");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isError() override; // { return true; }
@@ -1729,8 +1678,8 @@ private:
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message, const char *file, int line, int column);
 	friend define_newScriptVar_NamedFnc(Error, CTinyJS *Context, const CScriptException &Exception);
 };
-inline define_newScriptVar_NamedFnc(Error, CTinyJS *Context, ERROR_TYPES type, const char *message=0, const char *file=0, int line=-1, int column=-1) { return new CScriptVarError(Context, type, message, file, line, column); }
-inline define_newScriptVar_NamedFnc(Error, CTinyJS *Context, const CScriptException &Exception) { return new CScriptVarError(Context, Exception.errorType, Exception.message.c_str(), Exception.fileName.c_str(), Exception.lineNumber, Exception.column); }
+inline define_newScriptVar_NamedFnc(Error, CTinyJS* Context, ERROR_TYPES type, const char* message = 0, const char* file = 0, int line = -1, int column = -1) { return std::shared_ptr<CScriptVarError>(new CScriptVarError(Context, type))->init(message, file, line, column); }
+inline define_newScriptVar_NamedFnc(Error, CTinyJS* Context, const CScriptException& Exception) { return std::shared_ptr<CScriptVarError>(new CScriptVarError(Context, Exception.errorType))->init(Exception.message.c_str(), Exception.fileName.c_str(), Exception.lineNumber, Exception.column); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarArray
@@ -1741,10 +1690,14 @@ define_ScriptVarPtr_Type(Array);
 class CScriptVarArray : public CScriptVarObject {
 protected:
 	CScriptVarArray(CTinyJS *Context);
+	auto init() {
+		addChild("length", newScriptVar(0), SCRIPTVARLINK_WRITABLE);
+		return shared_from_this();
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarArray");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isArray() override; // { return true; }
@@ -1766,8 +1719,7 @@ private:
 //	uint32_t length;
 	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 };
-inline define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t) { return new CScriptVarArray(Context); }
-
+inline define_newScriptVar_Fnc(Array, CTinyJS* Context, Array_t) { return std::shared_ptr<CScriptVarArray>(new CScriptVarArray(Context))->init(); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarRegExp
@@ -1778,10 +1730,11 @@ define_ScriptVarPtr_Type(RegExp);
 class CScriptVarRegExp : public CScriptVarObject {
 protected:
 	CScriptVarRegExp(CTinyJS *Context, const std::string &Source, const std::string &Flags);
+	CScriptVarPtr init();
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarRegExp");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isRegExp() override; // { return true; }
@@ -1810,7 +1763,7 @@ private:
 	friend define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &, const std::string &);
 
 };
-inline define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &Obj, const std::string &Flags) { return new CScriptVarRegExp(Context, Obj, Flags); }
+inline define_newScriptVar_Fnc(RegExp, CTinyJS* Context, const std::string& Obj, const std::string& Flags) { return std::shared_ptr<CScriptVarRegExp>(new CScriptVarRegExp(Context, Obj, Flags))->init(); }
 
 #endif /* NO_REGEXP */
 
@@ -1822,11 +1775,15 @@ inline define_newScriptVar_Fnc(RegExp, CTinyJS *Context, const std::string &Obj,
 define_ScriptVarPtr_Type(Function);
 class CScriptVarFunction : public CScriptVarObject {
 protected:
-	CScriptVarFunction(CTinyJS *Context, const std::shared_ptr<CScriptTokenDataFnc>& Data);
+	CScriptVarFunction(CTinyJS *Context);
+	auto init(const std::shared_ptr<CScriptTokenDataFnc>& Data) {
+		setFunctionData(Data);
+		return shared_from_this();
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunction");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isObject() override; // { return true; }
@@ -1849,7 +1806,7 @@ private:
 
 	friend define_newScriptVar_Fnc(Function, CTinyJS *Context, const std::shared_ptr<CScriptTokenDataFnc>&);
 };
-inline define_newScriptVar_Fnc(Function, CTinyJS *Context, const std::shared_ptr<CScriptTokenDataFnc> &Obj) { return new CScriptVarFunction(Context, Obj); }
+inline define_newScriptVar_Fnc(Function, CTinyJS* Context, const std::shared_ptr<CScriptTokenDataFnc>& Obj) { return std::shared_ptr<CScriptVarFunction>(new CScriptVarFunction(Context))->init(Obj); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1860,10 +1817,15 @@ define_ScriptVarPtr_Type(FunctionBounded);
 class CScriptVarFunctionBounded : public CScriptVarFunction {
 protected:
 	CScriptVarFunctionBounded(CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
+	CScriptVarPtr init() {
+		auto ret = CScriptVarFunction::init(CScriptTokenDataFnc::create(LEX_R_FUNCTION));
+		getFunctionData()->name = boundedFunction->getFunctionData()->name;
+		return ret;
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionBounded");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunction::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isBounded() override;	///< is CScriptVarFunctionBounded
@@ -1877,7 +1839,7 @@ private:
 
 	friend define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments);
 };
-inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr> &BoundedArguments) { return new CScriptVarFunctionBounded(BoundedFunction, BoundedThis, BoundedArguments); }
+inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr BoundedFunction, CScriptVarPtr BoundedThis, const std::vector<CScriptVarPtr>& BoundedArguments) { return std::shared_ptr<CScriptVarFunctionBounded>(new CScriptVarFunctionBounded(BoundedFunction, BoundedThis, BoundedArguments)); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -1887,11 +1849,32 @@ inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr Bound
 define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
-	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata, const char *Name, const char *Args);
+	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata);
+	CScriptVarPtr init(const char* Name, const char* Args) {
+		std::shared_ptr<CScriptTokenDataFnc> FncData = CScriptTokenDataFnc::create(LEX_R_FUNCTION);
+		if (Name) FncData->name = Name;
+		if (Args) {
+			CScriptLex lex(Args);
+			int end_tk = LEX_EOF;
+			if (lex.tk == '(') {
+				end_tk = ')';
+				lex.match('(');
+			}
+			while (lex.tk != end_tk) {
+				FncData->arguments.push_back(CScriptToken(LEX_T_DESTRUCTURING_VAR, lex.tkStr));
+				lex.match(LEX_ID);
+				if (lex.tk != end_tk) lex.match(',', end_tk);
+			}
+			lex.match(end_tk);
+			if (end_tk != LEX_EOF) lex.match(LEX_EOF);
+		}
+		setFunctionData(FncData);
+		return shared_from_this();
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionNative");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunction::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual bool isNative() override; // { return true; }
 
@@ -1908,11 +1891,14 @@ protected:
 define_ScriptVarPtr_Type(FunctionNativeCallback);
 class CScriptVarFunctionNativeCallback : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), jsCallback(Callback) {}
+	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata) : CScriptVarFunctionNative(Context, Userdata), jsCallback(Callback) {}
+	CScriptVarPtr init(const char* Name, const char* Args) {
+		return CScriptVarFunctionNative::init(Name, Args);
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionNativeCallback");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunctionNative::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual void callFunction(const CFunctionsScopePtr &c) override;
@@ -1920,8 +1906,7 @@ private:
 	JSCallback jsCallback; ///< Callback for native functions
 	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*, const char*, const char*);
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name=0, const char *Args=0) { return new CScriptVarFunctionNativeCallback(Context, Callback, Userdata, Name, Args); }
-
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS* Context, JSCallback Callback, void* Userdata, const char* Name = 0, const char* Args = 0) { return std::shared_ptr<CScriptVarFunctionNativeCallback>(new CScriptVarFunctionNativeCallback(Context, Callback, Userdata))->init(Name, Args); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarFunctionNativeClass
@@ -1930,11 +1915,14 @@ inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallb
 template<class native>
 class CScriptVarFunctionNativeClass : public CScriptVarFunctionNative {
 protected:
-	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name, const char *Args) : CScriptVarFunctionNative(Context, Userdata, Name, Args), classPtr(ClassPtr), classFnc(ClassFnc) {}
+	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata) : CScriptVarFunctionNative(Context, Userdata), classPtr(ClassPtr), classFnc(ClassFnc) {}
+	CScriptVarPtr init(const char* Name, const char* Args) {
+		return CScriptVarFunctionNative::init(Name, Args);
+	}
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionNativeClass");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunctionNative::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual void callFunction(const CFunctionsScopePtr &c) override { (classPtr->*classFnc)(c, jsUserData); }
@@ -1945,8 +1933,7 @@ private:
 	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *, const char *, const char *);
 };
 template<typename native>
-define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name=0, const char *Args=0) { return new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata, Name, Args); }
-
+define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS* Context, native* ClassPtr, void (native::* ClassFnc)(const CFunctionsScopePtr&, void*), void* Userdata, const char* Name = 0, const char* Args = 0) { return std::shared_ptr<CScriptVarFunctionNativeClass<native>>(new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata))->init(Name, Args); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarAccessor
@@ -1957,19 +1944,20 @@ define_ScriptVarPtr_Type(Accessor);
 
 class CScriptVarAccessor : public CScriptVarObject {
 protected:
-	CScriptVarAccessor(CTinyJS *Context);
-	CScriptVarAccessor(CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata);
-	template<class C>	CScriptVarAccessor(CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData) : CScriptVarObject(Context) {
-		if(getterFnc)
-			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(Context, class_ptr, getterFnc, getterData), 0);
-		if(setterFnc)
-			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(Context, class_ptr, setterFnc, setterData), 0);
+	CScriptVarAccessor(CTinyJS* Context) : CScriptVarObject(Context) {}
+	CScriptVarPtr init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData);
+	template<class C> CScriptVarPtr init(C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) {
+		if (getterFnc)
+			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
+		if (setterFnc)
+			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
+		return shared_from_this();
 	}
-	CScriptVarAccessor(CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter);
+	CScriptVarPtr init(const CScriptVarFunctionPtr& getter, const CScriptVarFunctionPtr& setter);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarAccessor");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isAccessor() override; // { return true; }
@@ -1985,11 +1973,10 @@ public:
 	template<class C> friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData);
 	friend define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, const CScriptVarFunctionPtr &, const CScriptVarFunctionPtr &);
 };
-inline define_newScriptVar_Fnc(Accessor, CTinyJS *Context, Accessor_t) { return new CScriptVarAccessor(Context); }
-inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, JSCallback getter, void *getterdata, JSCallback setter, void *setterdata) { return new CScriptVarAccessor(Context, getter, getterdata, setter, setterdata); }
-template<class C> define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, C *class_ptr, void(C::*getterFnc)(const CFunctionsScopePtr &, void *), void *getterData, void(C::*setterFnc)(const CFunctionsScopePtr &, void *), void *setterData)  { return new CScriptVarAccessor(Context, class_ptr, getterFnc, getterData, setterFnc, setterData); }
-inline define_newScriptVar_NamedFnc(Accessor, CTinyJS *Context, const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) { return new CScriptVarAccessor(Context, getter, setter); }
-
+inline define_newScriptVar_Fnc(Accessor, CTinyJS* Context, Accessor_t) { return CScriptVarPtr(new CScriptVarAccessor(Context)); }
+inline define_newScriptVar_NamedFnc(Accessor, CTinyJS* Context, JSCallback getter, void* getterdata, JSCallback setter, void* setterdata) { return std::shared_ptr<CScriptVarAccessor>(new CScriptVarAccessor(Context))->init(getter, getterdata, setter, setterdata); }
+template<class C> define_newScriptVar_NamedFnc(Accessor, CTinyJS* Context, C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) { return std::shared_ptr<CScriptVarAccessor>(new CScriptVarAccessor(Context))->init<C>(class_ptr, getterFnc, getterData, setterFnc, setterData); }
+inline define_newScriptVar_NamedFnc(Accessor, CTinyJS* Context, const CScriptVarFunctionPtr& getter, const CScriptVarFunctionPtr& setter) { return std::shared_ptr<CScriptVarAccessor>(new CScriptVarAccessor(Context))->init(getter, setter); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarDestructuring
@@ -1999,9 +1986,10 @@ class CScriptVarDestructuring : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarDestructuring(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarDestructuring");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 };
 
@@ -2015,9 +2003,10 @@ class CScriptVarScope : public CScriptVarObject {
 protected: // only derived classes or friends can be created
 	CScriptVarScope(CTinyJS *Context) // constructor for rootScope
 		: CScriptVarObject(Context) {}
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScope");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 
 	virtual bool isObject() override; // { return false; }
 public:
@@ -2027,8 +2016,7 @@ public:
 	virtual CScriptVarScopePtr getParent();
 	friend define_newScriptVar_Fnc(Scope, CTinyJS *Context, Scope_t);
 };
-inline define_newScriptVar_Fnc(Scope, CTinyJS *Context, Scope_t) { return new CScriptVarScope(Context); }
-
+inline define_newScriptVar_Fnc(Scope, CTinyJS* Context, Scope_t) { return CScriptVarPtr(new CScriptVarScope(Context)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarScopeFnc
@@ -2038,11 +2026,16 @@ define_dummy_t(ScopeFnc);
 define_ScriptVarPtr_Type(ScopeFnc);
 class CScriptVarScopeFnc : public CScriptVarScope {
 protected: // only derived classes or friends can be created
-	CScriptVarScopeFnc(CTinyJS *Context, const CScriptVarScopePtr &Closure) // constructor for FncScope
-		: CScriptVarScope(Context), closure(Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : CScriptVarLinkPtr()) {}
+	CScriptVarScopeFnc(CTinyJS *Context) // constructor for FncScope
+		: CScriptVarScope(Context) {}
+	CScriptVarPtr init(const CScriptVarScopePtr& Closure) {
+		closure = Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : CScriptVarLinkPtr();
+		return shared_from_this();
+	}
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeFnc");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScope::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) override;
@@ -2079,8 +2072,7 @@ protected:
 	CScriptVarLinkPtr closure;
 	friend define_newScriptVar_Fnc(ScopeFnc, CTinyJS *Context, ScopeFnc_t, const CScriptVarScopePtr &Closure);
 };
-inline define_newScriptVar_Fnc(ScopeFnc, CTinyJS *Context, ScopeFnc_t, const CScriptVarScopePtr &Closure) { return new CScriptVarScopeFnc(Context, Closure); }
-
+inline define_newScriptVar_Fnc(ScopeFnc, CTinyJS* Context, ScopeFnc_t, const CScriptVarScopePtr& Closure) { return std::shared_ptr<CScriptVarScopeFnc>(new CScriptVarScopeFnc(Context))->init(Closure); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarScopeLet
@@ -2091,10 +2083,11 @@ define_ScriptVarPtr_Type(ScopeLet);
 class CScriptVarScopeLet : public CScriptVarScope {
 protected: // only derived classes or friends can be created
 	CScriptVarScopeLet(const CScriptVarScopePtr &Parent); // constructor for LetScope
-//		: CScriptVarScope(Parent->getContext()), parent( context->getRoot() != Parent ? addChild(TINYJS_SCOPE_PARENT_VAR, Parent, 0) : 0) {}
+	CScriptVarPtr init(const CScriptVarScopePtr& Parent);
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeLet");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScope::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) override;
@@ -2106,8 +2099,7 @@ protected:
 	bool letExpressionInitMode;
 	friend define_newScriptVar_Fnc(ScopeLet, CTinyJS *Context, ScopeLet_t, const CScriptVarScopePtr &Parent);
 };
-inline define_newScriptVar_Fnc(ScopeLet, CTinyJS *, ScopeLet_t, const CScriptVarScopePtr &Parent) { return new CScriptVarScopeLet(Parent); }
-
+inline define_newScriptVar_Fnc(ScopeLet, CTinyJS*, ScopeLet_t, const CScriptVarScopePtr& Parent) { return std::shared_ptr<CScriptVarScopeLet>(new CScriptVarScopeLet(Parent))->init(Parent); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarScopeWith
@@ -2117,12 +2109,15 @@ define_dummy_t(ScopeWith);
 define_ScriptVarPtr_Type(ScopeWith);
 class CScriptVarScopeWith : public CScriptVarScopeLet {
 protected:
-	CScriptVarScopeWith(const CScriptVarScopePtr &Parent, const CScriptVarPtr &With)
-		: CScriptVarScopeLet(Parent), with(addChild(TINYJS_SCOPE_WITH_VAR, With, 0)) {}
-
+	CScriptVarScopeWith(const CScriptVarScopePtr &Parent) : CScriptVarScopeLet(Parent) {}
+	CScriptVarPtr init(const CScriptVarScopePtr& Parent, const CScriptVarPtr& With) {
+		with = addChild(TINYJS_SCOPE_WITH_VAR, With, 0);
+		return CScriptVarScopeLet::init(Parent);
+	}
+	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeWith");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScopeLet::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual CScriptVarPtr scopeLet() override; ///< to create var like: let a = ...
@@ -2131,8 +2126,7 @@ private:
 	CScriptVarLinkPtr with;
 	friend define_newScriptVar_Fnc(ScopeWith, CTinyJS *Context, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With);
 };
-inline define_newScriptVar_Fnc(ScopeWith, CTinyJS *, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With) { return new CScriptVarScopeWith(Parent, With); }
-
+inline define_newScriptVar_Fnc(ScopeWith, CTinyJS*, ScopeWith_t, const CScriptVarScopePtr& Parent, const CScriptVarPtr& With) { return std::shared_ptr<CScriptVarScopeWith>(new CScriptVarScopeWith(Parent))->init(Parent, With); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarDefaultIterator
@@ -2144,10 +2138,11 @@ define_ScriptVarPtr_Type(DefaultIterator);
 class CScriptVarDefaultIterator : public CScriptVarObject {
 protected:
 	CScriptVarDefaultIterator(CTinyJS *Context, const CScriptVarPtr &Object, IteratorMode Mode);
+	CScriptVarPtr init();
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarDefaultIterator");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
 	virtual bool isIterator() override;
@@ -2161,7 +2156,7 @@ private:
 	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, IteratorMode);
 
 };
-inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *Context, const CScriptVarPtr &_Object, IteratorMode Mode) { return new CScriptVarDefaultIterator(Context, _Object, Mode); }
+inline define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS* Context, const CScriptVarPtr& _Object, IteratorMode Mode) { return std::shared_ptr<CScriptVarDefaultIterator>(new CScriptVarDefaultIterator(Context, _Object, Mode))->init(); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -2179,7 +2174,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarGenerator");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual ~CScriptVarGenerator() override;
 
@@ -2201,7 +2196,7 @@ public:
 		yieldVarIsException = true;
 	}
 	bool isClosed() const { return closed; }
-	CScriptVarPtr yield(CScriptResult &execute, CScriptVar *YieldIn);
+	CScriptVarPtr yield(CScriptResult& execute, const CScriptVarPtr& YieldIn);
 private:
 	CScriptVarPtr functionRoot;
 	CScriptVarFunctionPtr function;
@@ -2227,7 +2222,7 @@ public:
 	friend define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS *, const CScriptVarPtr &, const CScriptVarFunctionPtr &);
 
 };
-inline define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function) { return new CScriptVarGenerator(Context, FunctionRoot, Function); }
+inline define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS* Context, const CScriptVarPtr& FunctionRoot, const CScriptVarFunctionPtr& Function) { return CScriptVarPtr(new CScriptVarGenerator(Context, FunctionRoot, Function)); }
 
 #endif
 
@@ -2265,7 +2260,7 @@ public:
 	bool useStrict() const { return strictMode; }
 
 	operator bool() const { return type==Normal; }
-	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.clear(), target.clear(); }
+	void set(TYPE Type, bool Clear=true) { type=Type; if(Clear) value.reset(), target.clear(); }
 	void set(TYPE Type, const CScriptVarPtr &Value) { type=Type; value=Value; }
 	void set(TYPE Type, const std::string &Target) { type=Type; target=Target; }
 	void setThrow(const CScriptVarPtr &Value, const std::string &File, int Line=-1, int Column=-1) { type=Throw; value=Value; throw_at_file=File, throw_at_line=Line; throw_at_column=Column; }
@@ -2408,7 +2403,7 @@ private:
 		~CScopeControl() { clear(); }
 		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; }
 		void addFncScope(const CScriptVarScopePtr &_Scope) { context->scopes.push_back(_Scope); count++; }
-		CScriptVarScopeLetPtr addLetScope() {	count++; return context->scopes.back() = ::newScriptVar(context, ScopeLet, context->scopes.back()); }
+		CScriptVarScopeLetPtr addLetScope() { count++; return context->scopes.back() = ::newScriptVar(context, ScopeLet, context->scopes.back()); }
 		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = ::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
 	private:
 		CTinyJS *context;
@@ -2464,7 +2459,7 @@ public:
 #ifndef NO_GENERATORS
 	std::vector<CScriptVarGenerator *> generatorStack;
 	void generator_start(CScriptVarGenerator *Generator);
-	CScriptVarPtr generator_yield(CScriptResult &execute, CScriptVar *YieldIn);
+	CScriptVarPtr generator_yield(CScriptResult& execute, const CScriptVarPtr &YieldIn);
 #endif
 	//////////////////////////////////////////////////////////////////////////
 
