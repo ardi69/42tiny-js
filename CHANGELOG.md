@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-16 17:30)
+Version 0.10.0 (2025-02-16 19:34)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -117,3 +117,4 @@ Version 0.10.0 (2025-02-16 17:30)
 * changed:tokens2str_begin is now a sorted array tokens2str at compile time (constexpr)
 * changed enum TOKENIZE_FLAGS to enum _class_ TOKENIZE_FLAGS
 * changed CScriptVarLink now allways hold in shared_ptr
+* removed some debuging stuff

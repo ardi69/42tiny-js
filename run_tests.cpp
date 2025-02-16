@@ -41,17 +41,6 @@
  * This is a program to run all the tests in the tests folder...
  */
 
-#ifdef _DEBUG
-#	ifdef _MSC_VER
-#		ifdef USE_DEBUG_NEW
-//#			include "targetver.h"
-//#			include <afx.h>
-//#			define new DEBUG_NEW
-#		endif
-#	else
-#		define DEBUG_MEMORY 1
-#	endif
-#endif
 #define _CRT_SECURE_NO_WARNINGS
 
 #ifdef _WIN32

@@ -83,6 +83,7 @@
 #endif // TRACE
 
 enum  LEX_TYPES : uint16_t {
+	LEX_NONE      =(uint16_t)-1,
 	LEX_EOF = 0,
 
 	LEX_LNOT      = '!',  // 33
@@ -335,8 +336,8 @@ public:
 	uint16_t last_tk; ///< The type of the last token that we have
 	std::string tkStr; ///< Data contained in the token we have here
 
-	void check(uint16_t expected_tk, uint16_t alternate_tk=(uint16_t)-1); ///< Lexical check wotsit
-	void match(uint16_t expected_tk, uint16_t alternate_tk=(uint16_t)-1); ///< Lexical match wotsit
+	void check(uint16_t expected_tk, uint16_t alternate_tk=LEX_NONE); ///< Lexical check wotsit
+	void match(uint16_t expected_tk, uint16_t alternate_tk=LEX_NONE); ///< Lexical match wotsit
 	void reset(const POS &toPos); ///< Reset this lex so we can start again
 	const char* rest() const { return pos.tokenStart; }
 	std::string currentFile;
@@ -549,7 +550,7 @@ class CScriptToken : public fixed_size_object<CScriptToken>
 {
 public:
 	CScriptToken() : line(0), column(0), token(LEX_EOF)/*, data(0) needed??? */ {}
-	CScriptToken(CScriptLex *l, uint16_t Match=(uint16_t)-1, uint16_t Alternate = (uint16_t)-1);
+	CScriptToken(CScriptLex* l, uint16_t Match = LEX_NONE, uint16_t Alternate = LEX_NONE);
 	CScriptToken(uint16_t Tk, int32_t IntData=0);
 	CScriptToken(uint16_t Tk, double FloatData);
 	CScriptToken(uint16_t Tk, const std::string &TkStr);

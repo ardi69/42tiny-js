@@ -46,13 +46,6 @@
 #include <stdio.h>
 #include <iostream>
 
-#ifdef _DEBUG
-#	ifndef _MSC_VER
-#		define DEBUG_MEMORY 1
-#	endif
-#endif
-
-
 void js_print(const CFunctionsScopePtr &v, void *) {
 	std::cout << "> " << v->getArgument("text")->toString() << std::endl;
 }

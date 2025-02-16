@@ -36,11 +36,6 @@
  * SOFTWARE.
  */
 
-#ifdef _DEBUG
-#	ifndef _MSC_VER
-#		define DEBUG_MEMORY 1
-#	endif
-#endif
 #include <errno.h>
 #include <sstream>
 #include <fstream>
@@ -61,57 +56,6 @@
 
 
 // -----------------------------------------------------------------------------------
-//////////////////////////////////////////////////////////////////////////
-/// Memory Debug
-//////////////////////////////////////////////////////////////////////////
-
-//#define DEBUG_MEMORY 1
-
-#if DEBUG_MEMORY
-
-vector<CScriptVar*> allocatedVars;
-vector<CScriptVarLink*> allocatedLinks;
-
-void mark_allocated(CScriptVar *v) {
-	allocatedVars.push_back(v);
-}
-
-void mark_deallocated(CScriptVar *v) {
-	for (size_t i=0;i<allocatedVars.size();i++) {
-		if (allocatedVars[i] == v) {
-			allocatedVars.erase(allocatedVars.begin()+i);
-			break;
-		}
-	}
-}
-
-void mark_allocated(CScriptVarLink *v) {
-	allocatedLinks.push_back(v);
-}
-
-void mark_deallocated(CScriptVarLink *v) {
-	for (size_t i=0;i<allocatedLinks.size();i++) {
-		if (allocatedLinks[i] == v) {
-			allocatedLinks.erase(allocatedLinks.begin()+i);
-			break;
-		}
-	}
-}
-
-void show_allocated() {
-	for (size_t i=0;i<allocatedVars.size();i++) {
-		printf("ALLOCATED, %d refs\n", allocatedVars[i]->getRefs());
-		allocatedVars[i]->trace("  ");
-	}
-	for (size_t i=0;i<allocatedLinks.size();i++) {
-		printf("ALLOCATED LINK %s, allocated[%d] to \n", allocatedLinks[i]->getName().c_str(), allocatedLinks[i]->getVarPtr()->getRefs());
-		allocatedLinks[i]->getVarPtr()->trace("  ");
-	}
-	allocatedVars.clear();
-	allocatedLinks.clear();
-}
-#endif
-
 
 //////////////////////////////////////////////////////////////////////////
 /// Utils
@@ -260,7 +204,7 @@ void CScriptLex::reset(const POS &toPos) { ///< Reset this lex so we can start a
 	while (!getNextToken()); // instead recursion
 }
 
-void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/*=-1*/) {
+void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/*=LEX_NONE*/) {
 	if (expected_tk==';' && tk==LEX_EOF) return; // ignore last missing ';'
 	if (tk!=expected_tk && tk!=alternate_tk) {
 		std::ostringstream errorString;
@@ -268,12 +212,12 @@ void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/*=-1*/) {
 			errorString << "Got unexpected " << CScriptToken::getTokenStr(tk);
 		else
 			errorString << "Got '" << CScriptToken::getTokenStr(tk, tkStr.c_str()) << "' expected '" << CScriptToken::getTokenStr(expected_tk) << "'";
-		if(alternate_tk!=-1) errorString << " or '" << CScriptToken::getTokenStr(alternate_tk) << "'";
+		if(alternate_tk!=LEX_NONE) errorString << " or '" << CScriptToken::getTokenStr(alternate_tk) << "'";
 		throw CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
 	}
 }
-void CScriptLex::match(uint16_t expected_tk1, uint16_t alternate_tk/*=-1*/) {
-	check(expected_tk1, alternate_tk);
+void CScriptLex::match(uint16_t expected_tk, uint16_t alternate_tk/*=LEX_NONE*/) {
+	check(expected_tk, alternate_tk);
 	int line = pos.currentLine;
 	while (!getNextToken()); // instead recursion
 	lineBreakBeforeToken = line != pos.currentLine;
@@ -441,7 +385,7 @@ bool CScriptLex::getNextToken()
 		tk = LEX_STR;
 	} else {
 		// single chars
-		tk = currCh;
+		tk = (uint8_t)currCh;
 		if (currCh) getNextCh();
 		if (tk=='=') {
 			if(currCh=='=') { // ==
@@ -980,7 +924,7 @@ constexpr auto tokens2str = sort_array(std::array{
 	token2str_t{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
 }, token2str_cmp_t());
 
-CScriptToken::CScriptToken(CScriptLex *l, uint16_t Match, uint16_t Alternate) : line(l->currentLine()), column(l->currentColumn()), token(l->tk)/*, data(0) needed??? */
+CScriptToken::CScriptToken(CScriptLex* l, uint16_t Match /*= LEX_NONE*/, uint16_t Alternate /*= LEX_NONE*/) : line(l->currentLine()), column(l->currentColumn()), token(l->tk)/*, data(0) needed??? */
 {
 	if(token == LEX_INT || LEX_TOKEN_DATA_FLOAT(token)) {
 		CNumber number(l->tkStr);
@@ -1000,7 +944,7 @@ CScriptToken::CScriptToken(CScriptLex *l, uint16_t Match, uint16_t Alternate) : 
 		data = CScriptTokenDataIf::create();
 	else if (LEX_TOKEN_DATA_TRY(token))
 		data = CScriptTokenDataTry::create();
-	if (Match >= 0)
+	if (Match != LEX_NONE)
 		l->match(Match, Alternate);
 	else
 		l->match(l->tk);
@@ -1273,8 +1217,8 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		tokenScopeStack.clear();
 		ScriptTokenState state;
 		pushForwarder(state);
-		if(l->tk == '§') { // special-Token at Start means the code begins not at Statement-Level
-			l->match('§');
+		if(l->tk == '\x7f') { // special-Token at Start means the code begins not at Statement-Level
+			l->match('\x7f');
 			tokenizeLiteral(state, TOKENIZE_FLAGS::none);
 		} else do {
 			tokenizeStatement(state, TOKENIZE_FLAGS::none);
@@ -1319,7 +1263,7 @@ bool CScriptTokenizer::check(int ExpectedToken, int AlternateToken/*=-1*/) {
 			errorString << "Got unexpected " << CScriptToken::getTokenStr(currentToken);
 		else {
 			errorString << "Got '" << CScriptToken::getTokenStr(currentToken) << "' expected '" << CScriptToken::getTokenStr(ExpectedToken) << "'";
-			if(AlternateToken!=-1) errorString << " or '" << CScriptToken::getTokenStr(AlternateToken) << "'";
+			if(AlternateToken!=LEX_NONE) errorString << " or '" << CScriptToken::getTokenStr(AlternateToken) << "'";
 		}
 		throw CScriptException(SyntaxError, errorString.str(), currentFile, currentLine(), currentColumn());
 	}
@@ -2651,17 +2595,11 @@ CScriptVar::CScriptVar(CTinyJS* Context, const CScriptVarPtr& Prototype) : proto
 	}
 	context->first = this;
 	prev = 0;
-#if DEBUG_MEMORY
-	mark_allocated(this);
-#endif
 #if _DEBUG
 	debugID = currentDebugID++;
 #endif
 }
 CScriptVar::~CScriptVar(void) {
-#if DEBUG_MEMORY
-	mark_deallocated(this);
-#endif
 	for(SCRIPTVAR_CHILDS_it it = Childs.begin(); it != Childs.end(); ++it)
 		(*it)->setOwner(0);
 	removeAllChildren();
@@ -3263,17 +3201,10 @@ void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
 
 CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const std::string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/)
 	: name(Name), flags(Flags) {
-#if DEBUG_MEMORY
-	mark_allocated(this);
-#endif
 	var = Var;
 }
 
-CScriptVarLink::~CScriptVarLink() {
-#if DEBUG_MEMORY
-	mark_deallocated(this);
-#endif
-}
+CScriptVarLink::~CScriptVarLink() {}
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLinkPtr
@@ -5190,9 +5121,6 @@ CTinyJS::~CTinyJS() {
 #ifdef _DEBUG
 	for(CScriptVar *p = first; p; p=p->next)
 		printf("%p (%s) %s ID=%u\n", p, typeid(*p).name(), p->getParsableString().c_str(), p->debugID);
-#endif
-#if DEBUG_MEMORY
-	show_allocated();
 #endif
 }
 
@@ -7388,8 +7316,8 @@ void CTinyJS::native_parseFloat(const CFunctionsScopePtr &c, void *) {
 
 
 void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
-	std::string Code = "§" + c->getArgument("text")->toString();
-	// "§" is a spezal-token - it's for the tokenizer and means the code begins not in Statement-level
+	std::string Code = "\x7f" + c->getArgument("text")->toString();
+	// '\x7f' is a spezal-token - it's for the tokenizer and means the code begins not in Statement-level
 	CScriptVarLinkWorkPtr returnVar;
 	CScriptTokenizer *oldTokenizer = t; t=0;
 	try {
