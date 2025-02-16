@@ -42,9 +42,6 @@
  */
 
 #include "TinyJS.h"
-//#include "TinyJS_Functions.h"
-//#include "TinyJS_StringFunctions.h"
-//#include "TinyJS_MathFunctions.h"
 #include <assert.h>
 #include <stdio.h>
 #include <iostream>
@@ -55,13 +52,9 @@
 #	endif
 #endif
 
-//const char *code = "var a = 5; if (a==5) a=4; else a=3;";
-//const char *code = "{ var a = 4; var b = 1; while (a>0) { b = b * 2; a = a - 1; } var c = 5; }";
-//const char *code = "{ var b = 1; for (var i=0;i<4;i=i+1) b = b * 2; }";
-const char *code = "function myfunc(x, y) { return x + y; } var a = myfunc(1,2); print(a);";
 
 void js_print(const CFunctionsScopePtr &v, void *) {
-	printf("> %s\n", v->getArgument("text")->toString().c_str());
+	std::cout << "> " << v->getArgument("text")->toString() << std::endl;
 }
 
 void js_dump(const CFunctionsScopePtr &v, void *) {
@@ -91,16 +84,7 @@ int main(int , char **)
 {
 	char dummy;
 	topOfStack = &dummy;
-//	printf("%i %i\n", __cplusplus, _MSC_VER);
-
-//	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
-//	setlocale( LC_ALL, ".858" );
-//	printf("Locale:%s\n",setlocale( LC_ALL, 0 ));
 	CTinyJS *js = new CTinyJS();
-	/* add the functions from TinyJS_Functions.cpp */
-//	registerFunctions(js);
-//	registerStringFunctions(js);
-//	registerMathFunctions(js);
 	/* Add a native function */
 	js->addNative("function print(text)", &js_print, 0);
 	js->addNative("function console.log(text)", &js_print, 0);
@@ -112,7 +96,7 @@ int main(int , char **)
 		js->execute("var lets_quit = 0; function quit() { lets_quit = 1; } dump = this.dump;");
 		js->execute("print(\"Interactive mode... Type quit(); to exit, or print(...); to print something, or dump() to dump the symbol table!\");");
 	} catch (CScriptException &e) {
-		printf("%s\n", e.toString().c_str());
+		std::cout << e.toString() << std::endl;
 	}
 	int lineNumber = 0;
 	while (js->evaluate("lets_quit") == "0") {
@@ -121,7 +105,7 @@ int main(int , char **)
 		try {
 			js->execute(buffer, "console.input", lineNumber++);
 		} catch (CScriptException &e) {
-			printf("%s\n", e.toString().c_str());
+			std::cout << e.toString() << std::endl;
 		}
 	}
 	delete js;

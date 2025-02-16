@@ -250,7 +250,7 @@ CScriptLex::CScriptLex(const char *Code, const std::string &File, int Line, int 
 
 void CScriptLex::reset(const POS &toPos) { ///< Reset this lex so we can start again
 	dataPos = toPos.tokenStart;
-	tk = last_tk = 0;
+	tk = last_tk = LEX_EOF;
 	tkStr = "";
 	pos = toPos;
 	lineBreakBeforeToken = false;
@@ -260,7 +260,7 @@ void CScriptLex::reset(const POS &toPos) { ///< Reset this lex so we can start a
 	while (!getNextToken()); // instead recursion
 }
 
-void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
+void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/*=-1*/) {
 	if (expected_tk==';' && tk==LEX_EOF) return; // ignore last missing ';'
 	if (tk!=expected_tk && tk!=alternate_tk) {
 		std::ostringstream errorString;
@@ -272,7 +272,7 @@ void CScriptLex::check(int expected_tk, int alternate_tk/*=-1*/) {
 		throw CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
 	}
 }
-void CScriptLex::match(int expected_tk1, int alternate_tk/*=-1*/) {
+void CScriptLex::match(uint16_t expected_tk1, uint16_t alternate_tk/*=-1*/) {
 	check(expected_tk1, alternate_tk);
 	int line = pos.currentLine;
 	while (!getNextToken()); // instead recursion
@@ -842,137 +842,145 @@ bool CScriptTokenDataObjectLiteral::toDestructuringVar(const std::shared_ptr<CSc
 // CScriptToken
 //////////////////////////////////////////////////////////////////////////
 
-typedef struct { int id; const char *str; bool need_space; } token2str_t;
+typedef struct { uint16_t id; std::string_view str; bool need_space; } token2str_t;
 static size_t reserved_words_min_len = 2;
 static size_t reserved_words_max_len = 10;
-static token2str_t reserved_words_begin[] ={
-	// reserved words
-	{ LEX_R_IF,					"if",						true  },
-	{ LEX_R_ELSE,				"else",						true  },
-	{ LEX_R_DO,					"do",						true  },
-	{ LEX_R_WHILE,				"while",					true  },
-	{ LEX_R_FOR,				"for",						true  },
-	{ LEX_R_IN,					"in",						true  },
-	{ LEX_R_BREAK,				"break",					true  },
-	{ LEX_R_CONTINUE,			"continue",					true  },
-	{ LEX_R_FUNCTION,			"function",					true  },
-	{ LEX_R_RETURN,				"return",					true  },
-	{ LEX_R_VAR,				"var",						true  },
-	{ LEX_R_LET,				"let",						true  },
-	{ LEX_R_CONST,				"const",					true  },
-	{ LEX_R_WITH,				"with",						true  },
-	{ LEX_R_TRUE,				"true",						true  },
-	{ LEX_R_FALSE,				"false",					true  },
-	{ LEX_R_NULL,				"null",						true  },
-	{ LEX_R_NEW,				"new",						true  },
-	{ LEX_R_TRY,				"try",						true  },
-	{ LEX_R_CATCH,				"catch",					true  },
-	{ LEX_R_FINALLY,			"finally",					true  },
-	{ LEX_R_THROW,				"throw",					true  },
-	{ LEX_R_TYPEOF,				"typeof",					true  },
-	{ LEX_R_VOID,				"void",						true  },
-	{ LEX_R_DELETE,				"delete",					true  },
-	{ LEX_R_INSTANCEOF,			"instanceof",				true  },
-	{ LEX_R_SWITCH,				"switch",					true  },
-	{ LEX_R_CASE,				"case",						true  },
-	{ LEX_R_DEFAULT,			"default",					true  },
-	{ LEX_R_YIELD,				"yield",					true  },
+
+
+struct token2str_cmp_t {
+	constexpr bool operator()(const token2str_t& lhs, const token2str_t& rhs) const { return lhs.id < rhs.id; }
+	constexpr bool operator()(const token2str_t& lhs, uint16_t rhs) const { return lhs.id < rhs; }
+	constexpr bool operator()(const token2str_t* lhs, const token2str_t* rhs) const { return lhs && rhs && lhs->str < rhs->str; }
+	constexpr bool operator()(const token2str_t* lhs, std::string_view rhs) const { return lhs && lhs->str < rhs; }
 };
-#define ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
-#define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
-static token2str_t *reserved_words_end = ARRAY_END(reserved_words_begin);
-static token2str_t *str2reserved_begin[ARRAY_LENGTH(reserved_words_begin)];
-static token2str_t **str2reserved_end = ARRAY_END(str2reserved_begin);
 
-static token2str_t tokens2str_begin[] = {
-	{ LEX_EOF, 									"EOF", 										false },
-	{ LEX_ID, 									"ID", 										true  },
-	{ LEX_INT, 									"INT", 										true  },
-	{ LEX_FLOAT, 								"FLOAT", 									true  },
-	{ LEX_STR, 									"STRING", 									true  },
-	{ LEX_REGEXP, 								"REGEXP", 									true  },
-	{ LEX_ARROW, 								"=>", 										false },
-	{ LEX_EQUAL, 								"==", 										false },
-	{ LEX_TYPEEQUAL, 							"===", 										false },
-	{ LEX_NEQUAL, 								"!=", 										false },
-	{ LEX_NTYPEEQUAL, 							"!==", 										false },
-	{ LEX_LEQUAL, 								"<=", 										false },
-	{ LEX_LSHIFT, 								"<<", 										false },
-	{ LEX_LSHIFTEQUAL, 							"<<=", 										false },
-	{ LEX_GEQUAL, 								">=", 										false },
-	{ LEX_RSHIFT, 								">>", 										false },
-	{ LEX_RSHIFTEQUAL, 							">>=", 										false },
-	{ LEX_RSHIFTU, 								">>>", 										false },
-	{ LEX_RSHIFTUEQUAL, 						">>>=", 									false },
-	{ LEX_PLUSEQUAL, 							"+=", 										false },
-	{ LEX_MINUSEQUAL, 							"-=", 										false },
-	{ LEX_PLUSPLUS, 							"++", 										false },
-	{ LEX_MINUSMINUS, 							"--", 										false },
-	{ LEX_ANDEQUAL, 							"&=", 										false },
-	{ LEX_ANDAND, 								"&&", 										false },
-	{ LEX_OREQUAL, 								"|=", 										false },
-	{ LEX_OROR, 								"||", 										false },
-	{ LEX_XOREQUAL, 							"^=", 										false },
-	{ LEX_ASTERISKEQUAL, 						"*=", 										false },
-	{ LEX_SLASHEQUAL, 							"/=", 										false },
-	{ LEX_PERCENTEQUAL, 						"%=", 										false },
-	{ LEX_ASKASK, 								"??", 										false },
-	{ LEX_ASKASKEQUAL, 							"??=", 										false },
-	{ LEX_ASTERISKASTERISK, 					"**", 										false },
-	{ LEX_ASTERISKASTERISKEQUAL, 				"**=", 										false },
+template<typename T, typename L>
+constexpr auto sort_array(T arr, L less=std::less) {
+	[less](auto& arr) {
+		for (std::size_t i = 0; i < arr.size(); ++i) {
+			for (std::size_t j = 0; j < arr.size() - i - 1; ++j) {
+				if (less(arr[j + 1], arr[j])) {
+					auto x = arr[j]; arr[j] = arr[j + 1]; arr[j + 1] = x;
+				}
+			}
+		}
+	}(arr);
+	return arr;
+}
 
-	{ LEX_OPTIONAL_CHAINING_MEMBER, 			"?.", 										false },
-	{ LEX_OPTIONAL_CHAINING_ARRAY, 				"?.[", 										false },
-	{ LEX_OPTIONAL_CHANING_FNC, 				"?.(", 										false },
+// **Generische Funktion für Pointer-Array mit Sortierung nach `less`**
+template <typename T, std::size_t N, typename L, std::size_t... I>
+constexpr auto make_pointer_array(const std::array<T, N>& arr, L less, std::index_sequence<I...>) {
+	//constexpr auto sorted = sort_array(arr, less);
+	return sort_array(std::array<const T*, N>{ &arr[I]... }, less);
+}
+template <typename T, std::size_t N, typename L>
+constexpr auto make_pointer_array(const std::array<T, N>& arr, L less=std::less) {
+	return make_pointer_array(arr, less, std::make_index_sequence<N>{});
+}
+
+//static token2str_t reserved_words_begin[] ={
+constexpr auto reserved_words = sort_array(std::array{
+	// reserved words
+	token2str_t{ LEX_R_IF,					"if",						true  },
+	token2str_t{ LEX_R_ELSE,				"else",						true  },
+	token2str_t{ LEX_R_DO,					"do",						true  },
+	token2str_t{ LEX_R_WHILE,				"while",					true  },
+	token2str_t{ LEX_R_FOR,					"for",						true  },
+	token2str_t{ LEX_R_IN,					"in",						true  },
+	token2str_t{ LEX_R_BREAK,				"break",					true  },
+	token2str_t{ LEX_R_CONTINUE,			"continue",					true  },
+	token2str_t{ LEX_R_FUNCTION,			"function",					true  },
+	token2str_t{ LEX_R_RETURN,				"return",					true  },
+	token2str_t{ LEX_R_VAR,					"var",						true  },
+	token2str_t{ LEX_R_LET,					"let",						true  },
+	token2str_t{ LEX_R_CONST,				"const",					true  },
+	token2str_t{ LEX_R_WITH,				"with",						true  },
+	token2str_t{ LEX_R_TRUE,				"true",						true  },
+	token2str_t{ LEX_R_FALSE,				"false",					true  },
+	token2str_t{ LEX_R_NULL,				"null",						true  },
+	token2str_t{ LEX_R_NEW,					"new",						true  },
+	token2str_t{ LEX_R_TRY,					"try",						true  },
+	token2str_t{ LEX_R_CATCH,				"catch",					true  },
+	token2str_t{ LEX_R_FINALLY,				"finally",					true  },
+	token2str_t{ LEX_R_THROW,				"throw",					true  },
+	token2str_t{ LEX_R_TYPEOF,				"typeof",					true  },
+	token2str_t{ LEX_R_VOID,				"void",						true  },
+	token2str_t{ LEX_R_DELETE,				"delete",					true  },
+	token2str_t{ LEX_R_INSTANCEOF,			"instanceof",				true  },
+	token2str_t{ LEX_R_SWITCH,				"switch",					true  },
+	token2str_t{ LEX_R_CASE,				"case",						true  },
+	token2str_t{ LEX_R_DEFAULT,				"default",					true  },
+	token2str_t{ LEX_R_YIELD,				"yield",					true  },
+}, token2str_cmp_t());
+
+constexpr auto reserved_words_by_str = make_pointer_array(reserved_words, token2str_cmp_t());
+
+constexpr auto tokens2str = sort_array(std::array{
+
+	token2str_t{ LEX_EOF, 									"EOF", 										false },
+	token2str_t{ LEX_ID, 									"ID", 										true  },
+	token2str_t{ LEX_INT, 									"INT", 										true  },
+	token2str_t{ LEX_FLOAT, 								"FLOAT", 									true  },
+	token2str_t{ LEX_STR, 									"STRING", 									true  },
+	token2str_t{ LEX_REGEXP, 								"REGEXP", 									true  },
+	token2str_t{ LEX_ARROW, 								"=>", 										false },
+	token2str_t{ LEX_EQUAL, 								"==", 										false },
+	token2str_t{ LEX_TYPEEQUAL, 							"===", 										false },
+	token2str_t{ LEX_NEQUAL, 								"!=", 										false },
+	token2str_t{ LEX_NTYPEEQUAL, 							"!==", 										false },
+	token2str_t{ LEX_LEQUAL, 								"<=", 										false },
+	token2str_t{ LEX_LSHIFT, 								"<<", 										false },
+	token2str_t{ LEX_LSHIFTEQUAL, 							"<<=", 										false },
+	token2str_t{ LEX_GEQUAL, 								">=", 										false },
+	token2str_t{ LEX_RSHIFT, 								">>", 										false },
+	token2str_t{ LEX_RSHIFTEQUAL, 							">>=", 										false },
+	token2str_t{ LEX_RSHIFTU, 								">>>", 										false },
+	token2str_t{ LEX_RSHIFTUEQUAL,							">>>=", 									false },
+	token2str_t{ LEX_PLUSEQUAL, 							"+=", 										false },
+	token2str_t{ LEX_MINUSEQUAL, 							"-=", 										false },
+	token2str_t{ LEX_PLUSPLUS, 								"++", 										false },
+	token2str_t{ LEX_MINUSMINUS, 							"--", 										false },
+	token2str_t{ LEX_ANDEQUAL, 								"&=", 										false },
+	token2str_t{ LEX_ANDAND, 								"&&", 										false },
+	token2str_t{ LEX_OREQUAL, 								"|=", 										false },
+	token2str_t{ LEX_OROR, 									"||", 										false },
+	token2str_t{ LEX_XOREQUAL, 								"^=", 										false },
+	token2str_t{ LEX_ASTERISKEQUAL, 						"*=", 										false },
+	token2str_t{ LEX_SLASHEQUAL, 							"/=", 										false },
+	token2str_t{ LEX_PERCENTEQUAL, 							"%=", 										false },
+	token2str_t{ LEX_ASKASK, 								"??", 										false },
+	token2str_t{ LEX_ASKASKEQUAL, 							"??=", 										false },
+	token2str_t{ LEX_ASTERISKASTERISK, 						"**", 										false },
+	token2str_t{ LEX_ASTERISKASTERISKEQUAL, 				"**=", 										false },
+
+	token2str_t{ LEX_OPTIONAL_CHAINING_MEMBER,				"?.", 										false },
+	token2str_t{ LEX_OPTIONAL_CHAINING_ARRAY, 				"?.[", 										false },
+	token2str_t{ LEX_OPTIONAL_CHANING_FNC, 					"?.(", 										false },
 
 	// special tokens
-	{ LEX_T_OF, 								"of", 										true  },
-	{ LEX_T_FUNCTION_OPERATOR, 					"function", 								true  },
-	{ LEX_T_GENERATOR, 							"function*", 								true  },
-	{ LEX_T_GENERATOR_OPERATOR, 				"function*", 								true  },
-	{ LEX_T_GENERATOR_MEMBER, 					"*",		 								true  },
-	{ LEX_T_GET, 								"get", 										true  },
-	{ LEX_T_SET, 								"set", 										true  },
-	{ LEX_T_EXCEPTION_VAR, 						"LEX_T_EXCEPTION_VAR",	 					false },
-	{ LEX_T_SKIP, 								"LEX_T_SKIP", 								false },
-	{ LEX_T_END_EXPRESSION, 					"LEX_T_END_EXPRESSION",	 					false },
-	{ LEX_T_DUMMY_LABEL, 						"LABEL", 									true  },
-	{ LEX_T_LABEL, 								"LABEL", 									true  },
-	{ LEX_T_LOOP, 								"LEX_T_LOOP", 								true  },
-	{ LEX_T_FOR_IN, 							"LEX_FOR_IN", 								true  },
-	{ LEX_T_IF, 								"if", 										true  },
-	{ LEX_T_FORWARD, 							"LEX_T_FORWARD", 							false },
-	{ LEX_T_OBJECT_LITERAL, 					"LEX_T_OBJECT_LITERAL",	 					false },
-	{ LEX_T_ARRAY_COMPREHENSIONS_BODY,			"LEX_T_ARRAY_COMPREHENSIONS_BODY",			false },
-	{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
-};
-static token2str_t *tokens2str_end = &tokens2str_begin[sizeof(tokens2str_begin)/sizeof(tokens2str_begin[0])];
-struct token2str_cmp_t {
-	bool operator()(const token2str_t &lhs, const token2str_t &rhs) {
-		return lhs.id < rhs.id;
-	}
-	bool operator()(const token2str_t &lhs, int rhs) {
-		return lhs.id < rhs;
-	}
-	bool operator()(const token2str_t *lhs, const token2str_t *rhs) {
-		return strcmp(lhs->str, rhs->str)<0;
-	}
-	bool operator()(const token2str_t *lhs, const char *rhs) {
-		return strcmp(lhs->str, rhs)<0;
-	}
-};
-static bool tokens2str_sort() {
-//	printf("tokens2str_sort called\n");
-	std::sort(tokens2str_begin, tokens2str_end, token2str_cmp_t());
-	std::sort(reserved_words_begin, reserved_words_end, token2str_cmp_t());
-	for(unsigned int i=0; i<ARRAY_LENGTH(str2reserved_begin); i++)
-		str2reserved_begin[i] = &reserved_words_begin[i];
-	std::sort(str2reserved_begin, str2reserved_end, token2str_cmp_t());
-	return true;
-}
-static bool tokens2str_sorted = tokens2str_sort();
+	token2str_t{ LEX_T_OF, 									"of", 										true  },
+	token2str_t{ LEX_T_FUNCTION_OPERATOR, 					"function", 								true  },
+	token2str_t{ LEX_T_GENERATOR, 							"function*", 								true  },
+	token2str_t{ LEX_T_GENERATOR_OPERATOR, 					"function*", 								true  },
+	token2str_t{ LEX_T_GENERATOR_MEMBER, 					"*",		 								true  },
+	token2str_t{ LEX_T_GET, 								"get", 										true  },
+	token2str_t{ LEX_T_SET, 								"set", 										true  },
+	token2str_t{ LEX_T_EXCEPTION_VAR, 						"LEX_T_EXCEPTION_VAR",	 					false },
+	token2str_t{ LEX_T_SKIP, 								"LEX_T_SKIP", 								false },
+	token2str_t{ LEX_T_END_EXPRESSION, 						"LEX_T_END_EXPRESSION",	 					false },
+	token2str_t{ LEX_T_DUMMY_LABEL, 						"LABEL", 									true  },
+	token2str_t{ LEX_T_LABEL, 								"LABEL", 									true  },
+	token2str_t{ LEX_T_LOOP, 								"LEX_T_LOOP", 								true  },
+	token2str_t{ LEX_T_FOR_IN, 								"LEX_FOR_IN", 								true  },
+	token2str_t{ LEX_T_IF, 									"if", 										true  },
+	token2str_t{ LEX_T_FORWARD, 							"LEX_T_FORWARD", 							false },
+	token2str_t{ LEX_T_OBJECT_LITERAL, 						"LEX_T_OBJECT_LITERAL",	 					false },
+	token2str_t{ LEX_T_ARRAY_COMPREHENSIONS_BODY,			"LEX_T_ARRAY_COMPREHENSIONS_BODY",			false },
+	token2str_t{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
+}, token2str_cmp_t());
 
-CScriptToken::CScriptToken(CScriptLex *l, int Match, int Alternate) : line(l->currentLine()), column(l->currentColumn()), token(l->tk)/*, data(0) needed??? */
+CScriptToken::CScriptToken(CScriptLex *l, uint16_t Match, uint16_t Alternate) : line(l->currentLine()), column(l->currentColumn()), token(l->tk)/*, data(0) needed??? */
 {
 	if(token == LEX_INT || LEX_TOKEN_DATA_FLOAT(token)) {
 		CNumber number(l->tkStr);
@@ -1141,21 +1149,22 @@ std::string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it E
 
 }
 
-std::string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bool *need_space/*=0 */ ) {
-	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
+std::string CScriptToken::getTokenStr(uint16_t token, const char *tokenStr/*=0*/, bool *need_space/*=0 */ ) {
 	if(token == LEX_ID && tokenStr) {
 		if(need_space) *need_space=true;
 		return tokenStr;
 	}
-	token2str_t *found = std::lower_bound(reserved_words_begin, reserved_words_end, token, token2str_cmp_t());
-	if(found != reserved_words_end && found->id==token) {
-		if(need_space) *need_space=found->need_space;
-		return found->str;
+	{
+		auto found = std::lower_bound(reserved_words.begin(), reserved_words.end(), token, token2str_cmp_t());
+		if (found != reserved_words.end() && found->id == token) {
+			if (need_space) *need_space = found->need_space;
+			return std::string(found->str);
+		}
 	}
-	found = std::lower_bound(tokens2str_begin, tokens2str_end, token, token2str_cmp_t());
-	if(found != tokens2str_end && found->id==token) {
+	auto found = std::lower_bound(tokens2str.begin(), tokens2str.end(), token, token2str_cmp_t());
+	if(found != tokens2str.end() && found->id == token) {
 		if(need_space) *need_space=found->need_space;
-		return found->str;
+		return std::string(found->str);
 	}
 	if(need_space) *need_space=false;
 
@@ -1169,21 +1178,18 @@ std::string CScriptToken::getTokenStr( int token, const char *tokenStr/*=0*/, bo
 	msg << "?[" << token << "]";
 	return msg.str();
 }
-const char *CScriptToken::isReservedWord(int Token) {
-	if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
-	token2str_t *found = std::lower_bound(reserved_words_begin, reserved_words_end, Token, token2str_cmp_t());
-	if(found != reserved_words_end && found->id==Token) {
+std::string_view CScriptToken::isReservedWord(uint16_t Token) {
+	auto found = std::lower_bound(reserved_words.begin(), reserved_words.end(), Token, token2str_cmp_t());
+	if(found != reserved_words.end() && found->id == Token) {
 		return found->str;
 	}
-	return 0;
+	return std::string_view();
 }
-int CScriptToken::isReservedWord(const std::string &Str) {
+uint16_t CScriptToken::isReservedWord(const std::string_view &Str) {
 	size_t len = Str.length();
 	if(len >= reserved_words_min_len && len <= reserved_words_max_len) {
-		const char *str = Str.c_str();
-		if(!tokens2str_sorted) tokens2str_sorted=tokens2str_sort();
-		token2str_t **found = std::lower_bound(str2reserved_begin, str2reserved_end, str, token2str_cmp_t());
-		if(found != str2reserved_end && strcmp((*found)->str, str)==0) {
+		auto found = std::lower_bound(reserved_words_by_str.begin(), reserved_words_by_str.end(), Str, token2str_cmp_t());
+		if(found != reserved_words_by_str.end() && (*found)->str == Str) {
 			return (*found)->id;
 		}
 	}
@@ -1194,6 +1200,44 @@ int CScriptToken::isReservedWord(const std::string &Str) {
 //////////////////////////////////////////////////////////////////////////
 /// CScriptTokenizer
 //////////////////////////////////////////////////////////////////////////
+enum class TOKENIZE_FLAGS {
+	none = 0,
+	canLabel = 1 << 0,
+	canBreak = 1 << 1,
+	canContinue = 1 << 2,
+	canReturn = 1 << 3,
+	canYield = 1 << 4,
+	asStatement = 1 << 5,
+	noIn = 1 << 6,	/// expression without 'in' or 'of'
+	isAccessor = 1 << 7,
+	isGenerator = 1 << 8,
+	callForNew = 1 << 9,
+	noBlockStart = 1 << 10,
+	nestedObject = 1 << 11,
+};
+// Bitweise Operatoren für `TOKENIZE_FLAGS` überladen
+inline TOKENIZE_FLAGS operator|(TOKENIZE_FLAGS a, TOKENIZE_FLAGS b) {
+	return static_cast<TOKENIZE_FLAGS>(static_cast<unsigned int>(a) | static_cast<unsigned int>(b));
+}
+inline TOKENIZE_FLAGS& operator|=(TOKENIZE_FLAGS& a, TOKENIZE_FLAGS b) {
+	a = a | b;
+	return a;
+}
+inline TOKENIZE_FLAGS operator&(TOKENIZE_FLAGS a, TOKENIZE_FLAGS b) {
+	return static_cast<TOKENIZE_FLAGS>(static_cast<unsigned int>(a) & static_cast<unsigned int>(b));
+}
+// inline bool operator&(TOKENIZE_FLAGS a, TOKENIZE_FLAGS b) {
+// 	return static_cast<unsigned int>(a) & static_cast<unsigned int>(b);
+// }
+inline TOKENIZE_FLAGS& operator&=(TOKENIZE_FLAGS& a, TOKENIZE_FLAGS b) {
+	a = a & b;
+	return a;
+}
+inline TOKENIZE_FLAGS operator~(TOKENIZE_FLAGS a) {
+	return static_cast<TOKENIZE_FLAGS>(~static_cast<unsigned int>(a));
+}
+
+
 
 CScriptTokenizer::CScriptTokenizer() : tk(0), l(0), prevPos(&tokens) {
 }
@@ -1231,9 +1275,9 @@ void CScriptTokenizer::tokenizeCode(CScriptLex &Lexer) {
 		pushForwarder(state);
 		if(l->tk == '§') { // special-Token at Start means the code begins not at Statement-Level
 			l->match('§');
-			tokenizeLiteral(state, 0);
+			tokenizeLiteral(state, TOKENIZE_FLAGS::none);
 		} else do {
-			tokenizeStatement(state, 0);
+			tokenizeStatement(state, TOKENIZE_FLAGS::none);
 		} while (l->tk!=LEX_EOF);
 		pushToken(state.Tokens, LEX_EOF); // add LEX_EOF-Token
 		removeEmptyForwarder(state);
@@ -1303,21 +1347,8 @@ static inline void setTokenSkip(CScriptTokenizer::ScriptTokenState &State) {
 	State.Tokens[tokenBeginIdx].Int(size2int32(State.Tokens.size()-tokenBeginIdx));
 }
 
-enum {
-	TOKENIZE_FLAGS_canLabel			= 1<<0,
-	TOKENIZE_FLAGS_canBreak			= 1<<1,
-	TOKENIZE_FLAGS_canContinue		= 1<<2,
-	TOKENIZE_FLAGS_canReturn		= 1<<3,
-	TOKENIZE_FLAGS_canYield			= 1<<4,
-	TOKENIZE_FLAGS_asStatement		= 1<<5,
-	TOKENIZE_FLAGS_noIn				= 1<<6,	/// expression without 'in' or 'of'
-	TOKENIZE_FLAGS_isAccessor		= 1<<7,
-	TOKENIZE_FLAGS_isGenerator		= 1<<8,
-	TOKENIZE_FLAGS_callForNew		= 1<<9,
-	TOKENIZE_FLAGS_noBlockStart		= 1<<10,
-	TOKENIZE_FLAGS_nestedObject		= 1<<11,
-};
-void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, int Flags) {
+
+void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	l->match(LEX_R_TRY);
 	CScriptToken TryToken(LEX_T_TRY);
 	auto &TryData = TryToken.Try();
@@ -1354,7 +1385,7 @@ void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, int Flags) {
 		l->match(')');
 
 		// catch-block
-		tokenizeBlock(State, Flags | TOKENIZE_FLAGS_noBlockStart);
+		tokenizeBlock(State, Flags | TOKENIZE_FLAGS::noBlockStart);
 		State.Tokens.swap(catchBlock.block);
 		State.Forwarders.pop_back();
 	}
@@ -1366,7 +1397,7 @@ void CScriptTokenizer::tokenizeTry(ScriptTokenState &State, int Flags) {
 	}
 	State.Tokens.swap(mainTokens);
 }
-void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 
 	State.Marks.push_back(pushToken(State.Tokens)); // push Token & push tokenBeginIdx
 	pushToken(State.Tokens, '(');
@@ -1378,7 +1409,7 @@ void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
 
 
 	std::vector<int>::size_type MarksSize = State.Marks.size();
-	Flags |= TOKENIZE_FLAGS_canBreak;
+	Flags |= TOKENIZE_FLAGS::canBreak;
 	for(bool hasDefault=false;;) {
 		if( l->tk == LEX_R_CASE || l->tk == LEX_R_DEFAULT) {
 			if(l->tk == LEX_R_CASE) {
@@ -1407,7 +1438,7 @@ void CScriptTokenizer::tokenizeSwitch(ScriptTokenState &State, int Flags) {
 	setTokenSkip(State); // switch-block
 	setTokenSkip(State); // switch-statement
 }
-void CScriptTokenizer::tokenizeWith(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeWith(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	State.Marks.push_back(pushToken(State.Tokens)); // push Token & push tokenBeginIdx
 
 	pushToken(State.Tokens, '(');
@@ -1437,7 +1468,7 @@ static inline void PopLoopLabels(uint32_t label_count, STRING_VECTOR_t &LoopLabe
 	ASSERT(label_count <= LoopLabels.size());
 	LoopLabels.resize(LoopLabels.size()-label_count);
 }
-void CScriptTokenizer::tokenizeWhileAndDo(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeWhileAndDo(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 
 	bool do_while = l->tk==LEX_R_DO;
 
@@ -1461,7 +1492,7 @@ void CScriptTokenizer::tokenizeWhileAndDo(ScriptTokenState &State, int Flags) {
 		State.Tokens.swap(LoopData->condition);
 		l->match(')');
 	}
-	tokenizeStatementNoLet(State, Flags | TOKENIZE_FLAGS_canBreak | TOKENIZE_FLAGS_canContinue);
+	tokenizeStatementNoLet(State, Flags | TOKENIZE_FLAGS::canBreak | TOKENIZE_FLAGS::canContinue);
 	State.Tokens.swap(LoopData->body);
 	if(do_while) {
 		l->match(LEX_R_WHILE);
@@ -1475,7 +1506,7 @@ void CScriptTokenizer::tokenizeWhileAndDo(ScriptTokenState &State, int Flags) {
 	PopLoopLabels(label_count, State.LoopLabels);
 }
 
-void CScriptTokenizer::tokenizeIf_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign) {
+void CScriptTokenizer::tokenizeIf_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign) {
 	CScriptToken IfToken(LEX_T_IF);
 	auto &IfData = IfToken.If();
 
@@ -1509,7 +1540,7 @@ void CScriptTokenizer::tokenizeIf_inArrayComprehensions(ScriptTokenState &State,
 	State.Tokens.swap(mainTokens);
 }
 
-void CScriptTokenizer::tokenizeIf(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeIf(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 
 	CScriptToken IfToken(LEX_T_IF);
 	auto &IfData = IfToken.If();
@@ -1535,7 +1566,7 @@ void CScriptTokenizer::tokenizeIf(ScriptTokenState &State, int Flags) {
 	State.Tokens.swap(mainTokens);
 }
 
-void CScriptTokenizer::tokenizeFor_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign) {
+void CScriptTokenizer::tokenizeFor_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign) {
 
 	CScriptToken LoopToken(LEX_T_FOR_IN);
 	auto &LoopData = LoopToken.Loop();
@@ -1597,7 +1628,7 @@ void CScriptTokenizer::tokenizeFor_inArrayComprehensions(ScriptTokenState &State
 	State.Tokens.swap(mainTokens);
 }
 
-void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	bool for_in=false, for_of=false, for_each_in=false;
 	CScriptToken LoopToken(LEX_T_LOOP);
 	auto &LoopData = LoopToken.Loop();
@@ -1619,14 +1650,14 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 
 	if(l->tk == LEX_R_VAR || l->tk == LEX_R_LET) {
 		if(l->tk == LEX_R_VAR)
-			tokenizeVarNoConst(State, Flags | TOKENIZE_FLAGS_noIn);
+			tokenizeVarNoConst(State, Flags | TOKENIZE_FLAGS::noIn);
 		else { //if(l->tk == LEX_R_LET)
 			haveLetScope = true;
 			pushForwarder(State, true); // no clean up empty tokenizer
-			tokenizeLet(State, Flags | TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_asStatement);
+			tokenizeLet(State, Flags | TOKENIZE_FLAGS::noIn | TOKENIZE_FLAGS::asStatement);
 		}
 	} else if(l->tk!=';') {
-		tokenizeExpression(State, Flags | TOKENIZE_FLAGS_noIn);
+		tokenizeExpression(State, Flags | TOKENIZE_FLAGS::noIn);
 	}
 	if((for_in=(l->tk==LEX_R_IN || (l->tk==LEX_ID && l->tkStr=="of")))) {
 		if(!State.LeftHand)
@@ -1659,8 +1690,8 @@ void CScriptTokenizer::tokenizeFor(ScriptTokenState &State, int Flags) {
 	if(for_in || l->tk != ')') tokenizeExpression(State, Flags);
 	l->match(')');
 	State.Tokens.swap(LoopData->iter);
-	Flags = (Flags & (TOKENIZE_FLAGS_canReturn | TOKENIZE_FLAGS_canYield)) | TOKENIZE_FLAGS_canBreak | TOKENIZE_FLAGS_canContinue;
-	if(haveLetScope) Flags |= TOKENIZE_FLAGS_noBlockStart;
+	Flags = (Flags & (TOKENIZE_FLAGS::canReturn | TOKENIZE_FLAGS::canYield)) | TOKENIZE_FLAGS::canBreak | TOKENIZE_FLAGS::canContinue;
+	if(haveLetScope) Flags |= TOKENIZE_FLAGS::noBlockStart;
 	tokenizeStatementNoLet(State, Flags);
 	if(haveLetScope) State.Forwarders.pop_back();
 
@@ -1736,7 +1767,7 @@ CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/
 	if(withAssignment && l->tk=='=') {
 		l->match('=');
 		ScriptTokenState assignmentState;
-		tokenizeCondition(assignmentState, 0);
+		tokenizeCondition(assignmentState, TOKENIZE_FLAGS::none);
 		token.DestructuringVar()->assignment.swap(assignmentState.Tokens);
 	}
 	return token;
@@ -1746,7 +1777,7 @@ CScriptToken CScriptTokenizer::tokenizeFunctionArgument() {
 	return tokenizeVarIdentifier(0, &withAssignment);
 }
 
-void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef/*=false*/)
+void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef/*=false*/)
 {
 	l->match(LEX_ARROW);
 	CScriptToken FncToken(LEX_T_FUNCTION_ARROW);
@@ -1758,23 +1789,23 @@ void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, Script
 	ScriptTokenState functionState;
 	functionState.HaveReturnValue /*= functionState.FunctionIsGenerator*/ = false;
 	if(l->tk == '{')
-		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn); // => { } 
+		tokenizeBlock(functionState, TOKENIZE_FLAGS::canReturn); // => { } 
 	else {
-		tokenizeAssignment(functionState, 0);
+		tokenizeAssignment(functionState, TOKENIZE_FLAGS::none);
 		functionState.HaveReturnValue = true;
 	}
 	functionState.Tokens.swap(FncData->body);
 	State.Tokens.push_back(FncToken);
 }
 
-void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef/*=false*/) {
+void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef/*=false*/) {
 	bool forward = false;
-	bool Statement = (Flags & TOKENIZE_FLAGS_asStatement) != 0;
-	bool Accessor = (Flags & TOKENIZE_FLAGS_isAccessor) != 0;
-	bool Generator = (Flags & TOKENIZE_FLAGS_isGenerator) != 0;
+	bool Statement = (Flags & TOKENIZE_FLAGS::asStatement) != TOKENIZE_FLAGS::none;
+	bool Accessor = (Flags & TOKENIZE_FLAGS::isAccessor) != TOKENIZE_FLAGS::none;
+	bool Generator = (Flags & TOKENIZE_FLAGS::isGenerator) != TOKENIZE_FLAGS::none;
 	CScriptLex::POS functionPos = l->pos;
 
-	int tk = l->tk;
+	uint16_t tk = l->tk;
 	if(Accessor) {
 		tk = State.Tokens.back().String()=="get"?LEX_T_GET:LEX_T_SET;
 		State.Tokens.pop_back();
@@ -1815,9 +1846,9 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 	
 	ScriptTokenState functionState;
 //	if(l->tk == '{' || tk==LEX_T_GET || tk==LEX_T_SET)
-		tokenizeBlock(functionState, TOKENIZE_FLAGS_canReturn | (Generator ? TOKENIZE_FLAGS_canYield : 0));
+		tokenizeBlock(functionState, TOKENIZE_FLAGS::canReturn | (Generator ? TOKENIZE_FLAGS::canYield : TOKENIZE_FLAGS::none));
 //	else {
-//		tokenizeExpression(functionState, TOKENIZE_FLAGS_canYield);
+//		tokenizeExpression(functionState, TOKENIZE_FLAGS::canYield);
 //		if(Statement) l->match(';');
 //		functionState.HaveReturnValue = true;
 //	}
@@ -1832,13 +1863,13 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, int Flags, bool
 	State.Tokens.push_back(FncToken);
 }
 
-void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef/*=false*/) {
-	bool Definition = (Flags & TOKENIZE_FLAGS_asStatement)!=0;
-	bool noIN = (Flags & TOKENIZE_FLAGS_noIn)!=0;
+void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef/*=false*/) {
+	bool Definition = (Flags & TOKENIZE_FLAGS::asStatement)!=TOKENIZE_FLAGS::none;
+	bool noIN = (Flags & TOKENIZE_FLAGS::noIn)!=TOKENIZE_FLAGS::none;
 	bool Statement = Definition && !noIN;
 	bool Expression = !Definition;
-	Flags &= ~(TOKENIZE_FLAGS_asStatement);
-	if(!Definition) noIN=false, Flags &= ~TOKENIZE_FLAGS_noIn;
+	Flags &= ~(TOKENIZE_FLAGS::asStatement);
+	if(!Definition) noIN=false, Flags &= ~TOKENIZE_FLAGS::noIn;
 
 	bool foundIN = false;
 	bool leftHand = true;
@@ -1881,7 +1912,7 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 			pushToken(State.Tokens, ')');
 			if(Statement) {
 				if(l->tk == '{') // no extra BlockStart by expression
-					tokenizeBlock(State, Flags|=TOKENIZE_FLAGS_noBlockStart);
+					tokenizeBlock(State, Flags|=TOKENIZE_FLAGS::noBlockStart);
 				else
 					tokenizeStatementNoLet(State, Flags);
 			} else
@@ -1912,12 +1943,12 @@ void CScriptTokenizer::tokenizeLet(ScriptTokenState &State, int Flags, bool noLe
 	if(leftHand) State.LeftHand = true;
 }
 
-void CScriptTokenizer::tokenizeVarNoConst( ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeVarNoConst( ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	l->check(LEX_R_VAR);
 	tokenizeVarAndConst(State, Flags);
 }
-void CScriptTokenizer::tokenizeVarAndConst( ScriptTokenState &State, int Flags) {
-	bool noIN = (Flags & TOKENIZE_FLAGS_noIn)!=0;
+void CScriptTokenizer::tokenizeVarAndConst( ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
+	bool noIN = (Flags & TOKENIZE_FLAGS::noIn)!=TOKENIZE_FLAGS::none;
 	int currLine = l->currentLine(), currColumn = l->currentColumn();
 
 	bool leftHand = true;
@@ -1965,10 +1996,10 @@ void CScriptTokenizer::tokenizeVarAndConst( ScriptTokenState &State, int Flags) 
 	if(leftHand) State.LeftHand = true;
 }
 
-void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags) {
-	bool forFor = (Flags & TOKENIZE_FLAGS_noIn)!=0;
-	bool nestedObject = 	(Flags & TOKENIZE_FLAGS_nestedObject) != 0;
-	Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_nestedObject);
+void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
+	bool forFor = (Flags & TOKENIZE_FLAGS::noIn)!=TOKENIZE_FLAGS::none;
+	bool nestedObject = (Flags & TOKENIZE_FLAGS::nestedObject) != TOKENIZE_FLAGS::none;
+	Flags &= ~(TOKENIZE_FLAGS::noIn | TOKENIZE_FLAGS::nestedObject);
 	CScriptToken ObjectToken(LEX_T_OBJECT_LITERAL);
 	ObjectToken.line = l->currentLine();
 	ObjectToken.column = l->currentColumn();
@@ -1984,7 +2015,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 	while (l->tk != '}') {
 		CScriptTokenDataObjectLiteral::ELEMENT element;
 		bool assign = false;
-		if(CScriptToken::isReservedWord(l->tk))
+		if(!CScriptToken::isReservedWord(l->tk).empty())
 			l->tk = LEX_ID; // fake reserved-word as member.ID
 		if(l->tk == LEX_ID) {
 			element.id = l->tkStr; 
@@ -1993,7 +2024,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 				element.id = l->tkStr;
 				element.value.push_back(Token);
 				State.Tokens.swap(element.value);
-				tokenizeFunction(State, Flags| TOKENIZE_FLAGS_isAccessor);
+				tokenizeFunction(State, Flags| TOKENIZE_FLAGS::isAccessor);
 				State.Tokens.swap(element.value);
 				Objc->destructuring = false;
 			} else {
@@ -2016,7 +2047,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 			element.id = l->tkStr;
 			element.value.push_back(Token);
 			State.Tokens.swap(element.value);
-			tokenizeFunction(State, Flags | TOKENIZE_FLAGS_isGenerator);
+			tokenizeFunction(State, Flags | TOKENIZE_FLAGS::isGenerator);
 			State.Tokens.swap(element.value);
 			Objc->destructuring = false;
 		} else if (l->tk == LEX_INT) {
@@ -2035,7 +2066,7 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 			l->match(LEX_ID, LEX_STR);
 		if(assign) {
 			l->match(':');
-			int dFlags = Flags | ((l->tk == '{' || l->tk == '[') ? TOKENIZE_FLAGS_nestedObject : 0);
+			TOKENIZE_FLAGS dFlags = Flags | ((l->tk == '{' || l->tk == '[') ? TOKENIZE_FLAGS::nestedObject : TOKENIZE_FLAGS::none);
 			State.pushLeftHandState();
 			State.Tokens.swap(element.value);
 			tokenizeAssignment(State, dFlags);
@@ -2068,10 +2099,10 @@ void CScriptTokenizer::_tokenizeLiteralObject(ScriptTokenState &State, int Flags
 		State.LeftHand = true;
 	State.Tokens.push_back(ObjectToken);
 }
-void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags) {
-	bool forFor = (Flags & TOKENIZE_FLAGS_noIn)!=0;
-	bool nestedObject = 	(Flags & TOKENIZE_FLAGS_nestedObject) != 0;
-	Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_nestedObject);
+void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
+	bool forFor = (Flags & TOKENIZE_FLAGS::noIn)!=TOKENIZE_FLAGS::none;
+	bool nestedObject = (Flags & TOKENIZE_FLAGS::nestedObject) != TOKENIZE_FLAGS::none;
+	Flags &= ~(TOKENIZE_FLAGS::noIn | TOKENIZE_FLAGS::nestedObject);
 	CScriptToken ObjectToken(LEX_T_OBJECT_LITERAL);
 	ObjectToken.line = l->currentLine();
 	ObjectToken.column = l->currentColumn();
@@ -2097,7 +2128,7 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 			tokenizeFor_inArrayComprehensions(State, Flags, idx==2 ? Objc->elements[0].value : element_arrayComprehensionsBody.value);
 			State.Tokens.swap(element.value);
 		} else if(l->tk != ',') {
-			int dFlags = Flags | ((l->tk == '{' || l->tk == '[') ? TOKENIZE_FLAGS_nestedObject : 0);
+			TOKENIZE_FLAGS dFlags = Flags | ((l->tk == '{' || l->tk == '[') ? TOKENIZE_FLAGS::nestedObject : TOKENIZE_FLAGS::none);
 			State.pushLeftHandState();
 			State.Tokens.swap(element.value);
 			tokenizeAssignment(State, dFlags);
@@ -2132,7 +2163,7 @@ void CScriptTokenizer::_tokenizeLiteralArray(ScriptTokenState &State, int Flags)
 	State.Tokens.push_back(ObjectToken);
 }
 
-bool CScriptTokenizer::_tokenizeArrayComprehensions(ScriptTokenState &State, int Flags) {
+bool CScriptTokenizer::_tokenizeArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	l->match('[');
 	TOKEN_VECT value;
 	State.Tokens.swap(value);
@@ -2146,15 +2177,16 @@ bool CScriptTokenizer::_tokenizeArrayComprehensions(ScriptTokenState &State, int
 	return false;
 }
 
-void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	State.LeftHand = false;
-	bool canLabel = Flags & TOKENIZE_FLAGS_canLabel; Flags &= ~TOKENIZE_FLAGS_canLabel;
-	int ObjectLiteralFlags = Flags;
-	Flags &= ~TOKENIZE_FLAGS_noIn;
+	bool canLabel = (Flags & TOKENIZE_FLAGS::canLabel) != TOKENIZE_FLAGS::none; 
+	Flags &= ~TOKENIZE_FLAGS::canLabel;
+	TOKENIZE_FLAGS ObjectLiteralFlags = Flags;
+	Flags &= ~TOKENIZE_FLAGS::noIn;
 	switch(l->tk) {
 #ifndef NO_GENERATORS
 	case LEX_R_YIELD:
-		if (Flags & TOKENIZE_FLAGS_canYield) {
+		if ((Flags & TOKENIZE_FLAGS::canYield)!=TOKENIZE_FLAGS::none) {
 			pushToken(State.Tokens);
 			if (l->tk != ';' && l->tk != '}' && !l->lineBreakBeforeToken) {
 				tokenizeExpression(State, Flags);
@@ -2230,7 +2262,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 	case LEX_R_NEW:
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 		{
-			tokenizeFunctionCall(State, (Flags | TOKENIZE_FLAGS_callForNew) & ~TOKENIZE_FLAGS_noIn);
+			tokenizeFunctionCall(State, (Flags | TOKENIZE_FLAGS::callForNew) & ~TOKENIZE_FLAGS::noIn);
 			State.LeftHand = false;
 		}
 		setTokenSkip(State);
@@ -2259,7 +2291,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 				l->reset(prev_pos);
 			}
 			State.Marks.push_back(pushToken(State.Tokens, CScriptToken('('))); // push Token & push BeginIdx
-			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
+			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS::noIn);
 			State.LeftHand = false;
 			pushToken(State.Tokens, ')');
 			setTokenSkip(State);
@@ -2269,17 +2301,17 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, int Flags) {
 		l->check(LEX_EOF);
 	}
 }
-void CScriptTokenizer::tokenizeMember(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeMember(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	while(l->tk == '.' || l->tk == LEX_OPTIONAL_CHAINING_MEMBER || l->tk == '[' || l->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
 		if(l->tk == '.' || l->tk == LEX_OPTIONAL_CHAINING_MEMBER) {
 			pushToken(State.Tokens);
-			if(CScriptToken::isReservedWord(l->tk))
+			if(!CScriptToken::isReservedWord(l->tk).empty())
 				l->tk = LEX_ID; // fake reserved-word as member.ID
 			pushToken(State.Tokens , LEX_ID);
 		} else {
 			State.Marks.push_back(pushToken(State.Tokens));
 			State.pushLeftHandState();
-			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS_noIn);
+			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS::noIn);
 			State.popLeftHandeState();
 			pushToken(State.Tokens, ']');
 			setTokenSkip(State);
@@ -2287,8 +2319,8 @@ void CScriptTokenizer::tokenizeMember(ScriptTokenState &State, int Flags) {
 		State.LeftHand = true;
 	}
 }
-void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, int Flags) {
-	bool for_new = (Flags & TOKENIZE_FLAGS_callForNew)!=0; Flags &= ~TOKENIZE_FLAGS_callForNew;
+void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
+	bool for_new = (Flags & TOKENIZE_FLAGS::callForNew)!=TOKENIZE_FLAGS::none; Flags &= ~TOKENIZE_FLAGS::callForNew;
 	tokenizeLiteral(State, Flags);
 	tokenizeMember(State, Flags);
 	while(l->tk == '(' || l->tk == LEX_OPTIONAL_CHANING_FNC /* '?.(' */) {
@@ -2296,7 +2328,7 @@ void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, int Flags) 
 		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
 		State.pushLeftHandState();
 		while(l->tk!=')') {
-			tokenizeAssignment(State, Flags & ~TOKENIZE_FLAGS_noIn);
+			tokenizeAssignment(State, Flags & ~TOKENIZE_FLAGS::noIn);
 			if (l->tk!=')') pushToken(State.Tokens, ',', ')');
 		}
 		State.popLeftHandeState();
@@ -2317,7 +2349,7 @@ constexpr void bubble_sort(T& arr) {
 	}
 }
 
-void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	constexpr auto Left2Right = [] {
 		std::array arr{ // Automatische Typ- & Größenableitung
 			    /* Precedence 13 */		LEX_ASTERISKASTERISK,
@@ -2353,14 +2385,14 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 			case LEX_R_VOID:
 			case LEX_R_DELETE:
 			//case LEX_R_AWAIT:
-				Flags &= ~TOKENIZE_FLAGS_canLabel;
+				Flags &= ~TOKENIZE_FLAGS::canLabel;
 				noLeftHand = true;
 				pushToken(State.Tokens); // Precedence 14
 				break;
 			case LEX_PLUSPLUS: // pre-increment
 			case LEX_MINUSMINUS: { // pre-decrement
 					int tk = l->tk;
-					Flags &= ~TOKENIZE_FLAGS_canLabel;
+					Flags &= ~TOKENIZE_FLAGS::canLabel;
 					noLeftHand = true;
 					pushToken(State.Tokens); // Precedence 14
 					if (l->tk == LEX_ID && l->tkStr == "this")
@@ -2378,7 +2410,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 			noLeftHand = true;;
 			pushToken(State.Tokens); // Precedence 15
 		}
-		if(Flags&TOKENIZE_FLAGS_noIn && l->tk==LEX_R_IN)
+		if((Flags&TOKENIZE_FLAGS::noIn)!=TOKENIZE_FLAGS::none && l->tk==LEX_R_IN)
 			break;
 		if (std::binary_search(Left2Right.begin(), Left2Right.end(), l->tk)) {
 			noLeftHand = true;
@@ -2389,7 +2421,7 @@ void CScriptTokenizer::tokenizeSubExpression(ScriptTokenState &State, int Flags)
 	if(noLeftHand) State.LeftHand = false;
 }
 
-void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, int Flags, int op /*= LEX_OROR*/, int op_n /*= LEX_ANDAND*/) {
+void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, TOKENIZE_FLAGS Flags, int op/*= LEX_OROR*/, int op_n/*=LEX_ANDAND*/) {
 	op_n ? tokenizeLogic(State, Flags, op_n, 0) : tokenizeSubExpression(State, Flags);
 	if(l->tk==op || (op==LEX_OROR && l->tk == LEX_ASKASK)) {
 		size_t marks_count = State.Marks.size();
@@ -2402,10 +2434,10 @@ void CScriptTokenizer::tokenizeLogic(ScriptTokenState &State, int Flags, int op 
 	}
 }
 
-void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	tokenizeLogic(State, Flags);
 	if(l->tk == '?') {
-		Flags &= ~(TOKENIZE_FLAGS_noIn | TOKENIZE_FLAGS_canLabel);
+		Flags &= ~(TOKENIZE_FLAGS::noIn | TOKENIZE_FLAGS::canLabel);
 		State.Marks.push_back(pushToken(State.Tokens));
 		tokenizeAssignment(State, Flags);
 		setTokenSkip(State);
@@ -2415,7 +2447,7 @@ void CScriptTokenizer::tokenizeCondition(ScriptTokenState &State, int Flags) {
 		State.LeftHand = false;
 	}
 }
-void CScriptTokenizer::tokenizeAssignment(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeAssignment(ScriptTokenState& State, TOKENIZE_FLAGS Flags) {
 	tokenizeCondition(State, Flags);
 	if (l->tk=='=' || (l->tk>=LEX_ASSIGNMENTS_BEGIN && l->tk<=LEX_ASSIGNMENTS_END)) {
 		if(!State.LeftHand)
@@ -2425,7 +2457,7 @@ void CScriptTokenizer::tokenizeAssignment(ScriptTokenState &State, int Flags) {
 		State.LeftHand = false;
 	}
 }
-void CScriptTokenizer::tokenizeExpression(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeExpression(ScriptTokenState& State, TOKENIZE_FLAGS Flags) {
 	tokenizeAssignment(State, Flags);
 	while(l->tk == ',') {
 		pushToken(State.Tokens);
@@ -2433,9 +2465,9 @@ void CScriptTokenizer::tokenizeExpression(ScriptTokenState &State, int Flags) {
 		State.LeftHand = false;
 	}
 }
-void CScriptTokenizer::tokenizeBlock(ScriptTokenState &State, int Flags) {
-	bool addBlockStart = (Flags&TOKENIZE_FLAGS_noBlockStart)==0;
-	Flags&=~(TOKENIZE_FLAGS_noBlockStart);
+void CScriptTokenizer::tokenizeBlock(ScriptTokenState& State, TOKENIZE_FLAGS Flags) {
+	bool addBlockStart = (Flags&TOKENIZE_FLAGS::noBlockStart)==TOKENIZE_FLAGS::none;
+	Flags&=~(TOKENIZE_FLAGS::noBlockStart);
 	State.Marks.push_back(pushToken(State.Tokens, '{')); // push Token & push BeginIdx
 	if(addBlockStart) pushForwarder(State);
 
@@ -2448,15 +2480,15 @@ void CScriptTokenizer::tokenizeBlock(ScriptTokenState &State, int Flags) {
 	setTokenSkip(State);
 }
 
-void CScriptTokenizer::tokenizeStatementNoLet(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeStatementNoLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	if(l->tk == LEX_R_LET)
-		tokenizeLet(State, Flags | TOKENIZE_FLAGS_asStatement, true);
+		tokenizeLet(State, Flags | TOKENIZE_FLAGS::asStatement, true);
 	else if(l->tk==LEX_R_FUNCTION)
-		tokenizeFunction(State, Flags | TOKENIZE_FLAGS_asStatement, true);
+		tokenizeFunction(State, Flags | TOKENIZE_FLAGS::asStatement, true);
 	else
 		tokenizeStatement(State, Flags);
 }
-void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
+void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, TOKENIZE_FLAGS Flags) {
 	int tk = l->tk;
 	switch (l->tk)
 	{
@@ -2464,17 +2496,17 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 	case ';':				pushToken(State.Tokens); break;
 	case LEX_R_CONST:
 	case LEX_R_VAR:			tokenizeVarAndConst(State, Flags); break;
-	case LEX_R_LET:			tokenizeLet(State, Flags | TOKENIZE_FLAGS_asStatement); break;
+	case LEX_R_LET:			tokenizeLet(State, Flags | TOKENIZE_FLAGS::asStatement); break;
 	case LEX_R_WITH:		tokenizeWith(State, Flags); break;
 	case LEX_R_IF:			tokenizeIf(State, Flags); break;
 	case LEX_R_SWITCH:		tokenizeSwitch(State, Flags); break;
 	case LEX_R_DO:
 	case LEX_R_WHILE:		tokenizeWhileAndDo(State, Flags); break;
 	case LEX_R_FOR:			tokenizeFor(State, Flags); break;
-	case LEX_R_FUNCTION:	tokenizeFunction(State, Flags | TOKENIZE_FLAGS_asStatement); break;
+	case LEX_R_FUNCTION:	tokenizeFunction(State, Flags | TOKENIZE_FLAGS::asStatement); break;
 	case LEX_R_TRY:			tokenizeTry(State, Flags); break;
 	case LEX_R_RETURN:
-		if ((Flags & TOKENIZE_FLAGS_canReturn) == 0)
+		if ((Flags & TOKENIZE_FLAGS::canReturn) == TOKENIZE_FLAGS::none)
 			throw CScriptException(SyntaxError, "'return' statement, but not in a function.", l->currentFile, l->currentLine(), l->currentColumn());
 		[[fallthrough]];
 	case LEX_R_THROW:
@@ -2499,7 +2531,7 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 					throw CScriptException(SyntaxError, "label '" + l->tkStr + "' not found", l->currentFile, l->currentLine(), l->currentColumn());
 				pushToken(State.Tokens); // push 'Label'
 			}
-			else if ((Flags & (isBreak ? TOKENIZE_FLAGS_canBreak : TOKENIZE_FLAGS_canContinue)) == 0)
+			else if ((Flags & (isBreak ? TOKENIZE_FLAGS::canBreak : TOKENIZE_FLAGS::canContinue)) == TOKENIZE_FLAGS::none)
 				throw CScriptException(SyntaxError,
 					isBreak ? "'break' must be inside loop, switch or labeled statement" : "'continue' must be inside loop",
 					l->currentFile, l->currentLine(), l->currentColumn());
@@ -2511,7 +2543,7 @@ void CScriptTokenizer::tokenizeStatement(ScriptTokenState &State, int Flags) {
 		{
 			State.Marks.push_back(pushToken(State.Tokens, CScriptToken(LEX_T_SKIP))); // push skip & skiperBeginIdx
 			STRING_VECTOR_t::size_type label_count = State.Labels.size();
-			tokenizeExpression(State, Flags | TOKENIZE_FLAGS_canLabel);
+			tokenizeExpression(State, Flags | TOKENIZE_FLAGS::canLabel);
 			if (label_count < State.Labels.size() && l->tk == ':') {
 				State.Tokens.erase(State.Tokens.begin() + State.Marks.back()); // remove skip
 				State.Marks.pop_back();
@@ -3230,7 +3262,7 @@ void CScriptVar::setTemporaryMark_recursive(uint32_t ID)
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarLink::CScriptVarLink(const CScriptVarPtr &Var, const std::string &Name /*=TINYJS_TEMP_NAME*/, int Flags /*=SCRIPTVARLINK_DEFAULT*/)
-	: name(Name), flags(Flags), refs(0) {
+	: name(Name), flags(Flags) {
 #if DEBUG_MEMORY
 	mark_allocated(this);
 #endif
@@ -3243,32 +3275,12 @@ CScriptVarLink::~CScriptVarLink() {
 #endif
 }
 
-CScriptVarLink *CScriptVarLink::ref() {
-	refs++;
-	return this;
-}
-void CScriptVarLink::unref() {
-	refs--;
-	ASSERT(refs>=0); // printf("OMFG, we have unreffed too far!\n");
-	if (refs==0)
-		delete this;
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
 CScriptVarLinkPtr & CScriptVarLinkPtr::operator()( const CScriptVarPtr &var, const std::string &name /*= TINYJS_TEMP_NAME*/, int flags /*= SCRIPTVARLINK_DEFAULT*/ ) {
-	if(link && link->refs == 1) { // the link is only refered by this
-		link->name = name;
-		link->owner.reset();
-		link->flags = flags;
-		link->var = var;
-	} else {
-		if(link) link->unref();
-		link = (new CScriptVarLink(var, name, flags))->ref();
-	}
+	link = CScriptVarLink::create(var, name, flags);
 	return *this;
 }
 
@@ -3453,39 +3465,39 @@ Infinity InfinityNegative(-1);
 
 CNumber::CNumber(int64_t Value) {
 	if(std::numeric_limits<int32_t>::min()<=Value && Value<= std::numeric_limits<int32_t>::max())
-		type= CNumber::NType::tInt32, Int32=int32_t(Value);
+		type= NType::tInt32, Int32=int32_t(Value);
 	else
-		type= CNumber::NType::tDouble, Double=(double)Value;
+		type= NType::tDouble, Double=(double)Value;
 }
 CNumber::CNumber(uint64_t Value) {
 	if(Value<=(uint32_t)std::numeric_limits<int32_t>::max())
-		type= CNumber::NType::tInt32, Int32=int32_t(Value);
+		type= NType::tInt32, Int32=int32_t(Value);
 	else
-		type= CNumber::NType::tDouble, Double=(double)Value;
+		type= NType::tDouble, Double=(double)Value;
 }
 CNumber::CNumber(double Value) {
 	if(Value == 0.0 && signbit(Value))
-		type= CNumber::NType::tnNULL, Int32=0;
+		type= NType::tnNULL, Int32=0;
 	else if(isinf(Value))
-		type= CNumber::NType::tInfinity, Int32=Value > 0 ? 1 : -1;
+		type= NType::tInfinity, Int32=Value > 0 ? 1 : -1;
 	else if(isnan(Value))
-		type= CNumber::NType::tNaN, Int32=0;
+		type= NType::tNaN, Int32=0;
 	else {
 		double truncated = trunc(Value);  // Ganzzahliger Anteil
 		if (Value == truncated &&
 			truncated >= std::numeric_limits<int32_t>::min() &&
 			truncated <= std::numeric_limits<int32_t>::max()) {
-			type = CNumber::NType::tInt32;
+			type = NType::tInt32;
 			Int32 = static_cast<int32_t>(truncated);
 		} else {
-			type = CNumber::NType::tDouble;
+			type = NType::tDouble;
 			Double = Value;
 		}
 	}
 }
 
 // **String-Zuweisung**: Parst die Eingabe und speichert sie
-CNumber::CNumber(std::string_view str) : type(CNumber::NType::tNaN), Int32(0) {
+CNumber::CNumber(std::string_view str) : type(NType::tNaN), Int32(0) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) { // Falls nur Leerzeichen enthalten sind
@@ -3515,7 +3527,7 @@ CNumber::CNumber(std::string_view str) : type(CNumber::NType::tNaN), Int32(0) {
 	// 4. Falls nach der Zahl noch Zeichen stehen ? NaN setzen
 	size_t right = endptr.find_last_not_of(" \t\n\r\f\v");
 	if (right != std::string_view::npos) {
-		type = CNumber::NType::tNaN;
+		type = NType::tNaN;
 		Int32 = 0;
 	}
 }
@@ -3524,7 +3536,7 @@ CNumber::CNumber(std::string_view str) : type(CNumber::NType::tNaN), Int32(0) {
 int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view* endptr) {
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) {
-		type = CNumber::NType::tNaN;
+		type = NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return 0;
@@ -3558,7 +3570,7 @@ int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view*
 	}
 
 	if (radix < 2 || radix > 36) { // Ungültige Basis ? NaN
-		type = CNumber::NType::tNaN;
+		type = NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return 0;
@@ -3588,10 +3600,10 @@ int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view*
 		str.remove_prefix(1);
 	}
 	if (useFloat) {
-		type = CNumber::NType::tDouble;
+		type = NType::tDouble;
 		Double = negative ? -result_f : result_f;
 	} else {
-		type = CNumber::NType::tInt32;
+		type = NType::tInt32;
 		Int32 = negative ? -result_i : result_i;
 	}
 	return radix;
@@ -3602,7 +3614,7 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	// 1. Entferne führende Leerzeichen
 	size_t left = str.find_first_not_of(" \t\n\r\f\v");
 	if (left == std::string_view::npos) {
-		type = CNumber::NType::tNaN;
+		type = NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return;
@@ -3632,7 +3644,7 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
 
 	if (ec != std::errc{}) { // Fehler beim Parsen ? NaN
-		type = CNumber::NType::tNaN;
+		type = NType::tNaN;
 		Int32 = 0;
 		if (endptr) *endptr = str;
 		return;
@@ -3645,20 +3657,20 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 }
 
 CNumber CNumber::add(const CNumber &Value) const {
-	if(type== CNumber::NType::tNaN || Value.type== CNumber::NType::tNaN)
-		return CNumber(CNumber::NType::tNaN);
-	else if(type== CNumber::NType::tInfinity || Value.type== CNumber::NType::tInfinity) {
-		if(type!= CNumber::NType::tInfinity)
+	if(type== NType::tNaN || Value.type== NType::tNaN)
+		return CNumber(NType::tNaN);
+	else if(type== NType::tInfinity || Value.type== NType::tInfinity) {
+		if(type!= NType::tInfinity)
 			return Value;
-		else if(Value.type!= CNumber::NType::tInfinity || sign()==Value.sign())
+		else if(Value.type!= NType::tInfinity || sign()==Value.sign())
 			return *this;
 		else
-			return CNumber(CNumber::NType::tNaN);
-	} else if(type== CNumber::NType::tnNULL)
+			return CNumber(NType::tNaN);
+	} else if(type== NType::tnNULL)
 		return Value;
-	else if(Value.type== CNumber::NType::tnNULL)
+	else if(Value.type== NType::tnNULL)
 		return *this;
-	else if(type== CNumber::NType::tDouble || Value.type== CNumber::NType::tDouble)
+	else if(type== NType::tDouble || Value.type== NType::tDouble)
 		return CNumber(toDouble()+Value.toDouble());
 	else {
 		int32_t range_max = std::numeric_limits<int32_t>::max();
@@ -3674,18 +3686,18 @@ CNumber CNumber::add(const CNumber &Value) const {
 
 CNumber CNumber::operator-() const {
 	switch(type) {
-	case CNumber::NType::tInt32:
+	case NType::tInt32:
 		if(Int32==0)
 			return CNumber(NegativeZero);
 		[[fallthrough]];
-	case CNumber::NType::tnNULL:
+	case NType::tnNULL:
 		return CNumber(-Int32);
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		return CNumber(-Double);
-	case CNumber::NType::tInfinity:
-		return CNumber(CNumber::NType::tInfinity, -Int32);
+	case NType::tInfinity:
+		return CNumber(NType::tInfinity, -Int32);
 	default:
-		return CNumber(CNumber::NType::tNaN);
+		return CNumber(NType::tNaN);
 	}
 }
 
@@ -3704,20 +3716,20 @@ static inline int bits(int32_t Value) {
 }
 
 CNumber CNumber::multi(const CNumber &Value) const {
-	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN)
-		return CNumber(CNumber::NType::tNaN);
-	else if(type== CNumber::NType::tInfinity || Value.type== CNumber::NType::tInfinity) {
+	if (type == NType::tNaN || Value.type == NType::tNaN)
+		return CNumber(NType::tNaN);
+	else if(type== NType::tInfinity || Value.type== NType::tInfinity) {
 		if(isZero() || Value.isZero())
-			return CNumber(CNumber::NType::tNaN);
+			return CNumber(NType::tNaN);
 		else
-			return CNumber(CNumber::NType::tInfinity, sign()==Value.sign()?1:-1);
+			return CNumber(NType::tInfinity, sign()==Value.sign()?1:-1);
 	} else if(isZero() || Value.isZero()) {
 		if(sign()==Value.sign())
 			return CNumber(0);
 		else
 			return CNumber(NegativeZero);
 	}
-	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble)
+	else if (type == NType::tDouble || Value.type == NType::tDouble)
 		return CNumber(toDouble()*Value.toDouble());
 	else {
 		// Int32*Int32
@@ -3730,18 +3742,18 @@ CNumber CNumber::multi(const CNumber &Value) const {
 
 
 CNumber CNumber::div( const CNumber &Value ) const {
-	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return CNumber(CNumber::NType::tNaN);
+	if (type == NType::tNaN || Value.type == NType::tNaN) return CNumber(NType::tNaN);
 	int Sign = sign()*Value.sign();
-	if(type== CNumber::NType::tInfinity) {
-		if (Value.type == CNumber::NType::tInfinity) return CNumber(CNumber::NType::tNaN);
-		else return CNumber(CNumber::NType::tInfinity, Sign);
+	if(type== NType::tInfinity) {
+		if (Value.type == NType::tInfinity) return CNumber(NType::tNaN);
+		else return CNumber(NType::tInfinity, Sign);
 	}
-	if (Value.type == CNumber::NType::tInfinity) {
+	if (Value.type == NType::tInfinity) {
 		if(Sign<0) return CNumber(NegativeZero);
 		else return CNumber(0);
 	} else if(Value.isZero()) {
-		if(isZero()) return CNumber(CNumber::NType::tNaN);
-		else return CNumber(CNumber::NType::tInfinity, Sign);
+		if(isZero()) return CNumber(NType::tNaN);
+		else return CNumber(NType::tInfinity, Sign);
 	} else
 		return CNumber(toDouble() / Value.toDouble());
 }
@@ -3753,10 +3765,10 @@ CNumber CNumber::pow(const CNumber& Value) const {
 }
 
 CNumber CNumber::modulo( const CNumber &Value ) const {
-	if (type == CNumber::NType::tNaN || type == CNumber::NType::tInfinity || Value.type == CNumber::NType::tNaN || Value.isZero()) return CNumber(CNumber::NType::tNaN);
-	if (Value.type == CNumber::NType::tInfinity) return CNumber(*this);
+	if (type == NType::tNaN || type == NType::tInfinity || Value.type == NType::tNaN || Value.isZero()) return CNumber(NType::tNaN);
+	if (Value.type == NType::tInfinity) return CNumber(*this);
 	if(isZero()) return CNumber(0);
-	if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble || (Int32 == std::numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */) {
+	if (type == NType::tDouble || Value.type == NType::tDouble || (Int32 == std::numeric_limits<int32_t>::min() && Value == -1) /* use double to prevent integer overflow */) {
 		double n = toDouble(), d = Value.toDouble(), q;
 #if __cplusplus >= 201103L || _MSVC_LANG >= 201103L
 		std::ignore = modf(n/d, &q);
@@ -3769,19 +3781,19 @@ CNumber CNumber::modulo( const CNumber &Value ) const {
 }
 
 CNumber CNumber::round() const {
-	if(type != CNumber::NType::tDouble) return CNumber(*this);
+	if(type != NType::tDouble) return CNumber(*this);
 	if(Double < 0.0 && Double >= -0.5)
 		return CNumber(NegativeZero);
 	return CNumber(::floor(Double+0.5));
 }
 
 CNumber CNumber::floor() const {
-	if (type != CNumber::NType::tDouble) return CNumber(*this);
+	if (type != NType::tDouble) return CNumber(*this);
 	return CNumber(::floor(Double));
 }
 
 CNumber CNumber::ceil() const {
-	if(type != CNumber::NType::tDouble) return CNumber(*this);
+	if(type != NType::tDouble) return CNumber(*this);
 	return CNumber(::ceil(Double));
 }
 
@@ -3820,36 +3832,36 @@ CNumber CNumber::clamp(const CNumber &min, const CNumber &max) const {
 }
 
 int CNumber::less( const CNumber &Value ) const {
-	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return 0;
-	else if (type == CNumber::NType::tInfinity) {
-		if (Value.type == CNumber::NType::tInfinity) return Int32 < Value.Int32 ? 1 : -1;
+	if (type == NType::tNaN || Value.type == NType::tNaN) return 0;
+	else if (type == NType::tInfinity) {
+		if (Value.type == NType::tInfinity) return Int32 < Value.Int32 ? 1 : -1;
 		return -Int32;
-	} else if (Value.type == CNumber::NType::tInfinity)
+	} else if (Value.type == NType::tInfinity)
 		return Value.Int32;
 	else if (isZero() && Value.isZero()) return -1;
-	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble) return toDouble() < Value.toDouble() ? 1 : -1;
+	else if (type == NType::tDouble || Value.type == NType::tDouble) return toDouble() < Value.toDouble() ? 1 : -1;
 	return toInt32() < Value.toInt32() ? 1 : -1;
 }
 
 bool CNumber::equal( const CNumber &Value ) const {
-	if (type == CNumber::NType::tNaN || Value.type == CNumber::NType::tNaN) return false;
-	else if (type == CNumber::NType::tInfinity) {
-		if (Value.type == CNumber::NType::tInfinity) return Int32 == Value.Int32;
+	if (type == NType::tNaN || Value.type == NType::tNaN) return false;
+	else if (type == NType::tInfinity) {
+		if (Value.type == NType::tInfinity) return Int32 == Value.Int32;
 		return false;
-	} else if (Value.type == CNumber::NType::tInfinity) return false;
+	} else if (Value.type == NType::tInfinity) return false;
 	else if (isZero() && Value.isZero()) return true;
-	else if (type == CNumber::NType::tDouble || Value.type == CNumber::NType::tDouble) return toDouble() == Value.toDouble();
+	else if (type == NType::tDouble || Value.type == NType::tDouble) return toDouble() == Value.toDouble();
 	return toInt32() == Value.toInt32();
 }
 
 bool CNumber::isZero() const
 {
 	switch(type) {
-	case CNumber::NType::tInt32:
+	case NType::tInt32:
 		return Int32==0;
-	case CNumber::NType::tnNULL:
+	case NType::tnNULL:
 		return true;
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		return Double==0.0;
 	default:
 		return false;
@@ -3860,10 +3872,10 @@ bool CNumber::isInteger() const
 {
 	double integral;
 	switch(type) {
-	case CNumber::NType::tInt32:
-	case CNumber::NType::tnNULL:
+	case NType::tInt32:
+	case NType::tnNULL:
 		return true;
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		return modf(Double, &integral)==0.0;
 	default:
 		return false;
@@ -3872,12 +3884,12 @@ bool CNumber::isInteger() const
 
 int CNumber::sign() const {
 	switch(type) {
-	case CNumber::NType::tInt32:
-	case CNumber::NType::tInfinity:
+	case NType::tInt32:
+	case NType::tInfinity:
 		return Int32<0?-1:1;
-	case CNumber::NType::tnNULL:
+	case NType::tnNULL:
 		return -1;
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		return Double<0.0?-1:1;
 	default:
 		return 1;
@@ -3994,15 +4006,15 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 	if(2 > Radix || Radix > 36)
 		Radix = 10; // todo error;
 	switch(type) {
-	case CNumber::NType::tInt32:
+	case NType::tInt32:
 		if( (str = tiny_ltoa(Int32, Radix)) ) {
 			std::string ret(str); free(str);
 			return ret;
 		}
 		break;
-	case CNumber::NType::tnNULL:
+	case NType::tnNULL:
 		return "0";
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		if(Radix==10) {
 			std::ostringstream str;
 			str.unsetf(std::ios::floatfield);
@@ -4018,9 +4030,9 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 			return ret;
 		}
 		break;
-	case CNumber::NType::tInfinity:
+	case NType::tInfinity:
 		return Int32<0?"-Infinity":"Infinity";
-	case CNumber::NType::tNaN:
+	case NType::tNaN:
 		return "NaN";
 	}
 	return "";
@@ -4029,15 +4041,15 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 double CNumber::toDouble() const
 {
 	switch(type) {
-	case CNumber::NType::tnNULL:
+	case NType::tnNULL:
 		return -0.0;
-	case CNumber::NType::tInt32:
+	case NType::tInt32:
 		return double(Int32);
-	case CNumber::NType::tDouble:
+	case NType::tDouble:
 		return Double;
-	case CNumber::NType::tNaN:
+	case NType::tNaN:
 		return std::numeric_limits<double>::quiet_NaN();
-	case CNumber::NType::tInfinity:
+	case NType::tInfinity:
 		return Int32<0 ? -std::numeric_limits<double>::infinity(): std::numeric_limits<double>::infinity();
 	}
 	return 0.0;
@@ -6014,12 +6026,12 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 }
 inline CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a;
-	parent.swap(a);
+	std::swap(parent, a);
 	bool chaining_state = true;
 	while (t->tk == '.' || t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == '[' || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
 		if (execute) {
 			a = a.getter(execute); // a is now the "getted" var
-			parent.swap(a);
+			std::swap(parent, a);
 			if (execute && parent->getVarPtr()->isNullOrUndefined()) {
 				if (t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
 					chaining_state = false;

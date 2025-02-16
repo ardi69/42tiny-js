@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-15 14:50)
+Version 0.10.0 (2025-02-16 17:30)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -112,3 +112,8 @@ Version 0.10.0 (2025-02-15 14:50)
 * removed unneeded deleted copy-constructors
 * changed CScriptVarPtr is replaced by std::shared_ptr<CScriptVar>
 * changed enum NType to enum class NType
+* changed reserved_words_begin is now a sorted array reserved_words at compile time (constexpr)
+* changed:str2reserved_begin is now a sorted array reserved_words_by_str at compile time (constexpr)
+* changed:tokens2str_begin is now a sorted array tokens2str at compile time (constexpr)
+* changed enum TOKENIZE_FLAGS to enum _class_ TOKENIZE_FLAGS
+* changed CScriptVarLink now allways hold in shared_ptr

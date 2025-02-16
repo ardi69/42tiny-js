@@ -39,7 +39,6 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define test_CScriptVarLinkPtr 0
 #define TINY_JS_VERSION 0.10.0
 
 #include <string>
@@ -66,25 +65,13 @@
 #include "TinyJS_Threading.h"
 
 #ifdef _MSC_VER
-#	if defined(_DEBUG) && defined(_DEBUG_NEW)
-#		define _AFXDLL
-#		include <afx.h>         // MFC-Kern- und -Standardkomponenten
-#		define new DEBUG_NEW
-#	endif
 #	define DEPRECATED(_Text) __declspec(deprecated(_Text))
-#	define ATTRIBUTE_USED
 #elif defined(__GNUC__)
 #	define DEPRECATED(_Text) __attribute__ ((deprecated))
-#	define ATTRIBUTE_USED __attribute__((used))
 #else
 #	define DEPRECATED(_Text)
-#	define ATTRIBUTE_USED
 #endif
 
-#ifdef NO_WARN_DEPRECATED
-#	undef DEPRECATED
-#	define DEPRECATED(_Text)
-#endif
 
 #ifndef ASSERT
 #	define ASSERT(X) assert(X)
@@ -95,41 +82,32 @@
 #define TRACE printf
 #endif // TRACE
 
-/*!
- *  indicates the highest supported version of compiled js
- *  when enum LEX_TYPES are changed, then increment this version
- *  compiled js are created with this version
- */
-#define COMPILED_TOKENS_VERSION_MAX 0x0101
-/*!
- *  indicates the lowest supported version of compiled js
- *  when id's inserted, removed or reordered, then set version min to version max
- */
-#define COMPILED_TOKENS_VERSION_MIN 0x0101
-
-enum LEX_TYPES {
+enum  LEX_TYPES : uint16_t {
 	LEX_EOF = 0,
 
-	LEX_LNOT     = '!',  // 33
-	LEX_PERCENT  = '%',  // 37
-	LEX_AND      = '&',  // 38  Logical AND / Bitwise AND
-	LEX_LPAREN   = '(',  // 40  Left Parenthesis (runde Klammer auf)
-	LEX_RPAREN   = ')',  // 41  Right Parenthesis (runde Klammer zu)
-	LEX_ASTERISK = '*',  // 42 
-	LEX_PLUS     = '+',  // 43
-	LEX_MINUS    = '-',  // 45
-	LEX_SLASH    = '/',  // 47
-	LEX_COLON    = ':',  // 58  Colon (Doppelpunkt)
-	LEX_ASSIGN   = '=',  // 61  Assignment (Zuweisung)
-	LEX_LT       = '<',  // 60  Less than / Opening Angle Bracket (kleiner als)
-	LEX_GT       = '>',  // 62  Greater than / Closing Angle Bracket (größer als)
-	LEX_LBRACKET = '[',  // 91  Left Square Bracket (eckige Klammer auf)
-	LEX_RBRACKET = ']',  // 93  Right Square Bracket (eckige Klammer zu)
-	LEX_XOR      = '^',  // 94  Bitwise XOR (exklusives Oder)
-	LEX_LBRACE   = '{',  // 123 Left Curly Brace (geschweifte Klammer auf)
-	LEX_RBRACE   = '}',  // 125 Right Curly Brace (geschweifte Klammer zu)
-	LEX_OR       = '|',  // 124 Logical OR / Bitwise OR
-	LEX_BNOT     = '~',  // 126
+	LEX_LNOT      = '!',  // 33
+	LEX_PERCENT   = '%',  // 37
+	LEX_AND       = '&',  // 38  Logical AND / Bitwise AND
+	LEX_LPAREN    = '(',  // 40  Left Parenthesis (runde Klammer auf)
+	LEX_RPAREN    = ')',  // 41  Right Parenthesis (runde Klammer zu)
+	LEX_ASTERISK  = '*',  // 42 
+	LEX_PLUS      = '+',  // 43
+	LEX_COMMA     = ',',  // 44
+	LEX_MINUS     = '-',  // 45
+	LEX_DOT       = '.',  // 46
+	LEX_SLASH     = '/',  // 47
+	LEX_COLON     = ':',  // 58  Colon (Doppelpunkt)
+	LEX_SEMICOLON = ';',  // 59  semicolon (Semicolon)
+	LEX_LT        = '<',  // 60  Less than / Opening Angle Bracket (kleiner als)
+	LEX_ASSIGN    = '=',  // 61  Assignment (Zuweisung)
+	LEX_GT        = '>',  // 62  Greater than / Closing Angle Bracket (größer als)
+	LEX_LBRACKET  = '[',  // 91  Left Square Bracket (eckige Klammer auf)
+	LEX_RBRACKET  = ']',  // 93  Right Square Bracket (eckige Klammer zu)
+	LEX_XOR       = '^',  // 94  Bitwise XOR (exklusives Oder)
+	LEX_LBRACE    = '{',  // 123 Left Curly Brace (geschweifte Klammer auf)
+	LEX_OR        = '|',  // 124 Logical OR / Bitwise OR
+	LEX_RBRACE    = '}',  // 125 Right Curly Brace (geschweifte Klammer zu)
+	LEX_BNOT      = '~',  // 126
 
 	// reserved words
 	LEX_R_IF = 256,        // Reserviertes Schlüsselwort: Bedingte Anweisung (if)
@@ -294,17 +272,17 @@ extern const char *ERROR_NAME[];
 
 #define TEMPORARY_MARK_SLOTS 5
 
-#define TINYJS_RETURN_VAR					"return"
-#define TINYJS_LOKALE_VAR					"__locale__"
-#define TINYJS_ANONYMOUS_VAR				"__anonymous__"
-#define TINYJS_ARGUMENTS_VAR				"arguments"
-#define TINYJS_PROTOTYPE_CLASS			"prototype"
-#define TINYJS_FUNCTION_CLOSURE_VAR		"__function_closure__"
-#define TINYJS_SCOPE_PARENT_VAR			"__scope_parent__"
-#define TINYJS_SCOPE_WITH_VAR				"__scope_with__"
-#define TINYJS_ACCESSOR_GET_VAR			"__accessor_get__"
-#define TINYJS_ACCESSOR_SET_VAR			"__accessor_set__"
-#define TINYJS_CONSTRUCTOR_VAR			"constructor"
+#define TINYJS_RETURN_VAR			"return"
+#define TINYJS_LOKALE_VAR			"__locale__"
+#define TINYJS_ANONYMOUS_VAR		"__anonymous__"
+#define TINYJS_ARGUMENTS_VAR		"arguments"
+#define TINYJS_PROTOTYPE_CLASS		"prototype"
+#define TINYJS_FUNCTION_CLOSURE_VAR	"__function_closure__"
+#define TINYJS_SCOPE_PARENT_VAR		"__scope_parent__"
+#define TINYJS_SCOPE_WITH_VAR		"__scope_with__"
+#define TINYJS_ACCESSOR_GET_VAR		"__accessor_get__"
+#define TINYJS_ACCESSOR_SET_VAR		"__accessor_set__"
+#define TINYJS_CONSTRUCTOR_VAR		"constructor"
 #define TINYJS_TEMP_NAME			""
 #define TINYJS_BLANK_DATA			""
 
@@ -353,12 +331,12 @@ class CScriptLex
 public:
 	CScriptLex(const char* Code, const std::string& File = "", int Line = 0, int Column = 0);
 	struct POS;
-	int tk; ///< The type of the token that we have
-	int last_tk; ///< The type of the last token that we have
+	uint16_t tk; ///< The type of the token that we have
+	uint16_t last_tk; ///< The type of the last token that we have
 	std::string tkStr; ///< Data contained in the token we have here
 
-	void check(int expected_tk, int alternate_tk=-1); ///< Lexical check wotsit
-	void match(int expected_tk, int alternate_tk=-1); ///< Lexical match wotsit
+	void check(uint16_t expected_tk, uint16_t alternate_tk=(uint16_t)-1); ///< Lexical check wotsit
+	void match(uint16_t expected_tk, uint16_t alternate_tk=(uint16_t)-1); ///< Lexical match wotsit
 	void reset(const POS &toPos); ///< Reset this lex so we can start again
 	const char* rest() const { return pos.tokenStart; }
 	std::string currentFile;
@@ -570,8 +548,8 @@ class CScriptTokenizer;
 class CScriptToken : public fixed_size_object<CScriptToken>
 {
 public:
-	CScriptToken() : line(0), column(0), token(0)/*, data(0) needed??? */ {}
-	CScriptToken(CScriptLex *l, int Match=-1, int Alternate=-1);
+	CScriptToken() : line(0), column(0), token(LEX_EOF)/*, data(0) needed??? */ {}
+	CScriptToken(CScriptLex *l, uint16_t Match=(uint16_t)-1, uint16_t Alternate = (uint16_t)-1);
 	CScriptToken(uint16_t Tk, int32_t IntData=0);
 	CScriptToken(uint16_t Tk, double FloatData);
 	CScriptToken(uint16_t Tk, const std::string &TkStr);
@@ -602,9 +580,9 @@ public:
 	// ACTUAL_CHANGE
 	static std::string getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString="", const std::string &Indent="");
 	static std::string getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString="", const std::string &Indent="");
-	static std::string getTokenStr( int token, const char *tokenStr=0, bool *need_space=0 );
-	static const char *isReservedWord(int Token);
-	static int isReservedWord(const std::string &Str);
+	static std::string getTokenStr(uint16_t token, const char *tokenStr=0, bool *need_space=0 );
+	static std::string_view isReservedWord(uint16_t Token);
+	static uint16_t isReservedWord(const std::string_view &Str);
 
 private:
 	std::variant<std::monostate, int32_t, double, std::shared_ptr<CScriptTokenDataString>, std::shared_ptr<CScriptTokenDataFnc>, 
@@ -619,7 +597,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 typedef std::vector<size_t> MARKS_t;
-
+enum class TOKENIZE_FLAGS;
 class CScriptTokenizer
 {
 public:
@@ -672,36 +650,36 @@ public:
 	int currentColumn() { return getPos().currentColumn();}
 	const std::string &tkStr() { static std::string empty; return LEX_TOKEN_DATA_STRING(getToken().token)?getToken().String():empty; }
 private:
-	void tokenizeTry(ScriptTokenState &State, int Flags);
-	void tokenizeSwitch(ScriptTokenState &State, int Flags);
-	void tokenizeWith(ScriptTokenState &State, int Flags);
-	void tokenizeWhileAndDo(ScriptTokenState &State, int Flags);
-	void tokenizeIf_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign);
-	void tokenizeIf(ScriptTokenState &State, int Flags);
-	void tokenizeFor_inArrayComprehensions(ScriptTokenState &State, int Flags, TOKEN_VECT &Assign);
-	void tokenizeFor(ScriptTokenState &State, int Flags);
+	void tokenizeTry(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeSwitch(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeWith(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeWhileAndDo(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeIf_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign);
+	void tokenizeIf(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeFor_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign);
+	void tokenizeFor(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
 	CScriptToken tokenizeFunctionArgument();
-	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, int Flags, bool noLetDef=false);
-	void tokenizeFunction(ScriptTokenState &State, int Flags, bool noLetDef=false);
-	void tokenizeLet(ScriptTokenState &State, int Flags, bool noLetDef=false);
-	void tokenizeVarNoConst(ScriptTokenState &State, int Flags);
-	void tokenizeVarAndConst(ScriptTokenState &State, int Flags);
-	void _tokenizeLiteralObject(ScriptTokenState &State, int Flags);
-	void _tokenizeLiteralArray(ScriptTokenState &State, int Flags);
-	bool _tokenizeArrayComprehensions(ScriptTokenState &State, int Flags);
+	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
+	void tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
+	void tokenizeLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
+	void tokenizeVarNoConst(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeVarAndConst(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void _tokenizeLiteralObject(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void _tokenizeLiteralArray(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	bool _tokenizeArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 
-	void tokenizeLiteral(ScriptTokenState &State, int Flags);
-	void tokenizeMember(ScriptTokenState &State, int Flags);
-	void tokenizeFunctionCall(ScriptTokenState &State, int Flags);
-	void tokenizeSubExpression(ScriptTokenState &State, int Flags);
-	void tokenizeLogic(ScriptTokenState &State, int Flags, int op= LEX_OROR, int op_n=LEX_ANDAND);
-	void tokenizeCondition(ScriptTokenState &State, int Flags);
-	void tokenizeAssignment(ScriptTokenState& State, int Flags);	// = += -= *= /= %= <<= >>= >>>= &= |= ^= AND ??=
-	void tokenizeExpression(ScriptTokenState& State, int Flags);	// ..., ... 
-	void tokenizeBlock(ScriptTokenState& State, int Flags);			// { ... }
-	void tokenizeStatementNoLet(ScriptTokenState &State, int Flags);
-	void tokenizeStatement(ScriptTokenState &State, int Flags);
+	void tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeMember(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeFunctionCall(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeSubExpression(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeLogic(ScriptTokenState &State, TOKENIZE_FLAGS Flags, int op= LEX_OROR, int op_n=LEX_ANDAND);
+	void tokenizeCondition(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeAssignment(ScriptTokenState& State, TOKENIZE_FLAGS Flags);	// = += -= *= /= %= <<= >>= >>>= &= |= ^= AND ??=
+	void tokenizeExpression(ScriptTokenState& State, TOKENIZE_FLAGS Flags);	// ..., ... 
+	void tokenizeBlock(ScriptTokenState& State, TOKENIZE_FLAGS Flags);			// { ... }
+	void tokenizeStatementNoLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeStatement(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 
 	size_t pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
 	size_t pushToken(TOKEN_VECT &Tokens, const CScriptToken &Token);
@@ -726,11 +704,7 @@ class CScriptVar;
 typedef std::shared_ptr<CScriptVar> CScriptVarPtr;
 template<typename C> class CScriptVarPointer;
 class CScriptVarLink;
-#if test_CScriptVarLinkPtr
-typedef std::shared_ptr<CScriptVarLink> CScriptVarLinkPtr;
-#else
 class CScriptVarLinkPtr;
-#endif
 class CScriptVarLinkWorkPtr;
 
 class CScriptVarPrimitive;
@@ -1045,7 +1019,7 @@ private: // prevent Copy
 	CScriptVarLink(const CScriptVarLink& link) = delete; ///< Copy constructor
 	CScriptVarLink &operator=(const CScriptVarLink& link) = delete; ///< Copy constructor
 public:
-	std::shared_ptr<CScriptVarLink> create(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
+	static inline std::shared_ptr<CScriptVarLink> create(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
 		return std::shared_ptr<CScriptVarLink>(new CScriptVarLink(var, name, flags));
 
 	}
@@ -1098,17 +1072,6 @@ private:
 	std::weak_ptr<CScriptVar> owner;
 	uint32_t flags;
 	CScriptVarPtr var;
-#ifdef _DEBUG
-	char dummy[24] = {};
-#endif
-	CScriptVarLink *ref();
-	void unref();
-private:
-	int refs;
-#if test_CScriptVarLinkPtr
-#else
-	friend class CScriptVarLinkPtr;
-#endif
 };
 
 
@@ -1116,60 +1079,34 @@ private:
 /// CScriptVarLinkPtr
 //////////////////////////////////////////////////////////////////////////
 
-#if test_CScriptVarLinkPtr
-#else
-/*!
- *  CScriptVarLinkPtr holds a pointer of CScriptVarLink
- */
 class CScriptVarLinkPtr {
 public:
 	// construct
 	CScriptVarLinkPtr() : link(0) {} ///< 0-Pointer
 
-	CScriptVarLinkPtr(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) { link = (new CScriptVarLink(var, name, flags))->ref(); }
-//	CScriptVarLinkPtr(CScriptVarLink *Link) : link(Link) { if(link) link->ref(); } // creates a new CScriptVarLink (from new);
-
-	// reconstruct
+	CScriptVarLinkPtr(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : link(CScriptVarLink::create(var, name, flags)) {}
 
 	CScriptVarLinkPtr& operator()(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
-//	CScriptVarLinkPtr &operator=(const CScriptVarPtr &var) { return operator()(var); }
-	// deconstruct
-	~CScriptVarLinkPtr() { if(link) link->unref(); }
-
-	// copy
-	CScriptVarLinkPtr(const CScriptVarLinkPtr &Copy) : link(Copy.link) { if(link) link->ref(); }
-	CScriptVarLinkPtr &operator=(const CScriptVarLinkPtr &Copy) {
-		if(link != Copy.link) {
-			if(link) link->unref();
-			link = Copy.link; if(link) link->ref();
-		}
-		return *this;
-	}
-	
-	// move
-	CScriptVarLinkPtr(CScriptVarLinkPtr &&Other) noexcept : link(Other.link) { Other.link = 0; }
-	CScriptVarLinkPtr &operator=(CScriptVarLinkPtr &&Other) noexcept { if(link) link->unref(); link = Other.link; Other.link = 0; return *this; }
 
 	CScriptVarLinkWorkPtr getter();
-	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
-	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
-	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
+	CScriptVarLinkWorkPtr getter(CScriptResult& execute);
+	CScriptVarLinkWorkPtr setter(const CScriptVarPtr& Var);
+	CScriptVarLinkWorkPtr setter(CScriptResult& execute, const CScriptVarPtr& Var);
 
-	operator bool() const { return link!=0; }
+	operator bool() const { return (bool)link && (bool)link->getVarPtr(); }
 
 	// for sorting in child-list
-	bool operator<(const std::string &rhs) const;
-	bool operator ==(const CScriptVarLinkPtr &rhs) const { return link==rhs.link; }
+	bool operator<(const std::string& rhs) const;
+//	bool operator ==(const CScriptVarLinkPtr& rhs) const { return link == rhs.link; }
 	// access to CScriptVarLink
-	CScriptVarLink *operator ->() const { return link; }
+	auto operator ->() const { return link; }
 
-	operator const CScriptVarPtr &() const { static CScriptVarPtr NullPtr; return link?link->getVarPtr():NullPtr; }
+	operator const CScriptVarPtr& () const { return link->getVarPtr(); }
+	void clear() { link.reset(); }
 
-	void clear() { if(link) link->unref(); link=0; }
 protected:
-	CScriptVarLink *link;
+	std::shared_ptr< CScriptVarLink> link;
 };
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarLinkWorkPtr
@@ -1208,12 +1145,6 @@ public:
 	CScriptVarLinkWorkPtr getter(CScriptResult &execute);
 	CScriptVarLinkWorkPtr setter(const CScriptVarPtr &Var);
 	CScriptVarLinkWorkPtr setter(CScriptResult &execute, const CScriptVarPtr &Var);
-
-
-	void swap(CScriptVarLinkWorkPtr &Link) {
-		CScriptVarPtr _referencedOwner = referencedOwner; referencedOwner = Link.referencedOwner; Link.referencedOwner = _referencedOwner;
-		CScriptVarLink *_link=link; link=Link.link; Link.link=_link;
-	}
 
 	void clear() { CScriptVarLinkPtr::clear(); referencedOwner.reset(); }
 	void setReferencedOwner(const CScriptVarPtr &Owner) { referencedOwner = Owner; }
@@ -1391,20 +1322,20 @@ private:
 public:
 
 	CNumber(const CNumber &Copy) { *this=Copy; }
-	CNumber(NegativeZero_t) : type(CNumber::NType::tnNULL), Int32(0) {}
-	CNumber(NaN_t) : type(CNumber::NType::tNaN), Int32(0) {}
-	CNumber(Infinity v) : type(CNumber::NType::tInfinity), Int32(v.Sig()) {}
-	CNumber(int32_t Value=0) : type(CNumber::NType::tInt32), Int32(Value) {}
-	CNumber(uint32_t Value) : type(CNumber::NType::tInt32) {
+	CNumber(NegativeZero_t) : type(NType::tnNULL), Int32(0) {}
+	CNumber(NaN_t) : type(NType::tNaN), Int32(0) {}
+	CNumber(Infinity v) : type(NType::tInfinity), Int32(v.Sig()) {}
+	CNumber(int32_t Value=0) : type(NType::tInt32), Int32(Value) {}
+	CNumber(uint32_t Value) : type(NType::tInt32) {
 		if (Value <= 0x7ffffffUL) 
 			Int32 = Value;
 		else
-			type = CNumber::NType::tDouble, Double = Value;
+			type = NType::tDouble, Double = Value;
 	}
 	CNumber(uint64_t Value);
 	CNumber(int64_t Value);
 	CNumber(double Value);
-	CNumber(unsigned char Value) : type(CNumber::NType::tInt32), Int32(Value) {}
+	CNumber(unsigned char Value) : type(NType::tInt32), Int32(Value) {}
 	
 	CNumber(std::string_view);
 
@@ -1414,7 +1345,7 @@ public:
 
 	CNumber add(const CNumber &Value) const;
 	CNumber operator-() const;
-	CNumber operator~() const { if(type== CNumber::NType::tNaN) return *this; else return ~toInt32(); }
+	CNumber operator~() const { if(type== NType::tNaN) return *this; else return ~toInt32(); }
 	bool operator!() const { return isZero(); }
 	CNumber multi(const CNumber &Value) const;
 	CNumber div(const CNumber& Value) const;
@@ -1436,14 +1367,14 @@ public:
 	bool equal(const CNumber &Value) const;
 
 
-	bool isInt32() const { return type == CNumber::NType::tInt32; }
-	bool isUInt32() const { return (type == CNumber::NType::tInt32 && Int32 >= 0) || (type == CNumber::NType::tDouble && Double <= std::numeric_limits<uint32_t>::max()) || (type == CNumber::NType::tnNULL); }
-	bool isDouble() const { return type == CNumber::NType::tDouble; }
+	bool isInt32() const { return type == NType::tInt32; }
+	bool isUInt32() const { return (type == NType::tInt32 && Int32 >= 0) || (type == NType::tDouble && Double <= std::numeric_limits<uint32_t>::max()) || (type == NType::tnNULL); }
+	bool isDouble() const { return type == NType::tDouble; }
 
-	bool isNaN() const { return type == CNumber::NType::tNaN; }
-	int isInfinity() const { return type == CNumber::NType::tInfinity ? Int32 : 0; }
-	bool isFinite() const { return type != CNumber::NType::tInfinity && type != CNumber::NType::tNaN; }
-	bool isNegativeZero() const { return type== CNumber::NType::tnNULL; }
+	bool isNaN() const { return type == NType::tNaN; }
+	int isInfinity() const { return type == NType::tInfinity ? Int32 : 0; }
+	bool isFinite() const { return type != NType::tInfinity && type != NType::tNaN; }
+	bool isNegativeZero() const { return type== NType::tnNULL; }
 	bool isZero() const; ///< is 0, -0
 	bool isInteger() const;
 	int sign() const;
@@ -1451,14 +1382,14 @@ public:
 	int32_t		toInt32() const { return cast<int32_t>(); }
 	uint32_t	toUInt32() const { return cast<uint32_t>(); }
 	double		toDouble() const;
-	bool		toBoolean() const { return !isZero() && type!= CNumber::NType::tNaN; }
+	bool		toBoolean() const { return !isZero() && type!= NType::tNaN; }
 	std::string	toString(uint32_t Radix=10) const;
 private:
 	template<typename T> T cast() const {
 		switch(type) {
-		case CNumber::NType::tInt32:
+		case NType::tInt32:
 			return T(Int32);
-		case CNumber::NType::tDouble:
+		case NType::tDouble:
 			return T(Double);
 		default:
 			return T(0);
@@ -1855,7 +1786,7 @@ protected:
 		if (Name) FncData->name = Name;
 		if (Args) {
 			CScriptLex lex(Args);
-			int end_tk = LEX_EOF;
+			uint16_t end_tk = LEX_EOF;
 			if (lex.tk == '(') {
 				end_tk = ')';
 				lex.match('(');
