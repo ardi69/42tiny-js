@@ -45,6 +45,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <iostream>
+using namespace TinyJS;
 
 void js_print(const CFunctionsScopePtr &v, void *) {
 	std::cout << "> " << v->getArgument("text")->toString() << std::endl;

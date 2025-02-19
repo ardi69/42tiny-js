@@ -53,6 +53,7 @@
 #include <ctime>
 #include <limits>
 #include <iostream>
+#include <sstream>
 
 #include "config.h"
 
@@ -81,6 +82,8 @@
 #ifndef TRACE
 #define TRACE printf
 #endif // TRACE
+
+namespace TinyJS {
 
 enum  LEX_TYPES : uint16_t {
 	LEX_NONE      =(uint16_t)-1,
@@ -327,35 +330,186 @@ public:
 /// CScriptLex
 //////////////////////////////////////////////////////////////////////////
 
-class CScriptLex
-{
+class CScriptLex {
 public:
-	CScriptLex(const char* Code, const std::string& File = "", int Line = 0, int Column = 0);
-	struct POS;
-	uint16_t tk; ///< The type of the token that we have
-	uint16_t last_tk; ///< The type of the last token that we have
-	std::string tkStr; ///< Data contained in the token we have here
-
-	void check(uint16_t expected_tk, uint16_t alternate_tk=LEX_NONE); ///< Lexical check wotsit
-	void match(uint16_t expected_tk, uint16_t alternate_tk=LEX_NONE); ///< Lexical match wotsit
-	void reset(const POS &toPos); ///< Reset this lex so we can start again
-	const char* rest() const { return pos.tokenStart; }
-	std::string currentFile;
+	// Struktur zur Speicherung von Positionsinformationen im Input.
+	// tokenStart ist hier ein absoluter Offset.
 	struct POS {
-		const char *tokenStart;
-		int32_t currentLine;
-		const char *currentLineStart;
-		int16_t currentColumn() const { return (int16_t)(tokenStart - currentLineStart) /* silently casted to int16_t because always checked in match(...) */; }
-	} pos;
-	int32_t currentLine() const { return pos.currentLine; }
-	int16_t currentColumn() const { return pos.currentColumn(); }
-	bool lineBreakBeforeToken;
-private:
-	const char *data;
-	const char *dataPos;
-	char currCh, nextCh;
+		size_t tokenStart;       // Absoluter Offset, an dem das Token beginnt
+		int32_t currentLine;     // Zeilennummer (1-basiert)
+		size_t currentLineStart; // Absoluter Offset des Zeilenanfangs
+		int16_t currentColumn() const {
+			return tokenStart >= currentLineStart
+				? static_cast<int16_t>(tokenStart - currentLineStart)
+				: 0;
+		}
+	};
+	int logFill = 0;
+	/////////////////////////////////
+	// Konstruktor, der einen istream verwendet.
+	/////////////////////////////////
+	CScriptLex(std::istream& in, const std::string& File = "", int Line = 1, int Column = 0);
 
+	/////////////////////////////////
+	// Konstruktor, der einen string verwendet.
+	/////////////////////////////////
+	CScriptLex(const std::string& code, const std::string& File = "", int Line = 1, int Column = 0);
+
+	/////////////////////////////////
+	// Positionen "locken" und zurücksetzen
+	/////////////////////////////////
+
+	[[nodiscard]] auto savePosition() {
+		struct PositionGuard {
+			CScriptLex* lexer;
+			bool active = true;
+
+			PositionGuard(CScriptLex& lex) : lexer(&lex) {
+				lexer->positionStack.push_back(lexer->pos);
+			}
+
+			// Kein Kopieren erlaubt!
+			PositionGuard(const PositionGuard&) = delete;
+			PositionGuard& operator=(const PositionGuard&) = delete;
+
+			// Aber Move erlaubt!
+			PositionGuard(PositionGuard&& other) noexcept : lexer(other.lexer), active(other.active) {
+				other.active = false;  // "Steal" den Zustand
+			}
+
+			PositionGuard& operator=(PositionGuard&& other) noexcept {
+				if (this != &other) {
+					discardPosition();  // Sicherstellen, dass alte Position verworfen wird
+					lexer = other.lexer;
+					active = other.active;
+					other.active = false;
+				}
+				return *this;
+			}
+
+			~PositionGuard() {
+				discardPosition();  // Falls nicht explizit restored wurde
+			}
+
+			void discardPosition() {
+				if (active && !lexer->positionStack.empty()) {
+					lexer->positionStack.pop_back();
+					active = false;
+				}
+			}
+
+			void restorePosition() {
+				if (active && !lexer->positionStack.empty()) {
+					lexer->reset(lexer->positionStack.back());
+					lexer->positionStack.pop_back();
+					active = false;
+				}
+			}
+		};
+
+		return PositionGuard(*this);
+	}
+
+	// Setzt den Lexer-Zustand (Position, Tokenvariablen etc.) auf die übergebene Position zurück.
+	// Dabei wird auch der interne Lesezeiger (tail) neu gesetzt, sodass ab der alten Position weitergelesen werden kann.
+	void reset(const POS& toPos);
+
+	/////////////////////////////////
+	// Token-Überprüfungsfunktionen
+	/////////////////////////////////
+
+	void check(uint16_t expected_tk, uint16_t alternate_tk = LEX_NONE);
+	void match(uint16_t expected_tk, uint16_t alternate_tk = LEX_NONE);
+
+	/////////////////////////////////
+	// Debug-/Testfunktion: Gibt den restlichen Input aus.
+	/////////////////////////////////
+	void printAll() {
+		while (currCh != LEX_EOF) {
+			std::cout << currCh;
+			getNextCh();
+		}
+	}
+
+	int currentLine() const { return pos.currentLine; }
+	int currentColumn() const { return pos.currentColumn(); }
+	
+	std::string rest();// { return ""; } // Dummy-Implementierung
+private:
+	/////////////////////////////////
+	// Falls der string-Konstruktor genutzt wird, halten wir hier den eigenen istringstream.
+	/////////////////////////////////
+	std::unique_ptr<std::istringstream> ownedStream;
+	/////////////////////////////////
+	// Eingabe und Puffer
+	/////////////////////////////////
+	std::istream& input;       // Eingabestrom (Referenz)
+	std::vector<char> buffer;  // Interner Ringpuffer (Größe ist immer eine Potenz von 2)
+	size_t head;               // Schreibposition im Puffer
+	bool full;                 // Kennzeichnet, ob der Puffer voll ist
+
+public:
+	std::string currentFile;   // Dateiname
+private:
+	POS pos;                   // Aktuelle Positionsdaten
+	char currCh;               // Aktuelles Zeichen
+	char nextCh;               // Lookahead-Zeichen (wichtig für die Tokenanalyse)
+public:
+	bool lineBreakBeforeToken; // Kennzeichnet, ob vor dem aktuellen Token ein Zeilenumbruch war
+private:
+	size_t globalOffset;       // Globaler Offset der bisher gelesenen Zeichen
+
+	std::vector<POS> positionStack; // Stack (LIFO) für gelockte Positionen
+
+	// Token-Informationen:
+public:
+	uint16_t tk;            // Aktueller Token-Typ
+private:
+	uint16_t last_tk;       // Letzter Token-Typ
+public:
+	std::string tkStr; // Zeichenkette des Tokens
+private:
+
+
+	/////////////////////////////////////////////////////////////
+	// Ringpuffer-Mechanismus mit integrierter Erweiterung
+	/////////////////////////////////////////////////////////////
+
+	// Berechne tailLocked: Falls gelockte Positionen existieren, entspricht tailLocked
+	// dem Index im Puffer der frühesten gelockten Position; ansonsten ist tailLocked gleich tail.
+	size_t getTailLocked() const {
+		return (positionStack.empty() ? globalOffset : positionStack.front().tokenStart) & (buffer.size() - 1);
+	}
+	// Liefert true, wenn der Puffer leer ist.
+	bool isEmpty() const {
+		return (head == getTailLocked() && !full);
+	}
+
+	// Füllt den Puffer mit neuen Daten aus dem Input-Strom.
+	// Dabei wird sichergestellt, dass der Bereich ab der frühesten gelockten Position (tailLocked)
+	// nicht überschrieben wird.
+	void fillBuffer();
+
+	/////////////////////////////////////////////////////////////
+	// Zeichen holen und Lookahead aktualisieren
+	/////////////////////////////////////////////////////////////
+
+	// Holt das nächste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
 	void getNextCh();
+
+	/////////////////////////////
+	// Hilfsfunktion: nächsthöhere Potenz von 2
+	/////////////////////////////
+	size_t nextPowerOfTwo(size_t n) {
+		size_t power = 1;
+		while (power < n)
+			power *= 2;
+		return power;
+	}
+	/////////////////////////////////////////////////////////////
+	// Dummy-Implementierung von getNextToken()
+	/////////////////////////////////////////////////////////////
+
 	[[nodiscard]] bool getNextToken(); ///< Get the text token from our text string
 };
 
@@ -1880,9 +2034,9 @@ protected:
 	CScriptVarPtr init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData);
 	template<class C> CScriptVarPtr init(C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) {
 		if (getterFnc)
-			addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
+			addChild(TINYJS_ACCESSOR_GET_VAR, TinyJS::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
 		if (setterFnc)
-			addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
+			addChild(TINYJS_ACCESSOR_SET_VAR, TinyJS::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
 		return shared_from_this();
 	}
 	CScriptVarPtr init(const CScriptVarFunctionPtr& getter, const CScriptVarFunctionPtr& setter);
@@ -2160,9 +2314,9 @@ inline define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS* Context, const
 
 //////////////////////////////////////////////////////////////////////////
 template<typename T>
-inline CScriptVarPtr CScriptVar::newScriptVar(T t) { return ::newScriptVar(context, t); }
+inline CScriptVarPtr CScriptVar::newScriptVar(T t) { return TinyJS::newScriptVar(context, t); }
 template<typename T1, typename T2>
-inline CScriptVarPtr CScriptVar::newScriptVar(T1 t1, T2 t2) { return ::newScriptVar(context, t1, t2); }
+inline CScriptVarPtr CScriptVar::newScriptVar(T1 t1, T2 t2) { return TinyJS::newScriptVar(context, t1, t2); }
 //inline CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(context, t); }
 //////////////////////////////////////////////////////////////////////////
 
@@ -2296,7 +2450,7 @@ public:
 	{
 		std::string name, args;
 		CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);
-		base->addChild(name, ret = ::newScriptVar<C>(this, class_ptr, class_fnc, userdata, name.c_str(), args.c_str()), LinkFlags);;
+		base->addChild(name, ret = TinyJS::newScriptVar<C>(this, class_ptr, class_fnc, userdata, name.c_str(), args.c_str()), LinkFlags);;
 		return ret;
 	}
 
@@ -2308,9 +2462,9 @@ public:
 
 	/// newVars & constVars
 	//CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(this, t); }
-	template<typename T>	CScriptVarPtr newScriptVar(T t) { return ::newScriptVar(this, t); }
-	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return ::newScriptVar(this, t1, t2); }
-	template<typename T1, typename T2, typename T3>	CScriptVarPtr newScriptVar(T1 t1, T2 t2, T3 t3) { return ::newScriptVar(this, t1, t2, t3); }
+	template<typename T>	CScriptVarPtr newScriptVar(T t) { return TinyJS::newScriptVar(this, t); }
+	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return TinyJS::newScriptVar(this, t1, t2); }
+	template<typename T1, typename T2, typename T3>	CScriptVarPtr newScriptVar(T1 t1, T2 t2, T3 t3) { return TinyJS::newScriptVar(this, t1, t2, t3); }
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }
 	const CScriptVarPtr &constScriptVar(Null_t)				{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
@@ -2335,8 +2489,8 @@ private:
 		~CScopeControl() { clear(); }
 		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; }
 		void addFncScope(const CScriptVarScopePtr &_Scope) { context->scopes.push_back(_Scope); count++; }
-		CScriptVarScopeLetPtr addLetScope() { count++; return context->scopes.back() = ::newScriptVar(context, ScopeLet, context->scopes.back()); }
-		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = ::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
+		CScriptVarScopeLetPtr addLetScope() { count++; return context->scopes.back() = TinyJS::newScriptVar(context, ScopeLet, context->scopes.back()); }
+		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = TinyJS::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
 	private:
 		CTinyJS *context;
 		int		count;
@@ -2541,6 +2695,7 @@ inline CNumber CScriptVarLink::toNumber(CScriptResult &execute) { return var->to
 inline void CScriptVar::setTemporaryMark(uint32_t ID) { temporaryMark[context->getCurrentMarkSlot()] = ID; }
 inline uint32_t CScriptVar::getTemporaryMark() { return temporaryMark[context->getCurrentMarkSlot()]; }
 
+} /* namespace TinyJS */
 
 #endif
 

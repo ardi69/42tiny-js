@@ -44,6 +44,8 @@
 #include <ctime>
 #include "TinyJS.h"
 
+namespace TinyJS {
+
 inline constexpr double k_PI		= 3.1415926535897932384626433832795;  // π
 inline constexpr double k_E			= 2.7182818284590452353602874713527;  // exp(1.0)
 inline constexpr double k_LN2		= 0.69314718055994530941723212145818; // log(2.0)
@@ -392,7 +394,6 @@ static void scMathSqrt(const CFunctionsScopePtr &c, void *userdata) {
 }
 
 // ----------------------------------------------- Register Functions
-void registerMathFunctions(CTinyJS *tinyJS) {}
 extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 
 	 CScriptVarPtr Math = tinyJS->getRoot()->addChild("Math", tinyJS->newScriptVar(Object), SCRIPTVARLINK_CONSTANT);
@@ -444,3 +445,5 @@ extern "C" void _registerMathFunctions(CTinyJS *tinyJS) {
 	 tinyJS->addNative("function Math.sqrt(a)", scMathSqrt, 0, SCRIPTVARLINK_BUILDINDEFAULT);    
   
 }
+
+} /* namespace TinyJS */

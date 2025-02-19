@@ -42,6 +42,8 @@
 #	endif
 #endif
 
+namespace TinyJS {
+
  // ----------------------------------------------- Actual Functions
 
 #define CheckObjectCoercible(var) do { \
@@ -263,7 +265,7 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 	CScriptVarRegExpPtr RegExp = getRegExpData(c, "regexp", true, "flags", substr, global, ignoreCase, sticky);
 	if(!global) {
 		if(!RegExp)
-			RegExp = ::newScriptVar(c->getContext(), substr, flags);
+			RegExp = TinyJS::newScriptVar(c->getContext(), substr, flags);
 		if(RegExp) {
 			try {
 				c->setReturnVar(RegExp->exec(str));
@@ -572,3 +574,4 @@ extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 #endif /* NO_REGEXP */
 }
 
+} /* namespace TinyJS */

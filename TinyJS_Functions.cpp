@@ -44,6 +44,8 @@
 #include <time.h>
 #include "TinyJS.h"
 
+namespace TinyJS {
+
 // ----------------------------------------------- Actual Functions
 
 static void scTrace(const CFunctionsScopePtr &c, void * userdata) {
@@ -207,7 +209,7 @@ static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 			if(!(*it)->isConfigurable()) c->throwError(TypeError, "property "+(*it)->getName()+" is non-configurable");
 			if(!(*it)->getVarPtr()->isAccessor()) c->throwError(TypeError, "property "+(*it)->getName()+" is a getter and/or a setter");
 		}
-		sort(begin, arr->Childs.end(), ::cmp_fnc(c, cmp_fnc));
+		sort(begin, arr->Childs.end(), TinyJS::cmp_fnc(c, cmp_fnc));
 		uint32_t idx = 0;
 		for(SCRIPTVAR_CHILDS_it it=begin; it != arr->Childs.end(); ++it, ++idx)
 			(*it)->reName(std::to_string(idx));
@@ -218,8 +220,6 @@ static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 
 
 // ----------------------------------------------- Register Functions
-void registerFunctions(CTinyJS *tinyJS) {
-}
 extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function trace()", scTrace, tinyJS, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Object.prototype.dump()", scObjectDump, 0, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -237,3 +237,4 @@ extern "C" void _registerFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function Array.prototype.sort()", scArraySort, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 
+} /* namespace TinyJS */

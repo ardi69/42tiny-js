@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-16 19:34)
+Version 0.10.0 (2025-02-19 11:08)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -118,3 +118,5 @@ Version 0.10.0 (2025-02-16 19:34)
 * changed enum TOKENIZE_FLAGS to enum _class_ TOKENIZE_FLAGS
 * changed CScriptVarLink now allways hold in shared_ptr
 * removed some debuging stuff
+* added TinyJS now uses always the namespace TinyJS
+* added the lexer now uses a ring buffer system and can read directly from a stream

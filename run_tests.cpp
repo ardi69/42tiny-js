@@ -215,6 +215,9 @@ void memtracing_kill() {
     }
 }
 #endif // INSANE_MEMORY_DEBUG
+
+using namespace TinyJS;
+
 class end { // this is for VisualStudio debugging stuff. It's holds the console open up to ENTER is pressed
 public:
 	end() : active(false) {}

@@ -54,6 +54,7 @@
 #	define ASSERT(X) assert(X)
 #endif
 
+namespace TinyJS {
 
 // -----------------------------------------------------------------------------------
 
@@ -185,55 +186,200 @@ std::string CScriptException::toString() {
 /// CScriptLex
 //////////////////////////////////////////////////////////////////////////
 
-CScriptLex::CScriptLex(const char *Code, const std::string &File, int Line, int Column) : data(Code) {
-	currentFile = File;
-	pos.currentLineStart = pos.tokenStart = data;
-	pos.currentLine = Line;
+#define RINGBUFFER_SIZE 1024
+
+/////////////////////////////////
+// Konstruktor, der einen istream verwendet.
+/////////////////////////////////
+CScriptLex::CScriptLex(std::istream& in, const std::string& File/* = ""*/, int Line/* = 1*/, int Column/* = 0*/)
+	: input(in), currentFile(File),
+	pos({ 0, Line, 0 }),
+	currCh(LEX_EOF), nextCh(LEX_EOF),
+	head(0), full(false),
+	globalOffset(0), lineBreakBeforeToken(false),
+	tk(0), last_tk(0)
+{
+	// Initialer Puffer: 1024 Bytes (1024 ist eine Potenz von 2).
+	buffer.resize(RINGBUFFER_SIZE);
+	reset(pos);  // Setzt den internen Zustand anhand der Startposition
+}
+
+/////////////////////////////////
+// Konstruktor, der einen string verwendet.
+/////////////////////////////////
+CScriptLex::CScriptLex(const std::string& code, const std::string& File/* = ""*/, int Line/* = 1*/, int Column/* = 0*/)
+	: ownedStream(new std::istringstream(std::move(code))), input(*ownedStream),
+	currentFile(File), pos({ 0, Line, 0 }),
+	currCh(LEX_EOF), nextCh(LEX_EOF),
+	head(0), full(false),
+	globalOffset(0), lineBreakBeforeToken(false),
+	tk(0), last_tk(0)
+{
+	// Wähle eine Puffergröße passend zum Code.
+	// Wenn der Code sehr kurz ist, soll der Puffer nicht unnötig groß sein.
+	size_t desired = code.size() + 1; // +1 für den Endmarker
+	size_t initSize = (desired < RINGBUFFER_SIZE) ? nextPowerOfTwo(desired) : RINGBUFFER_SIZE;
+	buffer.resize(initSize);
 	reset(pos);
 }
 
-void CScriptLex::reset(const POS &toPos) { ///< Reset this lex so we can start again
-	dataPos = toPos.tokenStart;
-	tk = last_tk = LEX_EOF;
+
+// Setzt den Lexer-Zustand (Position, Tokenvariablen etc.) auf die übergebene Position zurück.
+// Dabei wird auch der interne Lesezeiger (tail) neu gesetzt, sodass ab der alten Position weitergelesen werden kann.
+void CScriptLex::reset(const POS& toPos) {
+	globalOffset = toPos.tokenStart; // Setze den globalen Offset auf den gespeicherten Wert
+	tk = last_tk = 0;
 	tkStr = "";
 	pos = toPos;
 	lineBreakBeforeToken = false;
-	currCh = nextCh = 0;
+	currCh = nextCh = LEX_EOF;
+	size_t bufSize = buffer.size();
+	// Hole zweimal das nächste Zeichen, damit currCh und nextCh initialisiert werden (entspricht dem Original).
 	getNextCh(); // currCh
 	getNextCh(); // nextCh
 	while (!getNextToken()); // instead recursion
 }
 
-void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/*=LEX_NONE*/) {
-	if (expected_tk==';' && tk==LEX_EOF) return; // ignore last missing ';'
-	if (tk!=expected_tk && tk!=alternate_tk) {
-		std::ostringstream errorString;
-		if(expected_tk == LEX_EOF)
-			errorString << "Got unexpected " << CScriptToken::getTokenStr(tk);
-		else
-			errorString << "Got '" << CScriptToken::getTokenStr(tk, tkStr.c_str()) << "' expected '" << CScriptToken::getTokenStr(expected_tk) << "'";
-		if(alternate_tk!=LEX_NONE) errorString << " or '" << CScriptToken::getTokenStr(alternate_tk) << "'";
-		throw CScriptException(SyntaxError, errorString.str(), currentFile, pos.currentLine, currentColumn());
-	}
-}
-void CScriptLex::match(uint16_t expected_tk, uint16_t alternate_tk/*=LEX_NONE*/) {
-	check(expected_tk, alternate_tk);
-	int line = pos.currentLine;
-	while (!getNextToken()); // instead recursion
-	lineBreakBeforeToken = line != pos.currentLine;
-	if(pos.tokenStart-pos.currentLineStart > INT16_MAX) {
-		throw CScriptException(Error, "Maximum line length (of 32767 characters) exhausted", currentFile, pos.currentLine, int32_t(pos.tokenStart-pos.currentLineStart));
+/////////////////////////////////
+// Token-Überprüfungsfunktionen
+/////////////////////////////////
+
+void CScriptLex::check(uint16_t expected_tk, uint16_t alternate_tk/* = LEX_NONE*/) {
+	if (expected_tk == ';' && tk == LEX_EOF)
+		return;
+	if (tk != expected_tk && tk != alternate_tk) {
+		std::string errorString;
+		if (expected_tk == LEX_EOF)
+			errorString = "Got unexpected " + CScriptToken::getTokenStr(tk);
+		else {
+			errorString = "Got '" + CScriptToken::getTokenStr(tk, tkStr.c_str()) +
+				"' expected '" + CScriptToken::getTokenStr(expected_tk) + "'";
+			if (alternate_tk != LEX_NONE)
+				errorString += " or '" + CScriptToken::getTokenStr(alternate_tk) + "'";
+		}
+		throw CScriptException(SyntaxError, errorString, currentFile, pos.currentLine, currentColumn());
 	}
 }
 
+void CScriptLex::match(uint16_t expected_tk, uint16_t alternate_tk/* = LEX_NONE*/) {
+	check(expected_tk, alternate_tk);
+	int lineBefore = pos.currentLine;
+	while (!getNextToken()); // instead recursion
+	lineBreakBeforeToken = (lineBefore != pos.currentLine);
+	if (pos.tokenStart - pos.currentLineStart > std::numeric_limits<int16_t>::max()) {
+		throw CScriptException(Error, "Maximum line length (32767 characters) exhausted", currentFile, pos.currentLine, int32_t(pos.tokenStart - pos.currentLineStart));
+	}
+}
+
+std::string CScriptLex::rest() { 
+	std::string ret = "";
+	while (currCh != LEX_EOF) {
+		ret += currCh;
+		getNextCh();
+	}
+
+	return ret; } // Dummy-Implementierung
+
+
+/////////////////////////////////////////////////////////////
+// Ringpuffer-Mechanismus mit integrierter Erweiterung
+/////////////////////////////////////////////////////////////
+
+// Füllt den Puffer mit neuen Daten aus dem Input-Strom.
+// Dabei wird sichergestellt, dass der Bereich ab der frühesten gelockten Position (tailLocked)
+// nicht überschrieben wird.
+void CScriptLex::fillBuffer() {
+	if (input.eof())
+		return;
+	size_t bufSize = buffer.size();
+
+	// Berechne tailLocked: Falls gelockte Positionen existieren, entspricht tailLocked
+	// dem Index im Puffer der frühesten gelockten Position; ansonsten ist tailLocked gleich tail.
+	size_t tailLocked = getTailLocked();
+
+	// Berechne freien Platz, ohne den Bereich ab tailLocked zu überschreiben.
+	size_t freeSpace;
+	if (head > tailLocked || (head == tailLocked && !full)) {
+		freeSpace = bufSize - head + tailLocked;
+	}
+	else {
+		freeSpace = tailLocked - head;
+	}
+	if (bufSize >= 1024)
+		while (0);
+	// Falls nicht genug freier Platz vorhanden ist, erweitern wir den Puffer.
+	if (freeSpace < 64/* MIN_FILL_SIZE*/ && bufSize == RINGBUFFER_SIZE) {
+		size_t oldSize = bufSize;
+		size_t newSize = oldSize * 2; // Verdopplung – garantiert eine Potenz von 2.
+		std::vector<char> newBuffer(newSize);
+		// Berechne den benutzten Speicher im alten Puffer.
+		size_t usedSpace = (head >= tailLocked) ? (head - tailLocked) : (oldSize - tailLocked + head);
+		// Kopiere die Daten vom alten Puffer in den neuen.
+		for (size_t i = 0; i < usedSpace; ++i) {
+			newBuffer[tailLocked + i] = buffer[(tailLocked + i) & (oldSize - 1)];
+		}
+		buffer = std::move(newBuffer);
+		//tail = 0;
+		if(head < tailLocked)
+			head += oldSize;
+		full = false;
+		bufSize = newSize;
+		freeSpace += oldSize;
+		// Nach der Erweiterung neu berechnen:
+		//tailLocked = positionStack.empty() ? tail() : (positionStack.front().tokenStart & (bufSize - 1));
+		//if (head >= tailLocked) {
+		//	freeSpace = bufSize - head + tailLocked - 1;
+		//}
+		//else {
+		//	freeSpace = tailLocked - head - 1;
+		//}
+	}
+
+	// Nun lesen wir in möglichst großen Blöcken, statt Zeichen für Zeichen.
+	while (freeSpace > 0 && input.good()) {
+		// Bestimme, wie viele freie Zeichen in einem Block ab head liegen.
+		size_t contiguousFree;
+		if (head >= tailLocked)
+			contiguousFree = bufSize - head;
+		else
+			contiguousFree = freeSpace; // Der verfügbare Platz ist zusammenhängend.
+		input.read(&buffer[head], contiguousFree);
+		size_t count = input.gcount();
+		if (count == 0)
+			break; // Kein weiterer Input
+		head = (head + count) & (bufSize - 1);
+		freeSpace -= count;
+		if (count < contiguousFree)
+			break; // Wahrscheinlich Ende des Streams.
+		full = true;
+	}
+}
+
+/////////////////////////////////////////////////////////////
+// Zeichen holen und Lookahead aktualisieren
+/////////////////////////////////////////////////////////////
+
+// Holt das nächste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
 void CScriptLex::getNextCh() {
+	// Falls das aktuelle Zeichen ein Zeilenumbruch war, aktualisiere die Positionsdaten.
 	if(currCh == '\n') { // Windows or Linux
 		pos.currentLine++;
-		pos.tokenStart = pos.currentLineStart = dataPos - (nextCh == LEX_EOF ?  0 : 1);
+		pos.tokenStart = globalOffset - (nextCh == LEX_EOF ? 0 : 1);;
+		pos.currentLineStart = pos.tokenStart;
 	}
+	// Übertrage das bisherige Lookahead in currCh.
 	currCh = nextCh;
-	if ( (nextCh = *dataPos) != LEX_EOF ) dataPos++; // stay on EOF
-//	if(nextCh == -124) nextCh = '\n'; //
+	if (isEmpty())
+		fillBuffer();
+	size_t bufSize = buffer.size();
+	size_t tail = globalOffset & (bufSize - 1);
+	nextCh = isEmpty() ? LEX_EOF : buffer[tail];
+	if (!isEmpty()) {
+		full = false;
+		globalOffset++;
+	}
+	// Behandlung von Carriage Return: Wird currCh als '\r' gelesen,
+	// so wird (gegebenenfalls) mit Überspringen eines folgenden '\n' in '\n' umgewandelt.
 	if(currCh == '\r') { // Windows or Mac
 		if(nextCh == '\n')
 			getNextCh(); // Windows '\r\n\' --> skip '\r'
@@ -275,7 +421,7 @@ bool CScriptLex::getNextToken()
 	tk = LEX_EOF;
 	tkStr.clear();
 	// record beginning of this token
-	pos.tokenStart = dataPos - (nextCh == LEX_EOF ? (currCh == LEX_EOF ? 0 : 1) : 2);
+	pos.tokenStart = globalOffset - (nextCh == LEX_EOF ? (currCh == LEX_EOF ? 0 : 1) : 2);
 	// tokens
 
 	if (isIDStartChar(currCh)) { //  IDs
@@ -1657,14 +1803,14 @@ static void tokenizeVarIdentifierDestructuring( CScriptLex *Lexer, DESTRUCTURING
 static void tokenizeVarIdentifierDestructuringObject(CScriptLex *Lexer, DESTRUCTURING_VARS_t &Vars, STRING_VECTOR_t *VarNames) {
 	Lexer->match('{');
 	while(Lexer->tk != '}') {
-		CScriptLex::POS prev_pos = Lexer->pos;
+		auto prev_pos = Lexer->savePosition();
 		std::string Path = Lexer->tkStr;
 		Lexer->match(LEX_ID, LEX_STR);
 		if(Lexer->tk == ':') {
 			Lexer->match(':');
 			tokenizeVarIdentifierDestructuring(Lexer, Vars, Path, VarNames);
 		} else {
-			Lexer->reset(prev_pos);
+			prev_pos.restorePosition();
 			if(VarNames) VarNames->push_back(Lexer->tkStr);
 			Vars.push_back(DESTRUCTURING_VAR_t(Lexer->tkStr, Lexer->tkStr));
 			Lexer->match(LEX_ID);
@@ -1747,8 +1893,8 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS 
 	bool Statement = (Flags & TOKENIZE_FLAGS::asStatement) != TOKENIZE_FLAGS::none;
 	bool Accessor = (Flags & TOKENIZE_FLAGS::isAccessor) != TOKENIZE_FLAGS::none;
 	bool Generator = (Flags & TOKENIZE_FLAGS::isGenerator) != TOKENIZE_FLAGS::none;
-	CScriptLex::POS functionPos = l->pos;
-
+	auto functionPos_currentLine = l->currentLine();
+	auto functionPos_currentColumn = l->currentColumn();
 	uint16_t tk = l->tk;
 	if(Accessor) {
 		tk = State.Tokens.back().String()=="get"?LEX_T_GET:LEX_T_SET;
@@ -1797,7 +1943,7 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS 
 //		functionState.HaveReturnValue = true;
 //	}
 	if(functionState.HaveReturnValue == true && Generator != 0)
-		throw CScriptException(TypeError, "generator function returns a value.", l->currentFile, functionPos.currentLine, functionPos.currentColumn());
+		throw CScriptException(TypeError, "generator function returns a value.", l->currentFile, functionPos_currentLine, functionPos_currentColumn);
 
 	functionState.Tokens.swap(FncData->body);
 	if(forward) {
@@ -2214,7 +2360,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS F
 	case '(':
 		{
 			l->match('(');
-			CScriptLex::POS prev_pos = l->pos;
+			auto prev_pos = l->savePosition();
 			if(l->tk==LEX_ID || l->tk=='[' || l->tk=='{' || l->tk==')') {
 				try {
 					TOKEN_VECT arguments;
@@ -2232,7 +2378,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS F
 				} catch(...) {
 					/* ignore Error -> try regular (...)-expression */
 				}
-				l->reset(prev_pos);
+				prev_pos.restorePosition();
 			}
 			State.Marks.push_back(pushToken(State.Tokens, CScriptToken('('))); // push Token & push BeginIdx
 			tokenizeExpression(State, Flags & ~TOKENIZE_FLAGS::noIn);
@@ -3882,13 +4028,13 @@ static char *tiny_dtoa(double val, unsigned radix) {
 		val = -val;
 	}
 
-	double val_1 = floor(val);
+	double val_1 = ::floor(val);
 	double val_2 = val - val_1;
 
 
 	do {
 		double tmp = val_1 / radix;
-		val_1 = floor(tmp);
+		val_1 = ::floor(tmp);
 		digval = (unsigned)((tmp - val_1) * radix);
 
 		*p++ = (char) (digval + (digval > 9 ? ('a'-10) : '0'));
@@ -4303,11 +4449,11 @@ void CScriptVarArray::native_setLength(const CFunctionsScopePtr &c, void *data) 
 CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {}
 
 CScriptVarPtr CScriptVarRegExp::init() {
-	addChild("global", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
-	addChild("ignoreCase", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
-	addChild("multiline", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
-	addChild("sticky", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
-	addChild("regexp", ::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
+	addChild("global", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
+	addChild("ignoreCase", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_IgnoreCase, 0, 0, 0), 0);
+	addChild("multiline", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Multiline, 0, 0, 0), 0);
+	addChild("sticky", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Sticky, 0, 0, 0), 0);
+	addChild("regexp", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Source, 0, 0, 0), 0);
 	addChild("lastIndex", newScriptVar(0));
 	return shared_from_this();
 }
@@ -4409,7 +4555,7 @@ CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS* Context, const CSc
 CScriptVarPtr CScriptVarDefaultIterator::init() {
 	object->keys(keys, true);
 	pos = keys.begin();
-	addChild("next", ::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
+	addChild("next", TinyJS::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
 	return shared_from_this();
 }
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
@@ -4659,9 +4805,9 @@ void CScriptVarFunctionNativeCallback::callFunction(const CFunctionsScopePtr &c)
 declare_dummy_t(Accessor);
 CScriptVarPtr CScriptVarAccessor::init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData) {
 	if (getterFnc)
-		addChild(TINYJS_ACCESSOR_GET_VAR, ::newScriptVar(context, getterFnc, getterData), 0);
+		addChild(TINYJS_ACCESSOR_GET_VAR, TinyJS::newScriptVar(context, getterFnc, getterData), 0);
 	if (setterFnc)
-		addChild(TINYJS_ACCESSOR_SET_VAR, ::newScriptVar(context, setterFnc, setterData), 0);
+		addChild(TINYJS_ACCESSOR_SET_VAR, TinyJS::newScriptVar(context, setterFnc, setterData), 0);
 	return shared_from_this();
 }
 
@@ -4896,7 +5042,7 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// Scopes
-	root = ::newScriptVar(this, Scope);
+	root = TinyJS::newScriptVar(this, Scope);
 	scopes.push_back(root);
 
 	//////////////////////////////////////////////////////////////////////////
@@ -4907,7 +5053,7 @@ CTinyJS::CTinyJS() {
 	replacePrototype(var, objectPrototype);
 
 	//	objectPrototype->addChild("__proto__", newScriptVar(Accessor, newScriptVar(na))
-	objectPrototype->addChild("__proto__", ::newScriptVarAccessor(this, ::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_getter__proto__, 0), ::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_setter__proto__, 0)));
+	objectPrototype->addChild("__proto__", TinyJS::newScriptVarAccessor(this, TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_getter__proto__, 0), TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_setter__proto__, 0)));
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf);
 	addNative("function Object.setPrototypeOf(obj, proto)", this, &CTinyJS::native_Object_setPrototypeOf);
 	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectSecure);
@@ -4935,7 +5081,7 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Array(arrayLength)", this, &CTinyJS::native_Array, 0, SCRIPTVARLINK_CONSTANT);
 	arrayPrototype = link = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(::newScriptVar(this, this, &CTinyJS::native_Array, (void*)1, "Array", "(arrayLength)"));
+	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Array, (void*)1, "Array", "(arrayLength)"));
 
 	arrayPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	arrayPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -4946,7 +5092,7 @@ CTinyJS::CTinyJS() {
 	var = addNative("function String(thing)", this, &CTinyJS::native_String, 0, SCRIPTVARLINK_CONSTANT);
 	stringPrototype = link= var->findChild(TINYJS_PROTOTYPE_CLASS);
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(::newScriptVar(this, this, &CTinyJS::native_String, (void*)1, "String", "(thing)"));
+	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_String, (void*)1, "String", "(thing)"));
 	stringPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	stringPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
 	pseudo_refered.push_back(&stringPrototype);
@@ -4967,7 +5113,7 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Number(value)", this, &CTinyJS::native_Number, 0, SCRIPTVARLINK_CONSTANT);
 	numberPrototype = link =var->findChild(TINYJS_PROTOTYPE_CLASS);
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(::newScriptVar(this, this, &CTinyJS::native_Number, (void*)1, "Number", "(value)"));
+	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Number, (void*)1, "Number", "(value)"));
 
 	var->addChild("EPSILON", newScriptVarNumber(this, std::numeric_limits<double>::epsilon()), SCRIPTVARLINK_CONSTANT);
 	var->addChild("MAX_VALUE", newScriptVarNumber(this, std::numeric_limits<double>::max()), SCRIPTVARLINK_CONSTANT);
@@ -4991,7 +5137,7 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Boolean()", this, &CTinyJS::native_Boolean, 0, SCRIPTVARLINK_CONSTANT);
 	booleanPrototype = link = var->findChild(TINYJS_PROTOTYPE_CLASS);
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(::newScriptVar(this, this, &CTinyJS::native_Boolean, (void*)1, "Boolean", "(value)"));
+	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Boolean, (void*)1, "Boolean", "(value)"));
 
 	booleanPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	booleanPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -5011,10 +5157,10 @@ CTinyJS::CTinyJS() {
 #ifndef NO_GENERATORS
 	generatorPrototype = link = newScriptVar(Object);
 	link->setWritable(false);
-	generatorPrototype->addChild("next", ::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)0, "Generator.next"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("send", ::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)1, "Generator.send"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("close", ::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)2, "Generator.close"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("throw", ::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)3, "Generator.throw"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype->addChild("next", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)0, "Generator.next"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype->addChild("send", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)1, "Generator.send"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype->addChild("close", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)2, "Generator.close"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype->addChild("throw", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)3, "Generator.throw"), SCRIPTVARLINK_BUILDINDEFAULT);
 	pseudo_refered.push_back(&generatorPrototype);
 #endif /*NO_GENERATORS*/
 
@@ -5171,16 +5317,16 @@ void CTinyJS::execute(const std::string &Code, const std::string &File, int Line
 CScriptVarLinkPtr CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	t = &Tokenizer;
 	CScriptResult execute;
-	/*try*/ {
+	try {
 		do {
 			execute_statement(execute);
 			while (t->tk==';') t->match(';'); // skip empty statements
 		} while (t->tk!=LEX_EOF);
-	} /*catch (...) {
+	} catch (...) {
 		haveTry = false;
 		t=0; // clean up Tokenizer
 		throw; //
-	}*/
+	}
 	t=0;
 	ClearUnreferedVars(execute.value);
 
@@ -5235,7 +5381,9 @@ CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const std::string &funcDesc, std:
 		name = lex.tkStr;
 		lex.match(LEX_ID);
 	}
-	args = lex.rest();
+	auto pos = lex.savePosition();
+	args = '(' + lex.rest();
+	pos.restorePosition();
 	lex.match('(');
 	return base;
 }
@@ -5243,7 +5391,7 @@ CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const std::string &funcDesc, std:
 CScriptVarFunctionNativePtr CTinyJS::addNative(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
 	std::string name, args;
 	CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);
-	base->addChild(name, ret = ::newScriptVar(this, ptr, userdata, name.c_str(), args.c_str()), LinkFlags);;
+	base->addChild(name, ret = TinyJS::newScriptVar(this, ptr, userdata, name.c_str(), args.c_str()), LinkFlags);
 	return ret;
 }
 
@@ -5274,7 +5422,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	if(Function->isBounded()) return CScriptVarFunctionBoundedPtr(Function)->callFunction(execute, Arguments, This, newThis);
 
 	auto Fnc = Function->getFunctionData();
-	CScriptVarScopeFncPtr functionRoot(::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
+	CScriptVarScopeFncPtr functionRoot(TinyJS::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
 	if(Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
 	if(!Fnc->isArrowFunction()) {
 		// arrow functions get this from closure
@@ -5330,7 +5478,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 
 #ifndef NO_GENERATORS
 	if(Fnc->isGenerator()) {
-		return ::newScriptVarCScriptVarGenerator(this, functionRoot, Function);
+		return TinyJS::newScriptVarCScriptVarGenerator(this, functionRoot, Function);
 	}
 #endif /*NO_GENERATORS*/
 	// execute function!
@@ -7220,7 +7368,7 @@ static CScriptVarPtr _newError(CTinyJS *context, ERROR_TYPES type, const CFuncti
 	if(i>1) fileName	= c->getArgument(1)->toString();
 	if(i>2) line		= c->getArgument(2)->toNumber().toInt32();
 	if(i>3) column		= c->getArgument(3)->toNumber().toInt32();
-	return ::newScriptVarError(context, type, message.c_str(), fileName.c_str(), line, column);
+	return TinyJS::newScriptVarError(context, type, message.c_str(), fileName.c_str(), line, column);
 }
 void CTinyJS::native_Error(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(_newError(this, Error,c)); }
 void CTinyJS::native_EvalError(const CFunctionsScopePtr &c, void *data) { c->setReturnVar(_newError(this, EvalError,c)); }
@@ -7364,3 +7512,4 @@ void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/)
 	freeUniqueID();
 }
 
+} /* namespace TinyJS */

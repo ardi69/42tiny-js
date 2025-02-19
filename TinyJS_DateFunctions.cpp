@@ -51,6 +51,8 @@
 
 #endif
 
+namespace TinyJS {
+
 //////////////////////////////////////////////////////////////////////////
 /// CScriptTime
 //////////////////////////////////////////////////////////////////////////
@@ -802,7 +804,7 @@ CScriptVarPtr CScriptVarDate::valueOf_CallBack() {
 	else
 		return constScriptVar(NaN);
 }
-
+#if 0
 void test() {
 	CScriptTime tm;
 	tm.setTime(1970, 2, 29, 1, 59, 59, 999);
@@ -822,7 +824,6 @@ void test() {
 	tm.setTime(tm.getTime());
 	tm.setTime(1970, 9, 25, 3);
 	tm.setTime(tm.getTime());
-	do{}while(0);
 #if 0
 	time_t end_time;
 	time(&end_time);
@@ -844,15 +845,15 @@ void test() {
 	}
 #endif
 }
-
+#endif
 
 static void scDate(const CFunctionsScopePtr &c, void *data) {
-	test();
+//	test();
 	c->setReturnVar(c->newScriptVar(CScriptTime(CScriptTime::now()).castToString()));
 }
 
 static void scDate_Constructor(const CFunctionsScopePtr &c, void *data) {
-	CScriptVarDatePtr returnVar = ::newScriptVarDate(c->getContext());
+	CScriptVarDatePtr returnVar = TinyJS::newScriptVarDate(c->getContext());
 	c->setReturnVar(returnVar);
 	int ArgumentsLength = c->getArgumentsLength();
 	if(ArgumentsLength == 1) {
@@ -1067,3 +1068,4 @@ extern "C" void _registerDateFunctions(CTinyJS *tinyJS) {
 
 }
 
+} /* namespace TinyJS */
