@@ -54,6 +54,7 @@
 #include <limits>
 #include <iostream>
 #include <sstream>
+#include <functional>
 
 #include "config.h"
 
@@ -867,7 +868,7 @@ typedef CScriptVarPointer<CScriptVarPrimitive> CScriptVarPrimitivePtr;
 
 class CScriptVarScopeFnc;
 typedef CScriptVarPointer<CScriptVarScopeFnc> CFunctionsScopePtr;
-typedef void (*JSCallback)(const CFunctionsScopePtr &var, void *userdata);
+typedef std::function<void(const CFunctionsScopePtr &, void *)> JSCallback;
 
 class CTinyJS;
 class CScriptResult;
@@ -1935,7 +1936,7 @@ inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr Bound
 define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
-	CScriptVarFunctionNative(CTinyJS *Context, void *Userdata);
+	CScriptVarFunctionNative(CTinyJS *Context, JSCallback Callback, void *Userdata);
 	CScriptVarPtr init(const char* Name, const char* Args) {
 		std::shared_ptr<CScriptTokenDataFnc> FncData = CScriptTokenDataFnc::create(LEX_R_FUNCTION);
 		if (Name) FncData->name = Name;
@@ -1964,62 +1965,22 @@ protected:
 public:
 	virtual bool isNative() override; // { return true; }
 
-	virtual void callFunction(const CFunctionsScopePtr &c)=0;// { jsCallback(c, jsCallbackUserData); }
-protected:
-	void *jsUserData; ///< user data passed as second argument to native functions
-};
+	void callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
-
-//////////////////////////////////////////////////////////////////////////
-/// CScriptVarFunctionNativeCallback
-//////////////////////////////////////////////////////////////////////////
-
-define_ScriptVarPtr_Type(FunctionNativeCallback);
-class CScriptVarFunctionNativeCallback : public CScriptVarFunctionNative {
-protected:
-	CScriptVarFunctionNativeCallback(CTinyJS *Context, JSCallback Callback, void *Userdata) : CScriptVarFunctionNative(Context, Userdata), jsCallback(Callback) {}
-	CScriptVarPtr init(const char* Name, const char* Args) {
-		return CScriptVarFunctionNative::init(Name, Args);
-	}
-	// custom RTTI
-	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionNativeCallback");
-	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunctionNative::isDerivedFrom(parentHash); }
-	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
-public:
-
-	virtual void callFunction(const CFunctionsScopePtr &c) override;
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name = 0, const char *Args = 0);// { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
+	template<typename T>
+	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name = 0, const char *Args = 0);
 private:
 	JSCallback jsCallback; ///< Callback for native functions
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void*, const char*, const char*);
+	void *jsUserData; ///< user data passed as second argument to native functions
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS* Context, JSCallback Callback, void* Userdata, const char* Name = 0, const char* Args = 0) { return std::shared_ptr<CScriptVarFunctionNativeCallback>(new CScriptVarFunctionNativeCallback(Context, Callback, Userdata))->init(Name, Args); }
-
-//////////////////////////////////////////////////////////////////////////
-/// CScriptVarFunctionNativeClass
-//////////////////////////////////////////////////////////////////////////
-
-template<class native>
-class CScriptVarFunctionNativeClass : public CScriptVarFunctionNative {
-protected:
-	CScriptVarFunctionNativeClass(CTinyJS *Context, native *ClassPtr, void (native::*ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata) : CScriptVarFunctionNative(Context, Userdata), classPtr(ClassPtr), classFnc(ClassFnc) {}
-	CScriptVarPtr init(const char* Name, const char* Args) {
-		return CScriptVarFunctionNative::init(Name, Args);
-	}
-	// custom RTTI
-	static constexpr uint32_t classHash = fnv1aHash("CScriptVarFunctionNativeClass");
-	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarFunctionNative::isDerivedFrom(parentHash); }
-	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
-public:
-
-	virtual void callFunction(const CFunctionsScopePtr &c) override { (classPtr->*classFnc)(c, jsUserData); }
-private:
-	native *classPtr;
-	void (native::*classFnc)(const CFunctionsScopePtr &c, void *userdata);
-	template<typename native2>
-	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS*, native2 *, void (native2::*)(const CFunctionsScopePtr &, void *), void *, const char *, const char *);
-};
-template<typename native>
-define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS* Context, native* ClassPtr, void (native::* ClassFnc)(const CFunctionsScopePtr&, void*), void* Userdata, const char* Name = 0, const char* Args = 0) { return std::shared_ptr<CScriptVarFunctionNativeClass<native>>(new CScriptVarFunctionNativeClass<native>(Context, ClassPtr, ClassFnc, Userdata))->init(Name, Args); }
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name/* = 0*/, const char *Args/* = 0*/) { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
+template<typename T>
+inline define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name/* = 0*/, const char *Args/* = 0*/) {
+	return newScriptVar(Context, [ClassPtr, ClassFnc](const CFunctionsScopePtr scope, void *data) {
+		(ClassPtr->*ClassFnc)(scope, data);
+		}, Userdata, Name, Args);
+}
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarAccessor
@@ -2445,15 +2406,10 @@ private:
 	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, std::string &args);
 public:
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT);
-	template<class C>
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT)
-	{
-		std::string name, args;
-		CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);
-		base->addChild(name, ret = TinyJS::newScriptVar<C>(this, class_ptr, class_fnc, userdata, name.c_str(), args.c_str()), LinkFlags);;
-		return ret;
+	template <typename C>
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT) {
+		return addNative(funcDesc, [class_ptr, class_fnc](const CFunctionsScopePtr &scope, void *data) { (class_ptr->*class_fnc)(scope, data); }, userdata, LinkFlags);
 	}
-
 	/// Send all variables to stdout
 	void trace();
 

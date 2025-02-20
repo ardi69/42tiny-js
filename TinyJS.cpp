@@ -266,7 +266,7 @@ void CScriptLex::match(uint16_t expected_tk, uint16_t alternate_tk/* = LEX_NONE*
 	int lineBefore = pos.currentLine;
 	while (!getNextToken()); // instead recursion
 	lineBreakBeforeToken = (lineBefore != pos.currentLine);
-	if (pos.tokenStart - pos.currentLineStart > std::numeric_limits<int16_t>::max()) {
+	if (pos.tokenStart - pos.currentLineStart > static_cast<size_t>(std::numeric_limits<int16_t>::max())) {
 		throw CScriptException(Error, "Maximum line length (32767 characters) exhausted", currentFile, pos.currentLine, int32_t(pos.tokenStart - pos.currentLineStart));
 	}
 }
@@ -344,7 +344,7 @@ void CScriptLex::fillBuffer() {
 		else
 			contiguousFree = freeSpace; // Der verfügbare Platz ist zusammenhängend.
 		input.read(&buffer[head], contiguousFree);
-		size_t count = input.gcount();
+		size_t count = static_cast<size_t>(input.gcount());
 		if (count == 0)
 			break; // Kein weiterer Input
 		head = (head + count) & (bufSize - 1);
@@ -4787,15 +4787,8 @@ CScriptVarPtr CScriptVarFunctionBounded::callFunction( CScriptResult &execute, s
 /// CScriptVarFunctionNative
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, void *Userdata) : CScriptVarFunction(Context), jsUserData(Userdata) {}
+CScriptVarFunctionNative::CScriptVarFunctionNative(CTinyJS *Context, JSCallback Callback, void *Userdata) : CScriptVarFunction(Context), jsCallback(std::move(Callback)), jsUserData(Userdata) {}
 bool CScriptVarFunctionNative::isNative() { return true; }
-
-
-//////////////////////////////////////////////////////////////////////////
-/// CScriptVarFunctionNativeCallback
-//////////////////////////////////////////////////////////////////////////
-
-void CScriptVarFunctionNativeCallback::callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
 
 //////////////////////////////////////////////////////////////////////////
