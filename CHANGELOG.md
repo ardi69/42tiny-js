@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-20 11:10)
+Version 0.10.0 (2025-02-20 20:22)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -122,3 +122,10 @@ Version 0.10.0 (2025-02-20 11:10)
 * added the lexer now uses a ring buffer system and can read directly from a stream
 * changed Now std::function is used instead of a simple function pointer for native functions
 * removed No longer required classes CScriptVarFunctionNativeCallback and CScriptVarFunctionNativeClass. All native functionality is now in class CScriptVarFunctionNative
+* added CScriptVarString(std::string &&) move constructor
+* added String.prototype.padStart(targetLength, padString)
+* added String.prototype.padEnd(targetLength, padString)
+* added String.prototype.repeat(count)
+* added String.prototype.includes(searchString, position)
+* added String.prototype.startsWith(searchString, position)
+* added String.prototype.endsWith(searchString, length)

@@ -1115,9 +1115,9 @@ public:
 
 public:
 	/// newScriptVar
-	template<typename T>	CScriptVarPtr newScriptVar(T t); /// { return ::newScriptVar(context, t); }
-	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2); // { return ::newScriptVar(context, t); }
-	template<typename T>	const CScriptVarPtr &constScriptVar(T t); // { return ::newScriptVar(context, t); }
+	template<typename T>	CScriptVarPtr newScriptVar(T &&t);
+	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2);
+	template<typename T>	const CScriptVarPtr &constScriptVar(T t);
 
 	/// For memory management/garbage collection
 	void setTemporaryMark(uint32_t ID); // defined as inline at end of this file { temporaryMark[context->getCurrentMarkSlot()] = ID; }
@@ -1418,7 +1418,8 @@ public:
 define_ScriptVarPtr_Type(String);
 class CScriptVarString : public CScriptVarPrimitive {
 protected:
-	CScriptVarString(CTinyJS* Context, const std::string& Data);
+	CScriptVarString(CTinyJS *Context, const std::string &Data);
+	CScriptVarString(CTinyJS *Context, std::string &&Data);
 	auto init() {
 		addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
 		return shared_from_this();
@@ -1452,12 +1453,14 @@ protected:
 	std::string data;
 private:
 	friend define_newScriptVar_Fnc(String, CTinyJS *Context, const std::string &);
+	friend define_newScriptVar_Fnc(String, CTinyJS *Context, std::string &&);
 	friend define_newScriptVar_Fnc(String, CTinyJS *Context, const char *);
-	friend define_newScriptVar_Fnc(String, CTinyJS *Context, char *);
+//	friend define_newScriptVar_Fnc(String, CTinyJS *Context, char *);
 };
-inline define_newScriptVar_Fnc(String, CTinyJS* Context, const std::string& Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
+inline define_newScriptVar_Fnc(String, CTinyJS *Context, const std::string &Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
+inline define_newScriptVar_Fnc(String, CTinyJS *Context, std::string &&Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, std::move(Obj)))->init(); }
 inline define_newScriptVar_Fnc(String, CTinyJS* Context, const char* Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
-inline define_newScriptVar_Fnc(String, CTinyJS* Context, char* Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
+//inline define_newScriptVar_Fnc(String, CTinyJS* Context, char* Obj) { return std::shared_ptr<CScriptVarString>(new CScriptVarString(Context, Obj))->init(); }
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -2275,10 +2278,9 @@ inline define_newScriptVar_NamedFnc(CScriptVarGenerator, CTinyJS* Context, const
 
 //////////////////////////////////////////////////////////////////////////
 template<typename T>
-inline CScriptVarPtr CScriptVar::newScriptVar(T t) { return TinyJS::newScriptVar(context, t); }
+inline CScriptVarPtr CScriptVar::newScriptVar(T &&t) { return TinyJS::newScriptVar(context, std::forward<T>(t)); }
 template<typename T1, typename T2>
 inline CScriptVarPtr CScriptVar::newScriptVar(T1 t1, T2 t2) { return TinyJS::newScriptVar(context, t1, t2); }
-//inline CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(context, t); }
 //////////////////////////////////////////////////////////////////////////
 
 
@@ -2418,7 +2420,7 @@ public:
 
 	/// newVars & constVars
 	//CScriptVarPtr newScriptVar(const CNumber &t) { return ::newScriptVar(this, t); }
-	template<typename T>	CScriptVarPtr newScriptVar(T t) { return TinyJS::newScriptVar(this, t); }
+	template<typename T>	CScriptVarPtr newScriptVar(T &&t) { return TinyJS::newScriptVar(this, std::forward<T>(t)); }
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return TinyJS::newScriptVar(this, t1, t2); }
 	template<typename T1, typename T2, typename T3>	CScriptVarPtr newScriptVar(T1 t1, T2 t2, T3 t3) { return TinyJS::newScriptVar(this, t1, t2, t3); }
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }

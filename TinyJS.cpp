@@ -3478,7 +3478,8 @@ std::string CScriptVarNull::getVarType() { return "null"; }
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
 //////////////////////////////////////////////////////////////////////////
-CScriptVarString::CScriptVarString(CTinyJS* Context, const std::string& Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {}
+CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {}
+CScriptVarString::CScriptVarString(CTinyJS *Context, std::string &&Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(std::move(Data)) {}
 bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }

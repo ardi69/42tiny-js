@@ -329,6 +329,10 @@ static void scStringSearch(const CFunctionsScopePtr &c, void *userdata) {
 #endif /* NO_REGEXP */ 
 }
 
+// ----------------------------------------------------------------------
+// String.prototype.slice(start, end)
+// Signatur: function String.prototype.slice(start, end)
+// Extrahiert einen Teilstring, unterstützt negative Indizes (als Slice) und arbeitet über std::string_view.
 static void scStringSlice(const CFunctionsScopePtr &c, void *userdata) {
 	std::string str = this2string(c);
 	int32_t length = c->getArgumentsLength()-(ptr2int32(userdata) & 1);
@@ -346,8 +350,11 @@ static void scStringSlice(const CFunctionsScopePtr &c, void *userdata) {
 		c->setReturnVar(c->newScriptVar(""));
 	else if(end <= start)
 		c->setReturnVar(c->newScriptVar(""));
-	else
-		c->setReturnVar(c->newScriptVar(str.substr(start, end-start)));
+	else {
+		std::string_view sv(str);
+		auto result_view = sv.substr(start, end - start);
+		c->setReturnVar(c->newScriptVar(std::string(result_view)));
+	}
 }
 
 static void scStringSplit(const CFunctionsScopePtr &c, void *) {
@@ -497,6 +504,155 @@ static void scRegExpExec(const CFunctionsScopePtr &c, void *) {
 }
 #endif /* NO_REGEXP */
 
+// ----------------------------------------------------------------------
+// String.prototype.padStart(targetLength, padString)
+// Signatur: function String.prototype.padStart(targetLength, padString)
+// Falls padString nicht angegeben ist, wird standardmäßig ein einzelnes Leerzeichen genutzt.
+static void scStringPadStart(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    int targetLength = c->getArgument("targetLength")->toNumber().toInt32();
+    std::string padStr = c->getArgument("padString")->isUndefined() ? " " : c->getArgument("padString")->toString();
+    if(padStr.empty())
+        padStr = " ";
+    int currentLength = static_cast<int>(str.size());
+    if(targetLength <= currentLength) {
+        c->setReturnVar(c->newScriptVar(str));
+        return;
+    }
+    int padLength = targetLength - currentLength;
+    std::string padResult;
+    while (static_cast<int>(padResult.size()) < padLength) {
+        padResult.append(padStr);
+    }
+    // Nutzung von std::string_view zur Bestimmung des genauen Auffüllbereichs
+    std::string_view padView(padResult);
+    padView = padView.substr(0, padLength);
+    std::string result = std::string(padView) + str;
+    c->setReturnVar(c->newScriptVar(result));
+}
+
+// ----------------------------------------------------------------------
+// String.prototype.padEnd(targetLength, padString)
+// Signatur: function String.prototype.padEnd(targetLength, padString)
+// Falls padString nicht angegeben ist, wird standardmäßig ein einzelnes Leerzeichen genutzt.
+static void scStringPadEnd(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    int targetLength = c->getArgument("targetLength")->toNumber().toInt32();
+    std::string padStr = c->getArgument("padString")->isUndefined() ? " " : c->getArgument("padString")->toString();
+    if(padStr.empty())
+        padStr = " ";
+    int currentLength = static_cast<int>(str.size());
+    if(targetLength <= currentLength) {
+        c->setReturnVar(c->newScriptVar(str));
+        return;
+    }
+    int padLength = targetLength - currentLength;
+    std::string padResult;
+    while (static_cast<int>(padResult.size()) < padLength) {
+        padResult.append(padStr);
+    }
+    std::string_view padView(padResult);
+    padView = padView.substr(0, padLength);
+    std::string result = str + std::string(padView);
+    c->setReturnVar(c->newScriptVar(result));
+}
+
+// ----------------------------------------------------------------------
+// String.prototype.repeat(count)
+// Signatur: function String.prototype.repeat(count)
+// Wiederholt den String count-Mal. Bei negativen oder zu großen Werten wird ein Fehler geworfen.
+static void scStringRepeat(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    int count = c->getArgument("count")->toNumber().toInt32();
+    if(count < 0) {
+        c->throwError(RangeError, "repeat count must be non-negative");
+        return;
+    }
+    // Begrenze den Wiederholungsfaktor auf einen sinnvollen Maximalwert (z. B. 10.000)
+    if(count > 10000) {
+        c->throwError(RangeError, "repeat count must not be too large");
+        return;
+    }
+    std::string result;
+    result.reserve(str.size() * count);
+    for (int i = 0; i < count; i++) {
+        result.append(str);
+    }
+    c->setReturnVar(c->newScriptVar(result));
+}
+
+// ----------------------------------------------------------------------
+// String.prototype.includes(searchString, position)
+// Signatur: function String.prototype.includes(searchString, position)
+// Prüft, ob der String ab der gegebenen Position den searchString enthält.
+static void scStringIncludes(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    std::string searchString = c->getArgument("searchString")->toString();
+    int position = c->getArgument("position")->isUndefined() ? 0 : c->getArgument("position")->toNumber().toInt32();
+    if (position < 0) position = 0;
+    bool found = (str.find(searchString, position) != std::string::npos);
+    c->setReturnVar(c->constScriptVar(found));
+}
+
+// ----------------------------------------------------------------------
+// String.prototype.startsWith(searchString, position)
+// Signatur: function String.prototype.startsWith(searchString, position)
+// Prüft, ob der String an der angegebenen Position mit searchString beginnt.
+static void scStringStartsWith(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    std::string searchString = c->getArgument("searchString")->toString();
+    int position = c->getArgument("position")->isUndefined() ? 0 : c->getArgument("position")->toNumber().toInt32();
+    if (position < 0) position = 0;
+    bool starts = false;
+    std::string_view sv(str);
+    if (static_cast<int>(sv.size()) >= position + static_cast<int>(searchString.size())) {
+        auto view = sv.substr(position, searchString.size());
+        starts = (view == searchString);
+    }
+    c->setReturnVar(c->constScriptVar(starts));
+}
+
+// ----------------------------------------------------------------------
+// String.prototype.endsWith(searchString, length)
+// Signatur: function String.prototype.endsWith(searchString, length)
+// Prüft, ob der String (bis zur optionalen Länge) mit searchString endet.
+static void scStringEndsWith(const CFunctionsScopePtr &c, void *) {
+    std::string str = this2string(c);
+    std::string searchString = c->getArgument("searchString")->toString();
+    int length = c->getArgument("length")->isUndefined() ? static_cast<int>(str.size()) : c->getArgument("length")->toNumber().toInt32();
+    if (length > static_cast<int>(str.size())) length = static_cast<int>(str.size());
+    bool ends = false;
+    if (length >= static_cast<int>(searchString.size())) {
+        std::string_view sv(str);
+        auto view = sv.substr(length - searchString.size(), searchString.size());
+        ends = (view == searchString);
+    }
+    c->setReturnVar(c->constScriptVar(ends));
+}
+
+#if 0
+// ----------------------------------------------------------------------
+// String.prototype.substr(start, length)
+// Signatur: function String.prototype.substr(start, length)
+// Extrahiert einen Teilstring beginnend bei start, maximal length Zeichen.
+static void scStringSubstr(const CFunctionsScopePtr &c, void *userdata) {
+    std::string str = this2string(c);
+    int32_t countParam = c->getArgumentsLength() - ptr2int32(userdata);
+    int32_t start = c->getArgument("start")->toNumber().toInt32();
+    if(start < 0 || start >= (int)str.size()) {
+        c->setReturnVar(c->newScriptVar(""));
+    } else if(countParam > 1) {
+        int len = c->getArgument("length")->toNumber().toInt32();
+        std::string_view sv(str);
+        auto result_view = sv.substr(start, len);
+        c->setReturnVar(c->newScriptVar(std::string(result_view)));
+    } else {
+        std::string_view sv(str);
+        auto result_view = sv.substr(start);
+        c->setReturnVar(c->newScriptVar(std::string(result_view)));
+    }
+}
+#endif
 // ----------------------------------------------- Register Functions
 void registerStringFunctions(CTinyJS *tinyJS) {}
 extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
@@ -572,6 +728,14 @@ extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 	tinyJS->addNative("function RegExp.prototype.test(str)", scRegExpTest, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function RegExp.prototype.exec(str)", scRegExpExec, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #endif /* NO_REGEXP */
+
+
+	tinyJS->addNative("function String.prototype.padStart(targetLength, padString)", scStringPadStart, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+    tinyJS->addNative("function String.prototype.padEnd(targetLength, padString)", scStringPadEnd, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+    tinyJS->addNative("function String.prototype.repeat(count)", scStringRepeat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+    tinyJS->addNative("function String.prototype.includes(searchString, position)", scStringIncludes, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+    tinyJS->addNative("function String.prototype.startsWith(searchString, position)", scStringStartsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+    tinyJS->addNative("function String.prototype.endsWith(searchString, length)", scStringEndsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 
 } /* namespace TinyJS */
