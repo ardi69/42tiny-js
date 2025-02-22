@@ -147,17 +147,27 @@ static void scArrayPop(const CFunctionsScopePtr &c, void *data) {
 	uint32_t len = c->getLength(arr);
 	if(len) {
 		c->setReturnVar(c->getPropertyValue(arr, len-1));
-		arr->removeChild(std::to_string(len-1));
+		if (arr->isExtensible()) {
+			arr->removeChild(std::to_string(len - 1));
+			arr->setProperty("length", c->newScriptVar(len - 1));
+		}
 	} else
 		c->setReturnVar(c->constScriptVar(Undefined));
 }
 
 static void scArrayPush(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
-//	uint32_t len = c->getLength(arr);
+	uint32_t len = c->getLength(arr);
 	uint32_t args = c->getArgumentsLength();
-	for (uint32_t i=0; i<args; ++i)
-		c->setProperty(arr, i, c->getArgument(i));
+	for (uint32_t i = 0; i < args; ++i) {
+		auto name = std::to_string(len + i);
+		CScriptVarLinkWorkPtr property = c->getProperty(arr, name);
+		if (!property) {
+			property(c->constScriptVar(Undefined), name);
+			property.setReferencedOwner(arr);
+		}
+		c->setProperty(property, c->getArgument(i));
+	}
 }
 
 namespace {
@@ -207,7 +217,7 @@ static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 		for(SCRIPTVAR_CHILDS_it it = begin; it != arr->Childs.end(); ++it) {
 			if(!(*it)->isWritable()) c->throwError(TypeError, "property "+(*it)->getName()+" is read-only");
 			if(!(*it)->isConfigurable()) c->throwError(TypeError, "property "+(*it)->getName()+" is non-configurable");
-			if(!(*it)->getVarPtr()->isAccessor()) c->throwError(TypeError, "property "+(*it)->getName()+" is a getter and/or a setter");
+			if((*it)->getVarPtr()->isAccessor()) c->throwError(TypeError, "property "+(*it)->getName()+" is a getter and/or a setter");
 		}
 		sort(begin, arr->Childs.end(), TinyJS::cmp_fnc(c, cmp_fnc));
 		uint32_t idx = 0;

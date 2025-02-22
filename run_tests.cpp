@@ -309,6 +309,10 @@ bool run_test(const char *filename) {
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+	// Setzt den Zeichensatz der Konsole (UTF-8) für korrekte Darstellung von Sonderzeichen.
+	SetConsoleOutputCP(65001);
+#endif
 #ifdef INSANE_MEMORY_DEBUG
     memtracing_init();
 #endif

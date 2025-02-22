@@ -723,7 +723,7 @@ extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 
 	tinyJS->addNative("function charToInt(ch)", scCharToInt, 0, SCRIPTVARLINK_BUILDINDEFAULT); //  convert a character to an int - get its value
 	
-	tinyJS->addNative("function String.prototype.fromCharCode(char)", scStringFromCharCode, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.fromCharCode(char)", scStringFromCharCode, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 #ifndef NO_REGEXP
 	tinyJS->addNative("function RegExp.prototype.test(str)", scRegExpTest, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function RegExp.prototype.exec(str)", scRegExpExec, 0, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -731,11 +731,17 @@ extern "C" void _registerStringFunctions(CTinyJS *tinyJS) {
 
 
 	tinyJS->addNative("function String.prototype.padStart(targetLength, padString)", scStringPadStart, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-    tinyJS->addNative("function String.prototype.padEnd(targetLength, padString)", scStringPadEnd, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-    tinyJS->addNative("function String.prototype.repeat(count)", scStringRepeat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-    tinyJS->addNative("function String.prototype.includes(searchString, position)", scStringIncludes, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-    tinyJS->addNative("function String.prototype.startsWith(searchString, position)", scStringStartsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-    tinyJS->addNative("function String.prototype.endsWith(searchString, length)", scStringEndsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.padStart(this, targetLength, padString)", scStringPadStart, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.padEnd(targetLength, padString)", scStringPadEnd, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.padEnd(this, targetLength, padString)", scStringPadEnd, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.repeat(count)", scStringRepeat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.repeat(this, count)", scStringRepeat, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.includes(searchString, position)", scStringIncludes, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.includes(this, searchString, position)", scStringIncludes, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.startsWith(searchString, position)", scStringStartsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.startsWith(this, searchString, position)", scStringStartsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.prototype.endsWith(searchString, length)", scStringEndsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
+	tinyJS->addNative("function String.endsWith(this, searchString, length)", scStringEndsWith, 0, SCRIPTVARLINK_BUILDINDEFAULT);
 }
 
 } /* namespace TinyJS */

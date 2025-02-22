@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-20 20:22)
+Version 0.10.0 (2025-02-24 11:20)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -129,3 +129,7 @@ Version 0.10.0 (2025-02-20 20:22)
 * added String.prototype.includes(searchString, position)
 * added String.prototype.startsWith(searchString, position)
 * added String.prototype.endsWith(searchString, length)
+* removed octal escapes in string literals
+* added template literals
+* removed octal escapes in string literals
+* added template literals

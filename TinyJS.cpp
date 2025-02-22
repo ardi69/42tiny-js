@@ -62,6 +62,19 @@ namespace TinyJS {
 /// Utils
 //////////////////////////////////////////////////////////////////////////
 
+inline int baseValue(int base, char c) {
+	if (base < 2 || base > 36) return -1;
+	int value = (c >= '0' && c <= '9') ? c - '0' :
+		((c | 32) >= 'a') ? (c | 32) - 'a' + 10 : -1;
+	return (value < base) ? value : -1;
+}
+inline bool baseValue(int base, char c, int &out) {
+	if (base < 2 || base > 36) return false;
+	out = (c >= '0' && c <= '9') ? c - '0' :
+		((c | 32) >= 'a') ? (c | 32) - 'a' + 10 : -1;
+	return out >= 0 && out < base;
+}
+
 inline bool isWhitespace(char ch) {
 	return (ch==' ') || (ch=='\t') || (ch=='\n') || (ch=='\r');
 }
@@ -134,6 +147,7 @@ std::string getJSString(const std::string &str) {
 		const char *replaceWith = 0;
 		switch (*i) {
 			case '\\': replaceWith = "\\\\"; break;
+			case '\0': replaceWith = "\\0"; break;
 			case '\n': replaceWith = "\\n"; break;
 			case '\r': replaceWith = "\\r"; break;
 			case '\a': replaceWith = "\\a"; break;
@@ -195,8 +209,7 @@ CScriptLex::CScriptLex(std::istream& in, const std::string& File/* = ""*/, int L
 	: input(in), currentFile(File),
 	pos({ 0, Line, 0 }),
 	currCh(LEX_EOF), nextCh(LEX_EOF),
-	head(0), full(false),
-	globalOffset(0), lineBreakBeforeToken(false),
+	head(0), bomChecked(false), globalOffset(0), lineBreakBeforeToken(false),
 	tk(0), last_tk(0)
 {
 	// Initialer Puffer: 1024 Bytes (1024 ist eine Potenz von 2).
@@ -208,11 +221,10 @@ CScriptLex::CScriptLex(std::istream& in, const std::string& File/* = ""*/, int L
 // Konstruktor, der einen string verwendet.
 /////////////////////////////////
 CScriptLex::CScriptLex(const std::string& code, const std::string& File/* = ""*/, int Line/* = 1*/, int Column/* = 0*/)
-	: ownedStream(new std::istringstream(std::move(code))), input(*ownedStream),
+	: ownedStream(new std::istringstream(code)), input(*ownedStream),
 	currentFile(File), pos({ 0, Line, 0 }),
 	currCh(LEX_EOF), nextCh(LEX_EOF),
-	head(0), full(false),
-	globalOffset(0), lineBreakBeforeToken(false),
+	head(0), bomChecked(false), globalOffset(0), lineBreakBeforeToken(false),
 	tk(0), last_tk(0)
 {
 	// Wähle eine Puffergröße passend zum Code.
@@ -233,7 +245,6 @@ void CScriptLex::reset(const POS& toPos) {
 	pos = toPos;
 	lineBreakBeforeToken = false;
 	currCh = nextCh = LEX_EOF;
-	size_t bufSize = buffer.size();
 	// Hole zweimal das nächste Zeichen, damit currCh und nextCh initialisiert werden (entspricht dem Original).
 	getNextCh(); // currCh
 	getNextCh(); // nextCh
@@ -288,9 +299,10 @@ std::string CScriptLex::rest() {
 // Füllt den Puffer mit neuen Daten aus dem Input-Strom.
 // Dabei wird sichergestellt, dass der Bereich ab der frühesten gelockten Position (tailLocked)
 // nicht überschrieben wird.
-void CScriptLex::fillBuffer() {
+bool CScriptLex::fillBuffer()
+{
 	if (input.eof())
-		return;
+		return false;
 	size_t bufSize = buffer.size();
 
 	// Berechne tailLocked: Falls gelockte Positionen existieren, entspricht tailLocked
@@ -298,15 +310,8 @@ void CScriptLex::fillBuffer() {
 	size_t tailLocked = getTailLocked();
 
 	// Berechne freien Platz, ohne den Bereich ab tailLocked zu überschreiben.
-	size_t freeSpace;
-	if (head > tailLocked || (head == tailLocked && !full)) {
-		freeSpace = bufSize - head + tailLocked;
-	}
-	else {
-		freeSpace = tailLocked - head;
-	}
-	if (bufSize >= 1024)
-		while (0);
+	size_t freeSpace = ((head >= tailLocked) ? bufSize - head + tailLocked : tailLocked - head) - 1;
+
 	// Falls nicht genug freier Platz vorhanden ist, erweitern wir den Puffer.
 	if (freeSpace < 64/* MIN_FILL_SIZE*/ && bufSize == RINGBUFFER_SIZE) {
 		size_t oldSize = bufSize;
@@ -319,20 +324,10 @@ void CScriptLex::fillBuffer() {
 			newBuffer[tailLocked + i] = buffer[(tailLocked + i) & (oldSize - 1)];
 		}
 		buffer = std::move(newBuffer);
-		//tail = 0;
 		if(head < tailLocked)
 			head += oldSize;
-		full = false;
 		bufSize = newSize;
 		freeSpace += oldSize;
-		// Nach der Erweiterung neu berechnen:
-		//tailLocked = positionStack.empty() ? tail() : (positionStack.front().tokenStart & (bufSize - 1));
-		//if (head >= tailLocked) {
-		//	freeSpace = bufSize - head + tailLocked - 1;
-		//}
-		//else {
-		//	freeSpace = tailLocked - head - 1;
-		//}
 	}
 
 	// Nun lesen wir in möglichst großen Blöcken, statt Zeichen für Zeichen.
@@ -340,19 +335,24 @@ void CScriptLex::fillBuffer() {
 		// Bestimme, wie viele freie Zeichen in einem Block ab head liegen.
 		size_t contiguousFree;
 		if (head >= tailLocked)
-			contiguousFree = bufSize - head;
+			contiguousFree = bufSize - head - (tailLocked == 0 ? 1 : 0);
 		else
 			contiguousFree = freeSpace; // Der verfügbare Platz ist zusammenhängend.
 		input.read(&buffer[head], contiguousFree);
 		size_t count = static_cast<size_t>(input.gcount());
 		if (count == 0)
 			break; // Kein weiterer Input
+		if (!bomChecked) {
+			bomChecked = true;
+			if (static_cast<uint8_t>(buffer[0]) == 0xEF && static_cast<uint8_t>(buffer[1]) == 0xBB && static_cast<uint8_t>(buffer[2]) == 0xBF)
+				globalOffset += 3;
+		}
 		head = (head + count) & (bufSize - 1);
 		freeSpace -= count;
 		if (count < contiguousFree)
 			break; // Wahrscheinlich Ende des Streams.
-		full = true;
 	}
+	return !needBufferFill();
 }
 
 /////////////////////////////////////////////////////////////
@@ -360,7 +360,8 @@ void CScriptLex::fillBuffer() {
 /////////////////////////////////////////////////////////////
 
 // Holt das nächste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
-void CScriptLex::getNextCh() {
+void CScriptLex::getNextCh(bool raw/*=false*/)
+{
 	// Falls das aktuelle Zeichen ein Zeilenumbruch war, aktualisiere die Positionsdaten.
 	if(currCh == '\n') { // Windows or Linux
 		pos.currentLine++;
@@ -369,18 +370,17 @@ void CScriptLex::getNextCh() {
 	}
 	// Übertrage das bisherige Lookahead in currCh.
 	currCh = nextCh;
-	if (isEmpty())
-		fillBuffer();
-	size_t bufSize = buffer.size();
-	size_t tail = globalOffset & (bufSize - 1);
-	nextCh = isEmpty() ? LEX_EOF : buffer[tail];
-	if (!isEmpty()) {
-		full = false;
+	if (needBufferFill() && !fillBuffer()) { 
+		nextCh = LEX_EOF; // buffer konnte nicht gefüllt werden
+	} else {
+		size_t bufSize = buffer.size();
+		size_t tail = globalOffset & (bufSize - 1);
+		nextCh = buffer[tail];
 		globalOffset++;
 	}
 	// Behandlung von Carriage Return: Wird currCh als '\r' gelesen,
 	// so wird (gegebenenfalls) mit Überspringen eines folgenden '\n' in '\n' umgewandelt.
-	if(currCh == '\r') { // Windows or Mac
+	if(!raw && currCh == '\r') { // Windows or Mac
 		if(nextCh == '\n')
 			getNextCh(); // Windows '\r\n\' --> skip '\r'
 		else
@@ -485,40 +485,28 @@ bool CScriptLex::getNextToken()
 		getNextCh();
 		while (currCh && currCh!=endCh && currCh!='\n') {
 			if (currCh == '\\') {
-				getNextCh();
+				getNextCh(); // eat '\'
 				switch (currCh) {
-					case '\n' : break; // ignore newline after '\'
-					case 'n': tkStr += '\n'; break;
-					case 'r': tkStr += '\r'; break;
-					case 'a': tkStr += '\a'; break;
-					case 'b': tkStr += '\b'; break;
-					case 'f': tkStr += '\f'; break;
-					case 't': tkStr += '\t'; break;
-					case 'v': tkStr += '\v'; break;
+					case '\n': break; // ignore newline after '\'
+					case '0': tkStr += '\0'; break;		// null
+					case 'n': tkStr += '\n'; break;		// line feed
+					case 'r': tkStr += '\r'; break;		// carriage return
+					case 'a': tkStr += '\a'; break;		// bell - no bell in javascript 
+					case 'b': tkStr += '\b'; break;		// backspace
+					case 'f': tkStr += '\f'; break;		// formfeed
+					case 't': tkStr += '\t'; break;		// tabulator
+					case 'v': tkStr += '\v'; break;		// verticl tabulator
 					case 'x': { // hex digits
-						getNextCh();
-						if(isHexadecimal(currCh)) {
-							char buf[3]="\0\0";
-							buf[0] = currCh;
-							for(int i=0; i<2 && isHexadecimal(nextCh); i++) {
-								getNextCh(); buf[i] = currCh;
-							}
-							tkStr += (char)strtol(buf, 0, 16);
+						getNextCh(); // eat x
+						int hi, lo;
+						if(baseValue(16, currCh, hi) && baseValue(16, nextCh, lo)) {
+							tkStr += static_cast<char>(hi << 4 | lo);
 						} else
 							throw CScriptException(SyntaxError, "malformed hexadezimal character escape sequence", currentFile, pos.currentLine, currentColumn());
+					}
 						[[fallthrough]];
-					}
-					default: {
-						if(isOctal(currCh)) {
-							char buf[4]="\0\0\0";
-							buf[0] = currCh;
-							for(int i=1; i<3 && isOctal(nextCh); i++) {
-								getNextCh(); buf[i] = currCh;
-							}
-							tkStr += (char)strtol(buf, 0, 8);
-						}
-						else tkStr += currCh;
-					}
+					default:
+						tkStr += currCh;
 				}
 			} else {
 				tkStr += currCh;
@@ -526,14 +514,65 @@ bool CScriptLex::getNextToken()
 			getNextCh();
 		}
 		if(currCh != endCh)
-			throw CScriptException(SyntaxError, "unterminated std::string literal", currentFile, pos.currentLine, currentColumn());
+			throw CScriptException(SyntaxError, "unterminated string literal", currentFile, pos.currentLine, currentColumn());
 		getNextCh();
 		tk = LEX_STR;
+	} else if(currCh == '`') { // template literal
+		getNextCh(); // eat '`'
+		while (currCh && currCh != '`' && !(currCh == '$' && nextCh == '{')) {
+			if (currCh == '\\' && (nextCh == '$'|| nextCh == '\\'|| nextCh == '`')) {
+				tkStr += currCh; // put '\\' in raw
+				getNextCh(true); 
+			}
+			tkStr += currCh;
+			getNextCh(true);
+		}
+		if (currCh != '`' && currCh != '$')
+			throw CScriptException(SyntaxError, "unterminated template literal", currentFile, pos.currentLine, currentColumn());
+		if (currCh == '`') {
+			// no ${ ... } --> normal string
+			getNextCh(); // eat '`'
+			tk = LEX_T_TEMPLATE_LITERAL;
+		} else { // ${
+			getNextCh(); // eat '$'
+			getNextCh(); // eat '{'
+			templateLiteralBraces.push_back(1);
+			tk = LEX_T_TEMPLATE_LITERAL_FIRST;
+		}
 	} else {
-		// single chars
+	 // single chars
 		tk = (uint8_t)currCh;
 		if (currCh) getNextCh();
-		if (tk=='=') {
+		if (tk == '{') {
+			if (!templateLiteralBraces.empty()) ++templateLiteralBraces.back(); // simple count braces
+		} else if (tk == '}') {
+			if (!templateLiteralBraces.empty()) { // template literal ?
+				if (--templateLiteralBraces.back() == 0) { // template literal end of ${ ... }
+					templateLiteralBraces.pop_back();
+					while (currCh && currCh != '`' && !(currCh == '$' && nextCh == '{')) {
+						if (currCh == '\\' && nextCh == '$') {
+							tkStr += currCh; // put '\\' in raw
+							getNextCh(false);
+						}
+						tkStr += currCh;
+						getNextCh(false);
+					}
+
+				}
+				if (currCh != '`' && currCh != '$')
+					throw CScriptException(SyntaxError, "unterminated template literal", currentFile, pos.currentLine, currentColumn());
+				if (currCh == '`') {
+					// no more ${ ... } -> end of tmplate literal 
+					getNextCh(); // eat '`'
+					tk = LEX_T_TEMPLATE_LITERAL_LAST;
+				} else {
+					getNextCh(); // eat '$'
+					getNextCh(); // eat '{'
+					templateLiteralBraces.push_back(1);
+					tk = LEX_T_TEMPLATE_LITERAL_MIDDLE;
+				}
+			}
+		} else if (tk == '=') {
 			if(currCh=='=') { // ==
 				tk = LEX_EQUAL;
 				getNextCh();
@@ -927,6 +966,81 @@ bool CScriptTokenDataObjectLiteral::toDestructuringVar(const std::shared_ptr<CSc
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+// CScriptTokenDataTemplateLiteral
+//////////////////////////////////////////////////////////////////////////
+
+// CScriptTokenDataTemplateLiteral::CScriptTokenDataTemplateLiteral(const std::string &String) {
+// }
+int CScriptTokenDataTemplateLiteral::addRaw(std::string &str) {
+	// Ursprünglichen String in den raw-Vektor speichern (unveränderte Version)
+	raw.push_back(str);
+
+	// Zeiger für das Lesen (rp = read pointer) und Schreiben (wp = write pointer)
+	char *wp = str.data();   // Schreibzeiger auf den Anfang des Strings setzen
+	const char *rp = str.data();
+	const char *ep = rp + str.size(); // Endpointer für die Schleifenbegrenzung
+
+	while (rp < ep) {
+		if (*rp == '\r') {  // Wenn ein \r (Carriage Return) gefunden wird
+			++rp;
+			if (rp < ep && *rp == '\n') {
+				// Falls direkt danach ein \n kommt, ersetze \r mit \n und überspringe \n
+				*wp++ = *rp++;
+			} else {
+				// Falls kein \n folgt, ersetze \r einfach durch \n
+				*wp++ = '\n';
+			}
+			continue;
+		}
+
+		if (*rp == '\\') {  // Falls ein Escape-Zeichen gefunden wurde
+			++rp; // eat '\'
+			if (rp < ep && (*rp == '\n' || *rp == '\r')) {
+				while (rp < ep && (*rp == '\n' || *rp == '\r')) ++rp; // eat all '\n' and '\r'
+				continue;
+			}
+			switch (*rp) {
+			case '0': *wp++ = '\0'; break;
+			case 'n': *wp++ = '\n'; break;
+			case 'r': *wp++ = '\r'; break;
+			case 'a': *wp++ = '\a'; break;
+			case 'b': *wp++ = '\b'; break;
+			case 'f': *wp++ = '\f'; break;
+			case 't': *wp++ = '\t'; break;
+			case 'v': *wp++ = '\v'; break;
+
+			case 'x':
+				{ // Hexadezimale Escape-Sequenz
+					++rp; // 'x' überspringen
+					int hi, lo;
+					if ((rp+1) < ep && baseValue(16, rp[0], hi) && baseValue(16, rp[1], lo)) {
+						char buf[3] = { rp[0], rp[1], '\0'};
+						++rp;
+						*wp++ = static_cast<char>(hi << 4 | lo); // Hexadezimale Umwandlung
+					} else {
+						return static_cast<int>(rp - str.data());
+					}
+					break;
+				}
+
+			default:
+				*wp++ = *rp; // ignore '\'
+			}
+			++rp; // Zum nächsten Zeichen springen
+		} else {
+			// Falls kein Escape-Zeichen vorliegt, einfach kopieren
+			*wp++ = *rp++;
+		}
+	}
+
+	// Die tatsächliche Länge des Strings anpassen, da Escape-Sequenzen weniger Platz brauchen
+	str.resize(wp - str.data());
+	strings.push_back(std::move(str));
+	return 0;
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////
 // CScriptToken
@@ -1068,7 +1182,11 @@ constexpr auto tokens2str = sort_array(std::array{
 	token2str_t{ LEX_T_OBJECT_LITERAL, 						"LEX_T_OBJECT_LITERAL",	 					false },
 	token2str_t{ LEX_T_ARRAY_COMPREHENSIONS_BODY,			"LEX_T_ARRAY_COMPREHENSIONS_BODY",			false },
 	token2str_t{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
-}, token2str_cmp_t());
+	token2str_t{ LEX_T_TEMPLATE_LITERAL, 					"LEX_T_TEMPLATE_LITERAL",					false },
+	token2str_t{ LEX_T_TEMPLATE_LITERAL_FIRST, 				"LEX_T_TEMPLATE_LITERAL_FIRST",				false },
+	token2str_t{ LEX_T_TEMPLATE_LITERAL_MIDDLE,				"LEX_T_TEMPLATE_LITERAL_MIDDLE",			false },
+	token2str_t{ LEX_T_TEMPLATE_LITERAL_LAST, 				"LEX_T_TEMPLATE_LITERAL_LAST",				false },
+	}, token2str_cmp_t());
 
 CScriptToken::CScriptToken(CScriptLex* l, uint16_t Match /*= LEX_NONE*/, uint16_t Alternate /*= LEX_NONE*/) : line(l->currentLine()), column(l->currentColumn()), token(l->tk)/*, data(0) needed??? */
 {
@@ -1090,6 +1208,8 @@ CScriptToken::CScriptToken(CScriptLex* l, uint16_t Match /*= LEX_NONE*/, uint16_
 		data = CScriptTokenDataIf::create();
 	else if (LEX_TOKEN_DATA_TRY(token))
 		data = CScriptTokenDataTry::create();
+	else if (LEX_TOKEN_DATA_TEMPLATE_LITERAL(token))
+		data = CScriptTokenDataTemplateLiteral::create();
 	if (Match != LEX_NONE)
 		l->match(Match, Alternate);
 	else
@@ -1404,14 +1524,15 @@ bool CScriptTokenizer::check(int ExpectedToken, int AlternateToken/*=-1*/) {
 	int currentToken = getToken().token;
 	if (ExpectedToken==';' && (currentToken==LEX_EOF || currentToken=='}')) return false; // ignore last missing ';'
 	if (currentToken!=ExpectedToken && currentToken!=AlternateToken) {
-		std::ostringstream errorString;
-		if(ExpectedToken == LEX_EOF)
-			errorString << "Got unexpected " << CScriptToken::getTokenStr(currentToken);
-		else {
-			errorString << "Got '" << CScriptToken::getTokenStr(currentToken) << "' expected '" << CScriptToken::getTokenStr(ExpectedToken) << "'";
-			if(AlternateToken!=LEX_NONE) errorString << " or '" << CScriptToken::getTokenStr(AlternateToken) << "'";
+		std::string errorString;
+		errorString.reserve(50);
+		if (ExpectedToken == LEX_EOF) {
+			errorString.append("Got unexpected ").append(CScriptToken::getTokenStr(currentToken));
+		} else {
+			errorString.append("Got '").append(CScriptToken::getTokenStr(currentToken)).append("' expected '").append(CScriptToken::getTokenStr(ExpectedToken)).append("'");
+			if(AlternateToken!=LEX_NONE) errorString.append(" or '").append(CScriptToken::getTokenStr(AlternateToken)).append("'");
 		}
-		throw CScriptException(SyntaxError, errorString.str(), currentFile, currentLine(), currentColumn());
+		throw CScriptException(SyntaxError, errorString, currentFile, currentLine(), currentColumn());
 	}
 	return true;
 }
@@ -1917,6 +2038,8 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS 
 		forward = !noLetDef && State.Forwarders.front() == State.Forwarders.back();
 
 	CScriptToken FncToken(tk);
+	FncToken.line = l->currentLine();
+	FncToken.column = l->currentColumn();
 	auto &FncData = FncToken.Fnc();
 
 	if(l->tk == LEX_ID || Accessor) {
@@ -2387,6 +2510,30 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS F
 			setTokenSkip(State);
 		}
 		break;
+	case LEX_T_TEMPLATE_LITERAL:
+	case LEX_T_TEMPLATE_LITERAL_FIRST:
+		{
+			bool isPlain = l->tk == LEX_T_TEMPLATE_LITERAL;
+			l->tk = LEX_T_TEMPLATE_LITERAL;
+			std::string tkStr(std::move(l->tkStr));
+			pushToken(State.Tokens);
+			auto& token = State.Tokens.back();
+			auto& data = token.TemplateLiteral();
+			auto err = data->addRaw(tkStr);
+			if (err)
+				throw CScriptException(SyntaxError, "incomplete hexadecimal escape sequence", currentFile, token.line, token.column + err - 1);
+			if (!isPlain) {
+				do {
+					ScriptTokenState functionState;
+					tokenizeCondition(functionState, Flags & ~TOKENIZE_FLAGS::noIn);
+					data->values.push_back(functionState.Tokens);
+					if ((err = data->addRaw(l->tkStr)))
+						throw CScriptException(SyntaxError, "incomplete hexadecimal escape sequence", currentFile, l->currentLine(), l->currentColumn() + err - 1);
+					l->match(LEX_T_TEMPLATE_LITERAL_MIDDLE, LEX_T_TEMPLATE_LITERAL_LAST);
+				} while (l->last_tk == LEX_T_TEMPLATE_LITERAL_MIDDLE);
+			}
+		}
+		break;
 	default:
 		l->check(LEX_EOF);
 	}
@@ -2413,19 +2560,44 @@ void CScriptTokenizer::tokenizeFunctionCall(ScriptTokenState &State, TOKENIZE_FL
 	bool for_new = (Flags & TOKENIZE_FLAGS::callForNew)!=TOKENIZE_FLAGS::none; Flags &= ~TOKENIZE_FLAGS::callForNew;
 	tokenizeLiteral(State, Flags);
 	tokenizeMember(State, Flags);
-	while(l->tk == '(' || l->tk == LEX_OPTIONAL_CHANING_FNC /* '?.(' */) {
-		State.LeftHand = false;
-		State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
-		State.pushLeftHandState();
-		while(l->tk!=')') {
-			tokenizeAssignment(State, Flags & ~TOKENIZE_FLAGS::noIn);
-			if (l->tk!=')') pushToken(State.Tokens, ',', ')');
+	while (l->tk == '(' || l->tk == LEX_OPTIONAL_CHANING_FNC /* '?.(' */ || l->tk == LEX_T_TEMPLATE_LITERAL || l->tk == LEX_T_TEMPLATE_LITERAL_FIRST) {
+		if (l->tk == LEX_T_TEMPLATE_LITERAL || l->tk == LEX_T_TEMPLATE_LITERAL_FIRST) {
+			bool isPlain = l->tk == LEX_T_TEMPLATE_LITERAL;
+			l->tk = LEX_T_TEMPLATE_LITERAL;
+			if (!isPlain) {
+				std::string tkStr(std::move(l->tkStr));
+				pushToken(State.Tokens);
+				auto &token = State.Tokens.back();
+				auto &data = token.TemplateLiteral();
+				auto err = data->addRaw(tkStr);
+				if (err)
+					throw CScriptException(SyntaxError, "incomplete hexadecimal escape sequence", currentFile, token.line, token.column + err - 1);
+				do {
+					ScriptTokenState functionState;
+					tokenizeCondition(functionState, Flags & ~TOKENIZE_FLAGS::noIn);
+					data->values.push_back(functionState.Tokens);
+					if ((err = data->addRaw(l->tkStr)))
+						throw CScriptException(SyntaxError, "incomplete hexadecimal escape sequence", currentFile, l->currentLine(), l->currentColumn() + err - 1);
+					l->match(LEX_T_TEMPLATE_LITERAL_MIDDLE, LEX_T_TEMPLATE_LITERAL_LAST);
+				} while (l->last_tk == LEX_T_TEMPLATE_LITERAL_MIDDLE);
+			} else
+				pushToken(State.Tokens);
+			break;
+		} else {
+
+			State.LeftHand = false;
+			State.Marks.push_back(pushToken(State.Tokens)); // push Token & push BeginIdx
+			State.pushLeftHandState();
+			while (l->tk != ')') {
+				tokenizeAssignment(State, Flags & ~TOKENIZE_FLAGS::noIn);
+				if (l->tk != ')') pushToken(State.Tokens, ',', ')');
+			}
+			State.popLeftHandeState();
+			pushToken(State.Tokens);
+			setTokenSkip(State);
+			if (for_new) break;
+			tokenizeMember(State, Flags);
 		}
-		State.popLeftHandeState();
-		pushToken(State.Tokens);
-		setTokenSkip(State);
-		if(for_new) break;
-		tokenizeMember(State, Flags);
 	}
 }
 template<typename T>
@@ -3661,8 +3833,8 @@ int32_t CNumber::parseInt(std::string_view str, int32_t radix, std::string_view*
 
 	while (!str.empty()) {
 		char c = str.front();
-		int charValue = (c >= '0' && c <= '9') ? c - '0' : (c | 0x20) - 'a' + 10;
-		if (charValue < 0 || charValue > radix) break;
+		int charValue;
+		if(!baseValue(radix, c, charValue)) break;
 
 		if (!useFloat) {
 			if (result_i > maxSafe) {
@@ -4562,7 +4734,6 @@ CScriptVarPtr CScriptVarDefaultIterator::init() {
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
 void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *data) {
 	if(pos==keys.end()) throw constScriptVar(StopIteration);
-	pos++;
 	if(mode==RETURN_ARRAY) {
 		CScriptVarArrayPtr arr = newScriptVar(Array);
 		arr->setArrayElement(0, newScriptVar(*pos));
@@ -4572,6 +4743,7 @@ void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *d
 		c->setReturnVar(newScriptVar(*pos));
 	else
 		c->setReturnVar(object->getOwnProperty(*pos));
+	++pos;
 }
 
 
@@ -6087,6 +6259,28 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 		t->match(LEX_T_EXCEPTION_VAR);
 		if(execute.value) return execute.value;
 		break;
+	case LEX_T_TEMPLATE_LITERAL:
+		if(execute) {
+			auto &token = t->getToken();;
+			auto &data = token.TemplateLiteral();
+			auto string_it = data->strings.begin();
+			auto string_end = data->strings.end();
+			auto value_it = data->values.begin();
+			std::string ret(*string_it++);
+			while (string_it < string_end) {
+				t->pushTokenScope(*value_it++);
+				CScriptVarPtr a = execute_condition(execute).getter(execute);
+				if (!execute) {
+					t->match(LEX_T_TEMPLATE_LITERAL);
+					return constScriptVar(Undefined);
+				}
+				ret.append(a->toString()).append(*string_it++);
+			}
+			t->match(LEX_T_TEMPLATE_LITERAL);
+			return newScriptVar(ret);
+		}
+		t->match(LEX_T_TEMPLATE_LITERAL);
+		break;
 	default:
 		t->match(LEX_EOF);
 		break;
@@ -6096,12 +6290,12 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 }
 inline CScriptVarLinkWorkPtr CTinyJS::execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute) {
 	CScriptVarLinkWorkPtr a;
-	std::swap(parent, a);
+	std::swap(parent, a); // a is now the parent
 	bool chaining_state = true;
 	while (t->tk == '.' || t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == '[' || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
 		if (execute) {
-			a = a.getter(execute); // a is now the "getted" var
-			std::swap(parent, a);
+			a = a.getter(execute); // a is now the "getted" parent var
+			std::swap(parent, a); // parent is now parent and a should be empty
 			if (execute && parent->getVarPtr()->isNullOrUndefined()) {
 				if (t->tk == LEX_OPTIONAL_CHAINING_MEMBER || t->tk == LEX_OPTIONAL_CHAINING_ARRAY) {
 					chaining_state = false;
@@ -6144,7 +6338,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 	CScriptVarLinkWorkPtr parent = execute_literals(execute);
 	CScriptVarLinkWorkPtr a = execute_member(parent, execute);
 	bool chaining_state = true;
-	while (t->tk == '(' || t->tk == LEX_OPTIONAL_CHANING_FNC) {
+	while (t->tk == '(' || t->tk == LEX_OPTIONAL_CHANING_FNC || t->tk == LEX_T_TEMPLATE_LITERAL) {
 		if (execute) {
 			a = a.getter(execute);
 			if (execute && a->getVarPtr()->isNullOrUndefined()) {
@@ -6165,28 +6359,33 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 				if(&dummy < stackBase)
 					throwError(execute, Error, "too much recursion");
 			}
+			if (t->tk == LEX_T_TEMPLATE_LITERAL) {
+				do 
+				{
+				} while (0);
+			} else {
+				t->match(t->tk); // path += '(';
 
-			t->match(t->tk); // path += '(';
-
-			// grab in all parameters
-			std::vector<CScriptVarPtr> arguments;
-			while(t->tk!=')') {
-				CScriptVarLinkWorkPtr value = execute_assignment(execute).getter(execute);
-//				path += (*value)->getString();
-				if (execute) {
-					arguments.push_back(value);
+				// grab in all parameters
+				std::vector<CScriptVarPtr> arguments;
+				while (t->tk != ')') {
+					CScriptVarLinkWorkPtr value = execute_assignment(execute).getter(execute);
+					//				path += (*value)->getString();
+					if (execute) {
+						arguments.push_back(value);
+					}
+					if (t->tk != ')') { t->match(','); /*path+=',';*/ }
 				}
-				if (t->tk!=')') { t->match(','); /*path+=',';*/ }
-			}
-			t->match(')'); //path+=')';
-			// setup a return variable
-			CScriptVarLinkWorkPtr returnVar;
-			if(execute) {
-				if (!parent)
-					parent = findInScopes("this");
-				// if no parent use the root-scope
-				CScriptVarPtr This(parent ? parent->getVarPtr() : (CScriptVarPtr )root);
-				a = callFunction(execute, fnc, arguments, This);
+				t->match(')'); //path+=')';
+				// setup a return variable
+				CScriptVarLinkWorkPtr returnVar;
+				if (execute) {
+					if (!parent)
+						parent = findInScopes("this");
+					// if no parent use the root-scope
+					CScriptVarPtr This(parent ? parent->getVarPtr() : (CScriptVarPtr)root);
+					a = callFunction(execute, fnc, arguments, This);
+				}
 			}
 		} else {
 			// function, but not executing - just parse args and be done
@@ -6807,6 +7006,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 			t->skip(t->getToken().Int());
 		break;
 	case LEX_R_FUNCTION:
+	case LEX_T_GENERATOR:
 		if(execute) {
 			CScriptVarLinkWorkPtr funcVar = parseFunctionDefinition(t->getToken());
 			scope()->scopeVar()->addChildOrReplace(funcVar->getName(), funcVar, SCRIPTVARLINK_VARDEFAULT);

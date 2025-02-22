@@ -226,7 +226,12 @@ enum  LEX_TYPES : uint16_t {
 	LEX_T_DESTRUCTURING_VAR,								// CScriptTokenDataDestructuringVar
 	LEX_T_ARRAY_COMPREHENSIONS_BODY,						// CScriptTokenDataArrayComprehensionsBody
 	LEX_T_FORWARD,											// CScriptTokenDataForwards
-#define LEX_TOKEN_NONSIMPLE_END LEX_T_FORWARD
+	LEX_T_TEMPLATE_LITERAL,
+	LEX_T_TEMPLATE_LITERAL_FIRST,							// CScriptTokenDataTemplateLiteral
+	LEX_T_TEMPLATE_LITERAL_MIDDLE,							// CScriptTokenDataTemplateLiteral
+	LEX_T_TEMPLATE_LITERAL_LAST,							// CScriptTokenDataTemplateLiteral
+
+#define LEX_TOKEN_NONSIMPLE_END LEX_T_TEMPLATE_LITERAL_LAST
 
 	LEX_T_EXCEPTION_VAR,
 	LEX_T_SKIP,
@@ -247,6 +252,7 @@ enum  LEX_TYPES : uint16_t {
 #define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR)
 #define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)		(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
 #define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
+#define LEX_TOKEN_DATA_TEMPLATE_LITERAL(tk)					(tk==LEX_T_TEMPLATE_LITERAL)
 
 #define LEX_TOKEN_DATA_SIMPLE(tk) (!(LEX_TOKEN_NONSIMPLE_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_END))
 
@@ -447,7 +453,7 @@ private:
 	std::istream& input;       // Eingabestrom (Referenz)
 	std::vector<char> buffer;  // Interner Ringpuffer (Größe ist immer eine Potenz von 2)
 	size_t head;               // Schreibposition im Puffer
-	bool full;                 // Kennzeichnet, ob der Puffer voll ist
+	bool bomChecked;           // der stream wurde auf utf-8 bom getestet
 
 public:
 	std::string currentFile;   // Dateiname
@@ -461,11 +467,11 @@ private:
 	size_t globalOffset;       // Globaler Offset der bisher gelesenen Zeichen
 
 	std::vector<POS> positionStack; // Stack (LIFO) für gelockte Positionen
-
+	std::vector<uint32_t> templateLiteralBraces;
 	// Token-Informationen:
 public:
 	uint16_t tk;            // Aktueller Token-Typ
-private:
+//private:
 	uint16_t last_tk;       // Letzter Token-Typ
 public:
 	std::string tkStr; // Zeichenkette des Tokens
@@ -479,24 +485,24 @@ private:
 	// Berechne tailLocked: Falls gelockte Positionen existieren, entspricht tailLocked
 	// dem Index im Puffer der frühesten gelockten Position; ansonsten ist tailLocked gleich tail.
 	size_t getTailLocked() const {
-		return (positionStack.empty() ? globalOffset : positionStack.front().tokenStart) & (buffer.size() - 1);
+		return (positionStack.empty() ? pos.tokenStart : positionStack.front().tokenStart) & (buffer.size() - 1);
 	}
 	// Liefert true, wenn der Puffer leer ist.
-	bool isEmpty() const {
-		return (head == getTailLocked() && !full);
+	bool needBufferFill() const {
+		return ((globalOffset & (buffer.size() - 1))) == head;
 	}
 
 	// Füllt den Puffer mit neuen Daten aus dem Input-Strom.
 	// Dabei wird sichergestellt, dass der Bereich ab der frühesten gelockten Position (tailLocked)
 	// nicht überschrieben wird.
-	void fillBuffer();
+	bool fillBuffer();
 
 	/////////////////////////////////////////////////////////////
 	// Zeichen holen und Lookahead aktualisieren
 	/////////////////////////////////////////////////////////////
 
 	// Holt das nächste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
-	void getNextCh();
+	void getNextCh(bool raw=false);
 
 	/////////////////////////////
 	// Hilfsfunktion: nächsthöhere Potenz von 2
@@ -684,6 +690,23 @@ public:
 	CATCHBLOCKS_t catchBlocks;
 	TOKEN_VECT finallyBlock;
 };
+class CScriptVarArray;
+template<typename C> class CScriptVarPointer;
+
+class CScriptTokenDataTemplateLiteral : public fixed_size_object<CScriptTokenDataTemplateLiteral> {
+protected:
+	CScriptTokenDataTemplateLiteral() {}
+public:
+	template<class... Args>
+	static std::shared_ptr<CScriptTokenDataTemplateLiteral> create(Args&&... args) { return std::shared_ptr<CScriptTokenDataTemplateLiteral>(new CScriptTokenDataTemplateLiteral(std::forward<Args>(args)...)); }
+
+	int addRaw(std::string &String);
+	std::vector<std::string> raw;
+	std::vector<std::string> strings;
+	std::vector<TOKEN_VECT> values;
+//	std::shared_ptr<CScriptVarArray> strings;
+private:
+};
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -724,7 +747,8 @@ public:
 	const std::shared_ptr<CScriptTokenDataIf> &If() { ASSERT(LEX_TOKEN_DATA_IF(token)); return std::get<std::shared_ptr<CScriptTokenDataIf>>(data); }
 	const std::shared_ptr<CScriptTokenDataTry> &Try() { ASSERT(LEX_TOKEN_DATA_TRY(token)); return std::get<std::shared_ptr<CScriptTokenDataTry>>(data); }
 	const std::shared_ptr<CScriptTokenDataForwards> &Forwarder() { ASSERT(LEX_TOKEN_DATA_FORWARDER(token)); return std::get<std::shared_ptr<CScriptTokenDataForwards>>(data); }
-//	CScriptTokenData &TokenData() { CScriptTokenData *_data = std::get<std::shared_ptr<CScriptTokenData>>(data).get(); ASSERT(_data); return *_data; }
+	const std::shared_ptr<CScriptTokenDataTemplateLiteral>& TemplateLiteral() { ASSERT(LEX_TOKEN_DATA_TEMPLATE_LITERAL(token)); return std::get<std::shared_ptr<CScriptTokenDataTemplateLiteral>>(data); }
+	//	CScriptTokenData &TokenData() { CScriptTokenData *_data = std::get<std::shared_ptr<CScriptTokenData>>(data).get(); ASSERT(_data); return *_data; }
 //	const CScriptTokenData &TokenData() const { CScriptTokenData *_data = std::get<std::shared_ptr<CScriptTokenData>>(data).get(); ASSERT(_data); return *_data; }
 #ifdef _DEBUG
 	std::string token_str;
@@ -744,7 +768,7 @@ private:
 	std::variant<std::monostate, int32_t, double, std::shared_ptr<CScriptTokenDataString>, std::shared_ptr<CScriptTokenDataFnc>, 
 		std::shared_ptr<CScriptTokenDataObjectLiteral>, std::shared_ptr<CScriptTokenDataDestructuringVar>, 
 		std::shared_ptr<CScriptTokenDataArrayComprehensionsBody>, std::shared_ptr<CScriptTokenDataLoop>, std::shared_ptr<CScriptTokenDataIf>,
-		std::shared_ptr<CScriptTokenDataTry>, std::shared_ptr<CScriptTokenDataForwards>> data;
+		std::shared_ptr<CScriptTokenDataTry>, std::shared_ptr<CScriptTokenDataForwards>, std::shared_ptr<CScriptTokenDataTemplateLiteral>> data;
 };
 
 
