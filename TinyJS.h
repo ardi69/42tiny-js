@@ -224,6 +224,7 @@ enum  LEX_TYPES : uint16_t {
 	LEX_T_TRY,												// CScriptTokenDataTry
 	LEX_T_OBJECT_LITERAL,									// CScriptTokenDataObjectLiteral
 	LEX_T_DESTRUCTURING_VAR,								// CScriptTokenDataDestructuringVar
+	LEX_T_DESTRUCTURING_VAR_REST,							// CScriptTokenDataDestructuringVar als functions ...Rest argument
 	LEX_T_ARRAY_COMPREHENSIONS_BODY,						// CScriptTokenDataArrayComprehensionsBody
 	LEX_T_FORWARD,											// CScriptTokenDataForwards
 	LEX_T_TEMPLATE_LITERAL,
@@ -241,6 +242,8 @@ enum  LEX_TYPES : uint16_t {
 	LEX_OPTIONAL_CHAINING_ARRAY,	// .?[ ... ]
 	LEX_OPTIONAL_CHANING_FNC,		// .?( ... )
 
+	LEX_SPREAD_REST,				// ...rest ...spread
+
 };
 #define LEX_TOKEN_DATA_STRING(tk)							((LEX_TOKEN_STRING_BEGIN<= tk && tk <= LEX_TOKEN_STRING_END))
 #define LEX_TOKEN_DATA_FLOAT(tk)							(tk==LEX_FLOAT)
@@ -249,7 +252,7 @@ enum  LEX_TYPES : uint16_t {
 #define LEX_TOKEN_DATA_IF(tk)								(tk==LEX_T_IF)
 #define LEX_TOKEN_DATA_TRY(tk)								(tk==LEX_T_TRY)
 #define LEX_TOKEN_DATA_OBJECT_LITERAL(tk)					(tk==LEX_T_OBJECT_LITERAL)
-#define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR)
+#define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR || tk==LEX_T_DESTRUCTURING_VAR_REST)
 #define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)		(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
 #define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
 #define LEX_TOKEN_DATA_TEMPLATE_LITERAL(tk)					(tk==LEX_T_TEMPLATE_LITERAL)
@@ -838,8 +841,8 @@ private:
 	void tokenizeIf(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	void tokenizeFor_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign);
 	void tokenizeFor(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0);
-	CScriptToken tokenizeFunctionArgument();
+	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0, bool isRest=false);
+	CScriptToken tokenizeFunctionArgument(bool isRest);
 	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
 	void tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
 	void tokenizeLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
@@ -1975,8 +1978,11 @@ protected:
 				lex.match('(');
 			}
 			while (lex.tk != end_tk) {
-				FncData->arguments.push_back(CScriptToken(LEX_T_DESTRUCTURING_VAR, lex.tkStr));
+				bool rest = lex.tk == LEX_SPREAD_REST;
+				if (rest) lex.match(LEX_SPREAD_REST);
+				FncData->arguments.push_back(CScriptToken(rest ? LEX_T_DESTRUCTURING_VAR_REST : LEX_T_DESTRUCTURING_VAR, lex.tkStr));
 				lex.match(LEX_ID);
+				if (rest) break;
 				if (lex.tk != end_tk) lex.match(',', end_tk);
 			}
 			lex.match(end_tk);

@@ -701,20 +701,20 @@ bool CScriptLex::getNextToken()
 		} else if (tk == '?' && currCh == '?') {
 			tk = LEX_ASKASK;
 			getNextCh(); // eat '?'
-			if (currCh == '=') {
+			if (currCh == '=') {	// ??=
 				tk = LEX_ASKASKEQUAL;
 				getNextCh(); // eat '='
 			}
 		} else if (tk == '*' && currCh == '*') {
 			tk = LEX_ASTERISKASTERISK;
 			getNextCh(); // eat '*'
-			if (currCh == '=') {
+			if (currCh == '=') {	// **=
 				tk = LEX_ASTERISKASTERISKEQUAL;
 				getNextCh(); // eat '='
 			}
 		} else if (tk == '?' && currCh == '.') {
 			tk = LEX_OPTIONAL_CHAINING_MEMBER;
-			getNextCh(); // eat '?'
+			getNextCh(); // eat '.'
 			if (currCh == '[') {
 				tk = LEX_OPTIONAL_CHAINING_ARRAY;
 				getNextCh(); // eat '['
@@ -722,6 +722,10 @@ bool CScriptLex::getNextToken()
 				tk = LEX_OPTIONAL_CHANING_FNC;
 				getNextCh(); // eat '('
 			}
+		} else if (tk == '.' && currCh == '.' && nextCh == '.') {
+			tk = LEX_SPREAD_REST;
+			getNextCh(); // eat '.'
+			getNextCh(); // eat '.'
 		}
 	}
 	/* This isn't quite right yet */
@@ -1162,6 +1166,8 @@ constexpr auto tokens2str = sort_array(std::array{
 	token2str_t{ LEX_OPTIONAL_CHAINING_ARRAY, 				"?.[", 										false },
 	token2str_t{ LEX_OPTIONAL_CHANING_FNC, 					"?.(", 										false },
 
+	token2str_t{ LEX_SPREAD_REST, 							"...", 										false },
+
 	// special tokens
 	token2str_t{ LEX_T_OF, 									"of", 										true  },
 	token2str_t{ LEX_T_FUNCTION_OPERATOR, 					"function", 								true  },
@@ -1178,10 +1184,12 @@ constexpr auto tokens2str = sort_array(std::array{
 	token2str_t{ LEX_T_LOOP, 								"LEX_T_LOOP", 								true  },
 	token2str_t{ LEX_T_FOR_IN, 								"LEX_FOR_IN", 								true  },
 	token2str_t{ LEX_T_IF, 									"if", 										true  },
+	token2str_t{ LEX_T_TRY, 								"try", 										true  },
 	token2str_t{ LEX_T_FORWARD, 							"LEX_T_FORWARD", 							false },
 	token2str_t{ LEX_T_OBJECT_LITERAL, 						"LEX_T_OBJECT_LITERAL",	 					false },
 	token2str_t{ LEX_T_ARRAY_COMPREHENSIONS_BODY,			"LEX_T_ARRAY_COMPREHENSIONS_BODY",			false },
 	token2str_t{ LEX_T_DESTRUCTURING_VAR, 					"Destructuring Var", 						false },
+	token2str_t{ LEX_T_DESTRUCTURING_VAR_REST,				"...Destructuring Var",						false },
 	token2str_t{ LEX_T_TEMPLATE_LITERAL, 					"LEX_T_TEMPLATE_LITERAL",					false },
 	token2str_t{ LEX_T_TEMPLATE_LITERAL_FIRST, 				"LEX_T_TEMPLATE_LITERAL_FIRST",				false },
 	token2str_t{ LEX_T_TEMPLATE_LITERAL_MIDDLE,				"LEX_T_TEMPLATE_LITERAL_MIDDLE",			false },
@@ -1968,8 +1976,9 @@ static void tokenizeVarIdentifierDestructuring(CScriptLex *Lexer, DESTRUCTURING_
 		Lexer->match(LEX_ID);
 	}
 }
-CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/*=0*/, bool *NeedAssignment/*=0*/ ) {
-	CScriptToken token(LEX_T_DESTRUCTURING_VAR);
+TinyJS::CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/*=0*/, bool *NeedAssignment/*=0*/, bool isRest/*=false*/ ) {
+	if (isRest) l->match(LEX_SPREAD_REST);
+	CScriptToken token(isRest ? LEX_T_DESTRUCTURING_VAR_REST : LEX_T_DESTRUCTURING_VAR);
 	bool withAssignment = NeedAssignment && *NeedAssignment;
 	if(NeedAssignment) *NeedAssignment=(l->tk == '[' || l->tk=='{');
 	token.column = l->currentColumn();
@@ -1983,9 +1992,10 @@ CScriptToken CScriptTokenizer::tokenizeVarIdentifier( STRING_VECTOR_t *VarNames/
 	}
 	return token;
 }
-CScriptToken CScriptTokenizer::tokenizeFunctionArgument() {
+TinyJS::CScriptToken CScriptTokenizer::tokenizeFunctionArgument(bool isRest)
+{
 	bool withAssignment = true;
-	return tokenizeVarIdentifier(0, &withAssignment);
+	return tokenizeVarIdentifier(0, &withAssignment, isRest);
 }
 
 void CScriptTokenizer::tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef/*=false*/)
@@ -2049,7 +2059,9 @@ void CScriptTokenizer::tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS 
 		throw CScriptException(SyntaxError, "Function statement requires a name.", l->currentFile, l->currentLine(), l->currentColumn());
 	l->match('(');
 	while(l->tk != ')') {
-		FncData->arguments.push_back(tokenizeFunctionArgument());
+		bool rest = l->tk == LEX_SPREAD_REST;
+		FncData->arguments.push_back(tokenizeFunctionArgument(rest));
+		if (rest) break;
 		if (l->tk!=')') l->match(',',')');
 	}
 	l->match(')');
@@ -2489,8 +2501,9 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS F
 					TOKEN_VECT arguments;
 					bool arguments_ok = true;
 					while(arguments_ok && l->tk != ')') {
-						arguments.push_back(tokenizeFunctionArgument());
-						if(l->tk == ',') l->match(',');
+						bool rest = l->tk == LEX_SPREAD_REST;
+						arguments.push_back(tokenizeFunctionArgument(rest));
+						if(!rest && l->tk == ',') l->match(',');
 						else if (l->tk!=')') arguments_ok = false;
 					}
 					if((arguments_ok = arguments_ok && l->tk == ')')) l->match(')');
@@ -2526,6 +2539,7 @@ void CScriptTokenizer::tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS F
 				do {
 					ScriptTokenState functionState;
 					tokenizeCondition(functionState, Flags & ~TOKENIZE_FLAGS::noIn);
+					functionState.Tokens.push_back(CScriptToken(';'));
 					data->values.push_back(functionState.Tokens);
 					if ((err = data->addRaw(l->tkStr)))
 						throw CScriptException(SyntaxError, "incomplete hexadecimal escape sequence", currentFile, l->currentLine(), l->currentColumn() + err - 1);
@@ -5583,112 +5597,147 @@ CScriptVarPtr CTinyJS::callFunction(const CScriptVarFunctionPtr &Function, std::
 }
 
 CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis) {
+	// Ensure that the provided function is valid and actually a function
 	ASSERT(Function && Function->isFunction());
 
-	if(Function->isBounded()) return CScriptVarFunctionBoundedPtr(Function)->callFunction(execute, Arguments, This, newThis);
+	// If the function is "bound" (e.g., via bind()), call the bound version directly
+	if (Function->isBounded()) return CScriptVarFunctionBoundedPtr(Function)->callFunction(execute, Arguments, This, newThis);
 
+	// Retrieve function data (e.g., parameters, body, name)
 	auto Fnc = Function->getFunctionData();
+
+	// Create a new function scope to contain the function's local environment
 	CScriptVarScopeFncPtr functionRoot(TinyJS::newScriptVar(this, ScopeFnc, CScriptVarPtr(Function->findChild(TINYJS_FUNCTION_CLOSURE_VAR))));
-	if(Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
-	if(!Fnc->isArrowFunction()) {
-		// arrow functions get this from closure
-		if(This)
+
+	// If the function has a name, register it in the scope
+	if (Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
+
+	// If the function is not an arrow function, "this" must be explicitly set
+	if (!Fnc->isArrowFunction()) {
+		if (This)
 			functionRoot->addChild("this", This);
 		else
-			functionRoot->addChild("this", root); // if no this given use root
+			functionRoot->addChild("this", root); // Use root as default if no "this" is provided
 	}
+
+	// Create the "arguments" object containing all passed parameters
 	CScriptVarPtr arguments = functionRoot->addChild(TINYJS_ARGUMENTS_VAR, newScriptVar(Object));
 
+	// Create a control structure for the scope to ensure proper management of local variables
 	CScopeControl ScopeControl(this);
 	CScriptVarPtr tmpArgsScope = ScopeControl.addLetScope();
 
-	CScriptResult function_execute;
+	CScriptResult function_execute; // Stores the function execution result
+
+	// Determine the number of declared and actually passed arguments
 	size_t length_proto = Fnc->arguments.size();
 	size_t length_arguments = Arguments.size();
 	size_t length = std::max(length_proto, length_arguments);
 
+	// Extract argument names from the function declaration
 	STRING_VECTOR_t arg_names;
-	for(size_t arguments_idx = 0; arguments_idx<length_proto; ++arguments_idx) {
-		ASSERT(Fnc->arguments[arguments_idx].token == LEX_T_DESTRUCTURING_VAR);
+	for (size_t arguments_idx = 0; arguments_idx < length_proto; ++arguments_idx) {
+		ASSERT(LEX_TOKEN_DATA_DESTRUCTURING_VAR(Fnc->arguments[arguments_idx].token));
 		Fnc->arguments[arguments_idx].DestructuringVar()->getVarNames(arg_names);
 	}
-	for(STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it)
+
+	// Initialize all parameters in the temporary scope (default: Undefined)
+	for (STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it)
 		tmpArgsScope->addChildOrReplace(*it, constUndefined);
 
-	for(size_t arguments_idx = 0; execute && arguments_idx<length; ++arguments_idx) {
+	CScriptVarPtr restVar; // If there is a "rest" parameter (e.g., ...args)
+	if (length_proto && Fnc->arguments.back().token == LEX_T_DESTRUCTURING_VAR_REST) {
+		restVar = newScriptVar(Array);
+		--length_proto;
+	}
+
+	// Process all arguments (max. number of passed or declared arguments)
+	for (size_t arguments_idx = 0; execute && arguments_idx < length; ++arguments_idx) {
 		std::string arguments_idx_str = std::to_string(arguments_idx);
 		CScriptVarLinkWorkPtr value;
-		if(arguments_idx < length_arguments)
+
+		// Insert passed parameters into the "arguments" array
+		if (arguments_idx < length_arguments)
 			value = arguments->addChild(arguments_idx_str, Arguments[arguments_idx]);
 		else
 			value = constUndefined;
 
-		if(arguments_idx < length_proto) {
+		// If the argument is present in the function declaration
+		if (arguments_idx < length_proto) {
 			auto &DestructuringVar = Fnc->arguments[arguments_idx].DestructuringVar();
-			if(value->getVarPtr()->isUndefined()) {
-				if(DestructuringVar->assignment.size()) {
+			if (value->getVarPtr()->isUndefined()) { // If the argument was not passed or explicitly "undefined"
+				if (DestructuringVar->assignment.size()) { // If a default value exists
 					t->pushTokenScope(DestructuringVar->assignment);
 					assign_destructuring_var(execute, DestructuringVar, execute_assignment(execute), tmpArgsScope);
 				}
 			} else {
 				assign_destructuring_var(execute, DestructuringVar, value, tmpArgsScope);
 			}
+		} else if (restVar) { // If it's a "rest" parameter
+			restVar->addChild(std::to_string(arguments_idx - length_proto), Arguments[arguments_idx]);
+			if ((arguments_idx + 1) == length) {
+				auto &DestructuringVar = Fnc->arguments[length_proto].DestructuringVar();
+				assign_destructuring_var(execute, DestructuringVar, restVar, tmpArgsScope);
+			}
 		}
 	}
-	if(!execute) return constUndefined;
-	// copy args from tmpArgsScope to functionRoot
-	for(STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it) {
+	if (!execute) return constUndefined;
+
+	// Copy arguments from the temporary scope to the final function scope
+	for (STRING_VECTOR_it it = arg_names.begin(); it != arg_names.end(); ++it) {
 		functionRoot->addChildOrReplace(*it, tmpArgsScope->findChild(*it));
 	}
 	arguments->addChild("length", newScriptVar(length_arguments));
 
 #ifndef NO_GENERATORS
-	if(Fnc->isGenerator()) {
+	if (Fnc->isGenerator()) {
 		return TinyJS::newScriptVarCScriptVarGenerator(this, functionRoot, Function);
 	}
 #endif /*NO_GENERATORS*/
-	// execute function!
-	ScopeControl.clear(); 	// remove tmpArgsScope from scope-chain
-	// add the function's execute space to the symbol table so we can recurse
+
+	// Cleanup: Remove the temporary scope
+	ScopeControl.clear();
+
+	// Add the function's execution environment to the symbol table
 	ScopeControl.addFncScope(functionRoot.to_varPtr());
+
+	// If the function is native, execute it directly
 	if (Function->isNative()) {
 		try {
 			CScriptVarFunctionNativePtr(Function)->callFunction(functionRoot);
 			CScriptVarLinkPtr ret = functionRoot->findChild(TINYJS_RETURN_VAR);
 			function_execute.set(CScriptResult::Return, ret ? CScriptVarPtr(ret) : constUndefined);
 		} catch (CScriptVarPtr v) {
-			if(haveTry) {
-				function_execute.setThrow(v, "native function '"+Fnc->name+"'");
-			} else if(v->isError()) {
+			if (haveTry) {
+				function_execute.setThrow(v, "native function '" + Fnc->name + "'");
+			} else if (v->isError()) {
 				CScriptException err = CScriptVarErrorPtr(v)->toCScriptException();
-				if(err.fileName.empty()) err.fileName = "native function '"+Fnc->name+"'";
+				if (err.fileName.empty()) err.fileName = "native function '" + Fnc->name + "'";
 				throw err;
-			}
-			else
-				throw CScriptException(Error, "uncaught exception: '"+v->toString(function_execute)+"' in native function '"+Fnc->name+"'");
+			} else
+				throw CScriptException(Error, "uncaught exception: '" + v->toString(function_execute) + "' in native function '" + Fnc->name + "'");
 		}
-	} else {
+	} else { // Execute script function
 		/* we just want to execute the block, but something could
 			* have messed up and left us with the wrong ScriptLex, so
 			* we want to be careful here... */
 		std::string oldFile = t->currentFile;
 		t->currentFile = Fnc->file;
 		t->pushTokenScope(Fnc->body);
-		if(Fnc->body.front().token == '{')
+		if (Fnc->body.front().token == '{')
 			execute_block(function_execute);
 		else {
 			CScriptVarPtr ret = execute_base(function_execute);
-			if(function_execute) function_execute.set(CScriptResult::Return, ret);
+			if (function_execute) function_execute.set(CScriptResult::Return, ret);
 		}
 		t->currentFile = oldFile;
 
 		// because return will probably have called this, and set execute to false
 	}
-	if(function_execute.isReturnNormal()) {
-		if(newThis) *newThis = functionRoot->findChild("this");
-		if(function_execute.isReturn()) {
-			CScriptVarPtr ret = function_execute.value;
-			return ret;
+	if (function_execute.isReturnNormal()) {
+		if (newThis) *newThis = functionRoot->findChild("this");
+		if (function_execute.isReturn()) {
+			return function_execute.value;
 		}
 	} else
 		execute = function_execute;
@@ -6261,7 +6310,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 		break;
 	case LEX_T_TEMPLATE_LITERAL:
 		if(execute) {
-			auto &token = t->getToken();;
+			auto &token = t->getToken();
 			auto &data = token.TemplateLiteral();
 			auto string_it = data->strings.begin();
 			auto string_end = data->strings.end();
@@ -6270,6 +6319,7 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 			while (string_it < string_end) {
 				t->pushTokenScope(*value_it++);
 				CScriptVarPtr a = execute_condition(execute).getter(execute);
+				t->match(';');
 				if (!execute) {
 					t->match(LEX_T_TEMPLATE_LITERAL);
 					return constScriptVar(Undefined);
@@ -6360,9 +6410,8 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 					throwError(execute, Error, "too much recursion");
 			}
 			if (t->tk == LEX_T_TEMPLATE_LITERAL) {
-				do 
-				{
-				} while (0);
+				t->tk = '?';
+				t->match(LEX_T_TEMPLATE_LITERAL); 
 			} else {
 				t->match(t->tk); // path += '(';
 
