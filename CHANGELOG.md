@@ -98,7 +98,7 @@ Version 0.9.9 (2024-04-13 13:56:41)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.0 (2025-02-24 22:41)
+Version 0.10.0 (2025-03-26 10:39)
 =================================
 
 * modern times: from version 0.10.0 a compiler with C++17 support is required
@@ -132,3 +132,20 @@ Version 0.10.0 (2025-02-24 22:41)
 * removed octal escapes in string literals
 * added template literals
 * added ...Rest Parameter
+* changed let and const Statements rewriten
+* removed non Standard let expression
+* removed non Standard conditional catch
+* removed non Standard Array Comprehensions
+* changed destructuring rewritten
+* added Symbol() Symbol.for() and Symbol.keyFor()
+* changed rename Array.prototype.contains to Array.prototype.includes
+* added Array.prototype.map
+* added Array.prototype.shift
+* added Array.prototype.unshift
+* added Array.prototype.slice
+* added Array.prototype.splice
+* added Array.prototype.forEach
+* added Array.prototype.indexOf
+* added Array.prototype.reduce
+* added Array.prototype.reduceRight
+* removed unneeded files

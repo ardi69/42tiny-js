@@ -152,9 +152,6 @@
     <ClInclude Include="test.h" />
     <ClInclude Include="time_logger.h" />
     <ClInclude Include="TinyJS.h" />
-    <ClInclude Include="TinyJS_Functions.h" />
-    <ClInclude Include="TinyJS_MathFunctions.h" />
-    <ClInclude Include="TinyJS_StringFunctions.h" />
     <ClInclude Include="TinyJS_Threading.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

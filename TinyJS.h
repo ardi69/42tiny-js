@@ -1,4 +1,4 @@
-/*
+ï»¿/*
  * TinyJS
  *
  * A single-file Javascript-alike engine
@@ -105,7 +105,7 @@ enum  LEX_TYPES : uint16_t {
 	LEX_SEMICOLON = ';',  // 59  semicolon (Semicolon)
 	LEX_LT        = '<',  // 60  Less than / Opening Angle Bracket (kleiner als)
 	LEX_ASSIGN    = '=',  // 61  Assignment (Zuweisung)
-	LEX_GT        = '>',  // 62  Greater than / Closing Angle Bracket (größer als)
+	LEX_GT        = '>',  // 62  Greater than / Closing Angle Bracket (grÃ¶ÃŸer als)
 	LEX_LBRACKET  = '[',  // 91  Left Square Bracket (eckige Klammer auf)
 	LEX_RBRACKET  = ']',  // 93  Right Square Bracket (eckige Klammer zu)
 	LEX_XOR       = '^',  // 94  Bitwise XOR (exklusives Oder)
@@ -115,36 +115,39 @@ enum  LEX_TYPES : uint16_t {
 	LEX_BNOT      = '~',  // 126
 
 	// reserved words
-	LEX_R_IF = 256,        // Reserviertes Schlüsselwort: Bedingte Anweisung (if)
-	LEX_R_ELSE,            // Reserviertes Schlüsselwort: Alternative für if (else)
-	LEX_R_DO,              // Reserviertes Schlüsselwort: Schleifensteuerung (do)
-	LEX_R_WHILE,           // Reserviertes Schlüsselwort: Bedingte Schleife (while)
-	LEX_R_FOR,             // Reserviertes Schlüsselwort: Zählschleife (for)
-	LEX_R_IN,              // Reserviertes Schlüsselwort: Eigenschaftsprüfung in Objekten (in)
-	LEX_T_OF,              // Token für "of" (z. B. in for...of-Schleifen)
-	LEX_R_BREAK,           // Reserviertes Schlüsselwort: Schleifenabbruch (break)
-	LEX_R_CONTINUE,        // Reserviertes Schlüsselwort: Schleifeniteration fortsetzen (continue)
-	LEX_R_RETURN,          // Reserviertes Schlüsselwort: Funktionsergebnis zurückgeben (return)
-	LEX_R_VAR,             // Reserviertes Schlüsselwort: Variablendeklaration (var, veraltet)
-	LEX_R_LET,             // Reserviertes Schlüsselwort: Block-scoped Variablendeklaration (let)
-	LEX_R_CONST,           // Reserviertes Schlüsselwort: Unveränderliche Variablendeklaration (const)
-	LEX_R_WITH,            // Reserviertes Schlüsselwort: Veraltet, um auf Objekteigenschaften zuzugreifen (with)
-	LEX_R_TRUE,            // Reserviertes Schlüsselwort: Boolescher Wert „wahr“ (true)
-	LEX_R_FALSE,           // Reserviertes Schlüsselwort: Boolescher Wert „falsch“ (false)
-	LEX_R_NULL,            // Reserviertes Schlüsselwort: Null-Wert (null)
-	LEX_R_NEW,             // Reserviertes Schlüsselwort: Objektinstanziierung (new)
-	LEX_R_TRY,             // Reserviertes Schlüsselwort: Fehlerbehandlung starten (try)
-	LEX_R_CATCH,           // Reserviertes Schlüsselwort: Fehlerbehandlung (catch)
-	LEX_R_FINALLY,         // Reserviertes Schlüsselwort: Abschlussblock nach Fehlerbehandlung (finally)
-	LEX_R_THROW,           // Reserviertes Schlüsselwort: Fehler auslösen (throw)
-	LEX_R_TYPEOF,          // Reserviertes Schlüsselwort: Typüberprüfung (typeof)
-	LEX_R_VOID,            // Reserviertes Schlüsselwort: Undefined zurückgeben (void)
-	LEX_R_DELETE,          // Reserviertes Schlüsselwort: Löschen von Objekteigenschaften (delete)
-	LEX_R_INSTANCEOF,      // Reserviertes Schlüsselwort: Instanzprüfung (instanceof)
-	LEX_R_SWITCH,          // Reserviertes Schlüsselwort: Mehrwegverzweigung (switch)
-	LEX_R_CASE,            // Reserviertes Schlüsselwort: Fall in switch-Anweisung (case)
-	LEX_R_DEFAULT,         // Reserviertes Schlüsselwort: Standardfall in switch-Anweisung (default)
-	LEX_R_YIELD,           // Reserviertes Schlüsselwort: Wert in Generator-Funktion zurückgeben (yield)
+	LEX_RESERVED_WORD_BEGIN = 256,
+	LEX_R_IF,              // Reserviertes SchlÃ¼sselwort: Bedingte Anweisung (if)
+	LEX_R_ELSE,            // Reserviertes SchlÃ¼sselwort: Alternative fÃ¼r if (else)
+	LEX_R_DO,              // Reserviertes SchlÃ¼sselwort: Schleifensteuerung (do)
+	LEX_R_WHILE,           // Reserviertes SchlÃ¼sselwort: Bedingte Schleife (while)
+	LEX_R_FOR,             // Reserviertes SchlÃ¼sselwort: ZÃ¤hlschleife (for)
+	LEX_R_IN,              // Reserviertes SchlÃ¼sselwort: EigenschaftsprÃ¼fung in Objekten (in)
+	LEX_T_OF,              // Token fÃ¼r "of" (z. B. in for...of-Schleifen)
+	LEX_R_BREAK,           // Reserviertes SchlÃ¼sselwort: Schleifenabbruch (break)
+	LEX_R_CONTINUE,        // Reserviertes SchlÃ¼sselwort: Schleifeniteration fortsetzen (continue)
+	LEX_R_RETURN,          // Reserviertes SchlÃ¼sselwort: Funktionsergebnis zurÃ¼ckgeben (return)
+	LEX_R_VAR,             // Reserviertes SchlÃ¼sselwort: Variablendeklaration (var, veraltet)
+	LEX_R_LET,             // Reserviertes SchlÃ¼sselwort: Block-scoped Variablendeklaration (let)
+	LEX_R_CONST,           // Reserviertes SchlÃ¼sselwort: UnverÃ¤nderliche Variablendeklaration (const)
+	LEX_R_WITH,            // Reserviertes SchlÃ¼sselwort: Veraltet, um auf Objekteigenschaften zuzugreifen (with)
+	LEX_R_TRUE,            // Reserviertes SchlÃ¼sselwort: Boolescher Wert â€žwahrâ€œ (true)
+	LEX_R_FALSE,           // Reserviertes SchlÃ¼sselwort: Boolescher Wert â€žfalschâ€œ (false)
+	LEX_R_NULL,            // Reserviertes SchlÃ¼sselwort: Null-Wert (null)
+	LEX_R_NEW,             // Reserviertes SchlÃ¼sselwort: Objektinstanziierung (new)
+	LEX_R_TRY,             // Reserviertes SchlÃ¼sselwort: Fehlerbehandlung starten (try)
+	LEX_R_CATCH,           // Reserviertes SchlÃ¼sselwort: Fehlerbehandlung (catch)
+	LEX_R_FINALLY,         // Reserviertes SchlÃ¼sselwort: Abschlussblock nach Fehlerbehandlung (finally)
+	LEX_R_THROW,           // Reserviertes SchlÃ¼sselwort: Fehler auslÃ¶sen (throw)
+	LEX_R_TYPEOF,          // Reserviertes SchlÃ¼sselwort: TypÃ¼berprÃ¼fung (typeof)
+	LEX_R_VOID,            // Reserviertes SchlÃ¼sselwort: Undefined zurÃ¼ckgeben (void)
+	LEX_R_DELETE,          // Reserviertes SchlÃ¼sselwort: LÃ¶schen von Objekteigenschaften (delete)
+	LEX_R_INSTANCEOF,      // Reserviertes SchlÃ¼sselwort: InstanzprÃ¼fung (instanceof)
+	LEX_R_SWITCH,          // Reserviertes SchlÃ¼sselwort: Mehrwegverzweigung (switch)
+	LEX_R_CASE,            // Reserviertes SchlÃ¼sselwort: Fall in switch-Anweisung (case)
+	LEX_R_DEFAULT,         // Reserviertes SchlÃ¼sselwort: Standardfall in switch-Anweisung (default)
+	LEX_R_YIELD,           // Reserviertes SchlÃ¼sselwort: Wert in Generator-Funktion zurÃ¼ckgeben (yield)
+	LEX_R_CLASS,           // Reserviertes SchlÃ¼sselwort: class definition
+	LEX_RESERVED_WORD_END,
 
 #define LEX_EQUALS_BEGIN LEX_EQUAL
 	LEX_EQUAL,					// ==
@@ -193,6 +196,7 @@ enum  LEX_TYPES : uint16_t {
 
 #define LEX_TOKEN_STRING_BEGIN LEX_ID			// CScriptTokenDataString
 	LEX_ID,
+	LEX_SPREAD_REST_ID,
 	LEX_STR,
 	LEX_REGEXP,
 	LEX_T_LABEL,
@@ -208,7 +212,8 @@ enum  LEX_TYPES : uint16_t {
 #define LEX_TOKEN_FOR_BEGIN LEX_T_LOOP						// CScriptTokenDataLoop
 	LEX_T_LOOP,
 	LEX_T_FOR_IN,
-#define LEX_TOKEN_FOR_END LEX_T_FOR_IN
+	LEX_T_FOR_OF,
+#define LEX_TOKEN_FOR_END LEX_T_FOR_OF
 #define LEX_TOKEN_FUNCTION_BEGIN LEX_R_FUNCTION				// CScriptTokenDataFnc
 	LEX_R_FUNCTION,
 	LEX_T_FUNCTION_PLACEHOLDER,
@@ -223,9 +228,6 @@ enum  LEX_TYPES : uint16_t {
 	LEX_T_IF,												// CScriptTokenDataIf
 	LEX_T_TRY,												// CScriptTokenDataTry
 	LEX_T_OBJECT_LITERAL,									// CScriptTokenDataObjectLiteral
-	LEX_T_DESTRUCTURING_VAR,								// CScriptTokenDataDestructuringVar
-	LEX_T_DESTRUCTURING_VAR_REST,							// CScriptTokenDataDestructuringVar als functions ...Rest argument
-	LEX_T_ARRAY_COMPREHENSIONS_BODY,						// CScriptTokenDataArrayComprehensionsBody
 	LEX_T_FORWARD,											// CScriptTokenDataForwards
 	LEX_T_TEMPLATE_LITERAL,
 	LEX_T_TEMPLATE_LITERAL_FIRST,							// CScriptTokenDataTemplateLiteral
@@ -252,23 +254,22 @@ enum  LEX_TYPES : uint16_t {
 #define LEX_TOKEN_DATA_IF(tk)								(tk==LEX_T_IF)
 #define LEX_TOKEN_DATA_TRY(tk)								(tk==LEX_T_TRY)
 #define LEX_TOKEN_DATA_OBJECT_LITERAL(tk)					(tk==LEX_T_OBJECT_LITERAL)
-#define LEX_TOKEN_DATA_DESTRUCTURING_VAR(tk)				(tk==LEX_T_DESTRUCTURING_VAR || tk==LEX_T_DESTRUCTURING_VAR_REST)
-#define LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(tk)		(tk==LEX_T_ARRAY_COMPREHENSIONS_BODY)
 #define LEX_TOKEN_DATA_FORWARDER(tk)						(tk==LEX_T_FORWARD)
 #define LEX_TOKEN_DATA_TEMPLATE_LITERAL(tk)					(tk==LEX_T_TEMPLATE_LITERAL)
-
 #define LEX_TOKEN_DATA_SIMPLE(tk) (!(LEX_TOKEN_NONSIMPLE_BEGIN <= tk && tk <= LEX_TOKEN_NONSIMPLE_END))
+#define LEX_RESERVED_WORD(tk)								(tk > LEX_RESERVED_WORD_BEGIN && tk < LEX_RESERVED_WORD_END)
 
 enum SCRIPTVARLINK_FLAGS {
 	SCRIPTVARLINK_WRITABLE			= 1<<0,
 	SCRIPTVARLINK_CONFIGURABLE		= 1<<1,
 	SCRIPTVARLINK_ENUMERABLE		= 1<<2,
+	SCRIPTVARLINK_IMMUTABLE			= 1<<3,
 	SCRIPTVARLINK_DEFAULT			= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_VARDEFAULT		= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_ENUMERABLE,
-	SCRIPTVARLINK_CONSTDEFAULT		= SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_CONSTDEFAULT		= SCRIPTVARLINK_ENUMERABLE | SCRIPTVARLINK_IMMUTABLE,
 	SCRIPTVARLINK_BUILDINDEFAULT	= SCRIPTVARLINK_WRITABLE | SCRIPTVARLINK_CONFIGURABLE,
 	SCRIPTVARLINK_READONLY			= SCRIPTVARLINK_CONFIGURABLE,
-	SCRIPTVARLINK_READONLY_ENUM	= SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
+	SCRIPTVARLINK_READONLY_ENUM		= SCRIPTVARLINK_CONFIGURABLE | SCRIPTVARLINK_ENUMERABLE,
 	SCRIPTVARLINK_CONSTANT			= 0,
 };
 
@@ -286,20 +287,6 @@ extern const char *ERROR_NAME[];
 
 #define TEMPORARY_MARK_SLOTS 5
 
-#define TINYJS_RETURN_VAR			"return"
-#define TINYJS_LOKALE_VAR			"__locale__"
-#define TINYJS_ANONYMOUS_VAR		"__anonymous__"
-#define TINYJS_ARGUMENTS_VAR		"arguments"
-#define TINYJS_PROTOTYPE_CLASS		"prototype"
-#define TINYJS_FUNCTION_CLOSURE_VAR	"__function_closure__"
-#define TINYJS_SCOPE_PARENT_VAR		"__scope_parent__"
-#define TINYJS_SCOPE_WITH_VAR		"__scope_with__"
-#define TINYJS_ACCESSOR_GET_VAR		"__accessor_get__"
-#define TINYJS_ACCESSOR_SET_VAR		"__accessor_set__"
-#define TINYJS_CONSTRUCTOR_VAR		"constructor"
-#define TINYJS_TEMP_NAME			""
-#define TINYJS_BLANK_DATA			""
-
 typedef std::vector<std::string> STRING_VECTOR_t;
 typedef STRING_VECTOR_t::iterator STRING_VECTOR_it;
 typedef STRING_VECTOR_t::const_iterator STRING_VECTOR_cit;
@@ -307,8 +294,13 @@ typedef STRING_VECTOR_t::const_iterator STRING_VECTOR_cit;
 typedef std::set<std::string> STRING_SET_t;
 typedef STRING_SET_t::iterator STRING_SET_it;
 
+struct KEY_STRING_LES { bool operator()(const std::string &lhs, const std::string &rhs) const; };
+typedef std::set < std::string, KEY_STRING_LES> KEY_STRING_SET_t;
+typedef KEY_STRING_SET_t::iterator KEY_STRING_SET_it;
+
+
 /// convert the given string into a quoted string suitable for javascript
-std::string getJSString(const std::string &str);
+std::string getJSString(const std::string_view str);
 /// convert the given int into a string
 
 
@@ -363,10 +355,10 @@ public:
 	/////////////////////////////////
 	// Konstruktor, der einen string verwendet.
 	/////////////////////////////////
-	CScriptLex(const std::string& code, const std::string& File = "", int Line = 1, int Column = 0);
+	CScriptLex(const std::string &Code, const std::string_view File = "", int Line = 1, int Column = 0);
 
 	/////////////////////////////////
-	// Positionen "locken" und zurücksetzen
+	// Positionen "locken" und zurÃ¼cksetzen
 	/////////////////////////////////
 
 	[[nodiscard]] auto savePosition() {
@@ -415,17 +407,18 @@ public:
 					active = false;
 				}
 			}
+			const auto &getPos() { return lexer->positionStack.back(); }
 		};
 
 		return PositionGuard(*this);
 	}
 
-	// Setzt den Lexer-Zustand (Position, Tokenvariablen etc.) auf die übergebene Position zurück.
+	// Setzt den Lexer-Zustand (Position, Tokenvariablen etc.) auf die Ã¼bergebene Position zurÃ¼ck.
 	// Dabei wird auch der interne Lesezeiger (tail) neu gesetzt, sodass ab der alten Position weitergelesen werden kann.
 	void reset(const POS& toPos);
 
 	/////////////////////////////////
-	// Token-Überprüfungsfunktionen
+	// Token-ÃœberprÃ¼fungsfunktionen
 	/////////////////////////////////
 
 	void check(uint16_t expected_tk, uint16_t alternate_tk = LEX_NONE);
@@ -454,7 +447,7 @@ private:
 	// Eingabe und Puffer
 	/////////////////////////////////
 	std::istream& input;       // Eingabestrom (Referenz)
-	std::vector<char> buffer;  // Interner Ringpuffer (Größe ist immer eine Potenz von 2)
+	std::vector<char> buffer;  // Interner Ringpuffer (GrÃ¶ÃŸe ist immer eine Potenz von 2)
 	size_t head;               // Schreibposition im Puffer
 	bool bomChecked;           // der stream wurde auf utf-8 bom getestet
 
@@ -463,13 +456,13 @@ public:
 private:
 	POS pos;                   // Aktuelle Positionsdaten
 	char currCh;               // Aktuelles Zeichen
-	char nextCh;               // Lookahead-Zeichen (wichtig für die Tokenanalyse)
+	char nextCh;               // Lookahead-Zeichen (wichtig fÃ¼r die Tokenanalyse)
 public:
 	bool lineBreakBeforeToken; // Kennzeichnet, ob vor dem aktuellen Token ein Zeilenumbruch war
 private:
 	size_t globalOffset;       // Globaler Offset der bisher gelesenen Zeichen
 
-	std::vector<POS> positionStack; // Stack (LIFO) für gelockte Positionen
+	std::vector<POS> positionStack; // Stack (LIFO) fÃ¼r gelockte Positionen
 	std::vector<uint32_t> templateLiteralBraces;
 	// Token-Informationen:
 public:
@@ -486,7 +479,7 @@ private:
 	/////////////////////////////////////////////////////////////
 
 	// Berechne tailLocked: Falls gelockte Positionen existieren, entspricht tailLocked
-	// dem Index im Puffer der frühesten gelockten Position; ansonsten ist tailLocked gleich tail.
+	// dem Index im Puffer der frÃ¼hesten gelockten Position; ansonsten ist tailLocked gleich tail.
 	size_t getTailLocked() const {
 		return (positionStack.empty() ? pos.tokenStart : positionStack.front().tokenStart) & (buffer.size() - 1);
 	}
@@ -495,20 +488,20 @@ private:
 		return ((globalOffset & (buffer.size() - 1))) == head;
 	}
 
-	// Füllt den Puffer mit neuen Daten aus dem Input-Strom.
-	// Dabei wird sichergestellt, dass der Bereich ab der frühesten gelockten Position (tailLocked)
-	// nicht überschrieben wird.
+	// FÃ¼llt den Puffer mit neuen Daten aus dem Input-Strom.
+	// Dabei wird sichergestellt, dass der Bereich ab der frÃ¼hesten gelockten Position (tailLocked)
+	// nicht Ã¼berschrieben wird.
 	bool fillBuffer();
 
 	/////////////////////////////////////////////////////////////
 	// Zeichen holen und Lookahead aktualisieren
 	/////////////////////////////////////////////////////////////
 
-	// Holt das nächste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
+	// Holt das nÃ¤chste Zeichen aus dem Puffer, aktualisiert dabei currCh und nextCh sowie Positionsdaten.
 	void getNextCh(bool raw=false);
 
 	/////////////////////////////
-	// Hilfsfunktion: nächsthöhere Potenz von 2
+	// Hilfsfunktion: nÃ¤chsthÃ¶here Potenz von 2
 	/////////////////////////////
 	size_t nextPowerOfTwo(size_t n) {
 		size_t power = 1;
@@ -529,9 +522,12 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 class CScriptToken;
-typedef  std::vector<CScriptToken> TOKEN_VECT;
-typedef  std::vector<CScriptToken>::iterator TOKEN_VECT_it;
-typedef  std::vector<CScriptToken>::const_iterator TOKEN_VECT_cit;
+typedef std::vector<CScriptToken> TOKEN_VECT;
+typedef std::vector<CScriptToken>::iterator TOKEN_VECT_it;
+typedef std::vector<CScriptToken>::const_iterator TOKEN_VECT_cit;
+typedef std::pair<CScriptToken, TOKEN_VECT> FUNCTION_ARGUMENT;
+typedef std::vector<FUNCTION_ARGUMENT> FUNCTION_ARGUMENTS_VECT;
+
 
 class CScriptTokenDataString : public fixed_size_object<CScriptTokenDataString> {
 protected:
@@ -556,7 +552,7 @@ public:
 	std::string file;
 	int32_t line;
 	std::string name;
-	TOKEN_VECT arguments;
+	FUNCTION_ARGUMENTS_VECT arguments;
 	TOKEN_VECT body;
 	bool isGenerator() const { return type == LEX_T_GENERATOR || type == LEX_T_GENERATOR_OPERATOR || type == LEX_T_GENERATOR_MEMBER; }
 	bool isArrowFunction() const { return type == LEX_T_FUNCTION_ARROW; }
@@ -569,16 +565,16 @@ public:
 	static std::shared_ptr<CScriptTokenDataForwards> create() { return std::shared_ptr<CScriptTokenDataForwards>(new CScriptTokenDataForwards); }
 
 	bool checkRedefinition(const std::string &Str, bool checkVars);
-	void addVars( STRING_VECTOR_t &Vars );
-	void addConsts( STRING_VECTOR_t &Vars );
-	std::string addVarsInLetscope(STRING_VECTOR_t &Vars);
-	std::string addLets(STRING_VECTOR_t &Lets);
+	void addVars( STRING_VECTOR_t Vars );
+	std::string_view addConsts(STRING_VECTOR_t &Consts);
+	std::string_view addVarsInLetscope(STRING_VECTOR_t &Vars);
+	std::string_view addLets(STRING_VECTOR_t &Lets);
 	bool empty() const { return varNames[LETS].empty() && varNames[VARS].empty() && varNames[CONSTS].empty() && functions.empty(); }
 
 	enum {
 		LETS = 0,
-		VARS,
 		CONSTS,
+		VARS,
 		END
 	};
 	STRING_SET_t varNames[END];
@@ -623,24 +619,6 @@ public:
 	TOKEN_VECT else_body;
 };
 
-typedef std::pair<std::string, std::string> DESTRUCTURING_VAR_t;
-typedef std::vector<DESTRUCTURING_VAR_t> DESTRUCTURING_VARS_t;
-typedef DESTRUCTURING_VARS_t::iterator DESTRUCTURING_VARS_it;
-typedef DESTRUCTURING_VARS_t::const_iterator DESTRUCTURING_VARS_cit;
-class CScriptTokenDataDestructuringVar : public fixed_size_object<CScriptTokenDataDestructuringVar> {
-	CScriptTokenDataDestructuringVar() = default;
-public:
-	static std::shared_ptr<CScriptTokenDataDestructuringVar> create() { return std::shared_ptr<CScriptTokenDataDestructuringVar>(new CScriptTokenDataDestructuringVar); }
-
-	std::string getParsableString();
-
-	void getVarNames(STRING_VECTOR_t &Names);
-
-	DESTRUCTURING_VARS_t vars;
-	TOKEN_VECT assignment;
-private:
-};
-
 class CScriptTokenDataObjectLiteral : public fixed_size_object<CScriptTokenDataObjectLiteral> {
 	CScriptTokenDataObjectLiteral() : type(CScriptTokenDataObjectLiteral::OBJECT), destructuring(false), structuring(false) {}
 public:
@@ -648,13 +626,17 @@ public:
 
 	std::string getParsableString();
 
-	void setMode(bool Destructuring);
-	bool toDestructuringVar(const std::shared_ptr<CScriptTokenDataDestructuringVar> &DestructuringVar);
+	void setDestructuringMode(bool Destructuring);
 
-	enum {OBJECT, ARRAY, ARRAY_COMPREHENSIONS, ARRAY_COMPREHENSIONS_OLD} type;
+	bool getDestructuringVarNames(STRING_VECTOR_t &varnames);
+	STRING_VECTOR_t getDestructuringVarNames();
+	enum { OBJECT, ARRAY/*, ARRAY_COMPREHENSIONS, ARRAY_COMPREHENSIONS_OLD*/ } type;
 	struct ELEMENT {
 		std::string id;
+		TOKEN_VECT key; // dynamic key [ expression ] : value
 		TOKEN_VECT value;
+		TOKEN_VECT defaultValue;
+		bool isSpreadOrRest = false;
 	};
 	bool destructuring;
 	bool structuring;
@@ -666,14 +648,6 @@ public:
 private:
 };
 
-class CScriptTokenDataArrayComprehensionsBody : public fixed_size_object<CScriptTokenDataArrayComprehensionsBody> {
-	CScriptTokenDataArrayComprehensionsBody() = default;
-public:
-	static std::shared_ptr<CScriptTokenDataArrayComprehensionsBody> create() { return std::shared_ptr<CScriptTokenDataArrayComprehensionsBody>(new CScriptTokenDataArrayComprehensionsBody); }
-
-	TOKEN_VECT body;
-};
-
 class CScriptTokenDataTry : public fixed_size_object<CScriptTokenDataTry> {
 	CScriptTokenDataTry() = default;
 public:
@@ -682,18 +656,12 @@ public:
 	std::string getParsableString(const std::string &IndentString="", const std::string &Indent="");
 
 	TOKEN_VECT tryBlock;
-	struct CatchBlock {
-		std::shared_ptr<CScriptTokenDataDestructuringVar> indentifiers;
-		TOKEN_VECT condition;
-		TOKEN_VECT block;
-	};
-	typedef std::vector<CatchBlock> CATCHBLOCKS_t;
-	typedef CATCHBLOCKS_t::iterator CATCHBLOCKS_it;
-	typedef CATCHBLOCKS_t::const_iterator CATCHBLOCKS_cit;
-	CATCHBLOCKS_t catchBlocks;
+	TOKEN_VECT catchParameter;
+	TOKEN_VECT catchBlock;
 	TOKEN_VECT finallyBlock;
 };
-class CScriptVarArray;
+//class CScriptVarArray;
+class CScriptVar;
 template<typename C> class CScriptVarPointer;
 
 class CScriptTokenDataTemplateLiteral : public fixed_size_object<CScriptTokenDataTemplateLiteral> {
@@ -703,11 +671,14 @@ public:
 	template<class... Args>
 	static std::shared_ptr<CScriptTokenDataTemplateLiteral> create(Args&&... args) { return std::shared_ptr<CScriptTokenDataTemplateLiteral>(new CScriptTokenDataTemplateLiteral(std::forward<Args>(args)...)); }
 
-	int addRaw(std::string &String);
+	std::string getParsableString();
+
+	static int parseRaw(std::string &String);
+	//int addRaw(std::string &String);
 	std::vector<std::string> raw;
 	std::vector<std::string> strings;
 	std::vector<TOKEN_VECT> values;
-//	std::shared_ptr<CScriptVarArray> strings;
+	std::shared_ptr<CScriptVar/*Array*/> stringsArray;
 private:
 };
 
@@ -744,8 +715,6 @@ public:
 	const std::shared_ptr<CScriptTokenDataFnc>&Fnc() { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return std::get<std::shared_ptr<CScriptTokenDataFnc>>(data); }
 	const std::shared_ptr<CScriptTokenDataFnc> &Fnc() const { ASSERT(LEX_TOKEN_DATA_FUNCTION(token)); return std::get<std::shared_ptr<CScriptTokenDataFnc>>(data); }
 	const std::shared_ptr<CScriptTokenDataObjectLiteral> &Object() { ASSERT(LEX_TOKEN_DATA_OBJECT_LITERAL(token)); return std::get<std::shared_ptr<CScriptTokenDataObjectLiteral>>(data); }
-	const std::shared_ptr<CScriptTokenDataDestructuringVar> &DestructuringVar() { ASSERT(LEX_TOKEN_DATA_DESTRUCTURING_VAR(token)); return std::get<std::shared_ptr<CScriptTokenDataDestructuringVar>>(data); }
-	const std::shared_ptr<CScriptTokenDataArrayComprehensionsBody> &ArrayComprehensionsBody() { ASSERT(LEX_TOKEN_DATA_ARRAY_COMPREHENSIONS_BODY(token)); return std::get<std::shared_ptr<CScriptTokenDataArrayComprehensionsBody>>(data); }
 	const std::shared_ptr<CScriptTokenDataLoop> &Loop() { ASSERT(LEX_TOKEN_DATA_LOOP(token)); return std::get<std::shared_ptr<CScriptTokenDataLoop>>(data); }
 	const std::shared_ptr<CScriptTokenDataIf> &If() { ASSERT(LEX_TOKEN_DATA_IF(token)); return std::get<std::shared_ptr<CScriptTokenDataIf>>(data); }
 	const std::shared_ptr<CScriptTokenDataTry> &Try() { ASSERT(LEX_TOKEN_DATA_TRY(token)); return std::get<std::shared_ptr<CScriptTokenDataTry>>(data); }
@@ -769,8 +738,7 @@ public:
 
 private:
 	std::variant<std::monostate, int32_t, double, std::shared_ptr<CScriptTokenDataString>, std::shared_ptr<CScriptTokenDataFnc>, 
-		std::shared_ptr<CScriptTokenDataObjectLiteral>, std::shared_ptr<CScriptTokenDataDestructuringVar>, 
-		std::shared_ptr<CScriptTokenDataArrayComprehensionsBody>, std::shared_ptr<CScriptTokenDataLoop>, std::shared_ptr<CScriptTokenDataIf>,
+		std::shared_ptr<CScriptTokenDataObjectLiteral>, std::shared_ptr<CScriptTokenDataLoop>, std::shared_ptr<CScriptTokenDataIf>,
 		std::shared_ptr<CScriptTokenDataTry>, std::shared_ptr<CScriptTokenDataForwards>, std::shared_ptr<CScriptTokenDataTemplateLiteral>> data;
 };
 
@@ -812,7 +780,7 @@ public:
 	};
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
-	CScriptTokenizer(const char *Code, const std::string &File="", int Line=0, int Column=0);
+	CScriptTokenizer(const std::string &Code, const std::string &File="", int Line=0, int Column=0);
 
 public:
 
@@ -837,20 +805,19 @@ private:
 	void tokenizeSwitch(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	void tokenizeWith(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	void tokenizeWhileAndDo(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	void tokenizeIf_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign);
 	void tokenizeIf(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	void tokenizeFor_inArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags, TOKEN_VECT &Assign);
 	void tokenizeFor(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	CScriptToken tokenizeVarIdentifier(STRING_VECTOR_t *VarNames=0, bool *NeedAssignment=0, bool isRest=false);
-	CScriptToken tokenizeFunctionArgument(bool isRest);
-	void tokenizeArrowFunction(const TOKEN_VECT &Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
+	FUNCTION_ARGUMENT tokenizeFunctionArgument(bool isRest);
+	FUNCTION_ARGUMENTS_VECT tokenizeFunctionArguments();
+public:
+	static FUNCTION_ARGUMENTS_VECT tokenizeFunctionArguments(CScriptLex &l);
+	static FUNCTION_ARGUMENTS_VECT tokenizeFunctionArguments(const char *args);
+private:
+	void tokenizeArrowFunction(FUNCTION_ARGUMENTS_VECT &&Arguments, ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef = false);
 	void tokenizeFunction(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
-	void tokenizeLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool noLetDef=false);
-	void tokenizeVarNoConst(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	void tokenizeVarAndConst(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	void _tokenizeLiteralObject(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	void _tokenizeLiteralArray(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
-	bool _tokenizeArrayComprehensions(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void tokenizeLetVarOrConst(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
+	void _tokenizeLiteralObject(ScriptTokenState &State,TOKENIZE_FLAGS Flags,bool onlyDestructuring=false);
+	void _tokenizeLiteralArray(ScriptTokenState &State, TOKENIZE_FLAGS Flags, bool onlyDestructuring=false);
 
 	void tokenizeLiteral(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	void tokenizeMember(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
@@ -861,7 +828,6 @@ private:
 	void tokenizeAssignment(ScriptTokenState& State, TOKENIZE_FLAGS Flags);	// = += -= *= /= %= <<= >>= >>>= &= |= ^= AND ??=
 	void tokenizeExpression(ScriptTokenState& State, TOKENIZE_FLAGS Flags);	// ..., ... 
 	void tokenizeBlock(ScriptTokenState& State, TOKENIZE_FLAGS Flags);			// { ... }
-	void tokenizeStatementNoLet(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 	void tokenizeStatement(ScriptTokenState &State, TOKENIZE_FLAGS Flags);
 
 	size_t pushToken(TOKEN_VECT &Tokens, int Match=-1, int Alternate=-1);
@@ -910,36 +876,197 @@ enum IteratorMode {
 /// CScriptPropertyName
 //////////////////////////////////////////////////////////////////////////
 
-/// CScriptPropertyName holds the name of any property
 class CScriptPropertyName {
 public:
-	CScriptPropertyName() : idx(-1) {}
-	// property name
-	CScriptPropertyName(const std::string &Name) : name(Name), idx(name2arrayIdx(Name)) {}
-	// array index
-	CScriptPropertyName(uint32_t Idx) : name(std::to_string(Idx)), idx(Idx) { if (idx == 0xffffffffUL) idx = -1; }
-	// symbol
-	CScriptPropertyName(uint32_t Id, const std::string &Desc) : name(Desc), idx(-1-(int64_t)Id) {}
-	bool operator<(const CScriptPropertyName& rhs) {
-		int64_t lhs_idx = idx + 1;
-		int64_t rhs_idx = rhs.idx + 1;
-		if (lhs_idx < rhs_idx) return true;
-		if (lhs_idx == 0 && rhs_idx == 0) return name < rhs.name;
-		return false;
+
+	// Statische constexpr-Funktion, die einen uint32_t in einen String konvertiert.
+	// (Erfordert C++20, damit std::string hier teilweise zur Kompilierzeit aufgebaut werden kann.)
+
+	static
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+		constexpr
+#endif
+		std::string to_string_constexpr(uint32_t value) {
+		if (value == 0)
+			return "0";
+
+		std::string result;
+		while (value > 0) {
+			result.push_back('0' + (value % 10));
+			value /= 10;
+		}
+		std::reverse(result.begin(), result.end());
+		return result;
 	}
-	bool isArrayIdx() const { return 0 <= idx && idx < 0xFFFFFFFFLL; }
-	bool isPropertyName() const { return idx == -1; }
-	bool isSymbol() const { return idx < -1; }
+
+	static constexpr uint32_t computeArrayIndex(std::string_view str) {
+		if (str.empty() || (str.size() > 1 && str.front() == '0') || str.size() > 10 || (str.size() == 10 && str > "4294967294"))
+			return std::numeric_limits<uint32_t>::max();
+		uint32_t result = 0;
+		for (char c : str) {
+			if (c < '0' || c > '9') return std::numeric_limits<uint32_t>::max();
+			result = result * 10 + (c - '0');
+		}
+		return result;
+	}
+
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName() {}
+
+	CScriptPropertyName(nullptr_t) =delete;
+
+	// Konstruktor mit std::string_view.
+	// Der arrayIndex wird aus dem Namen via computeArrayIndex berechnet.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(const std::string_view str)
+		: name(str), arrayIndex(computeArrayIndex(name)) {}
+
+	// Konstruktor mit const char *.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(const char *str) : CScriptPropertyName(std::string_view(str)) {}
+
+	// Konstruktor mit const std::string& (lvalue): Kopiert den Ã¼bergebenen String.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(const std::string &str)
+		: name(str), arrayIndex(computeArrayIndex(name)) {}
+
+	// Konstruktor mit std::string&& (rvalue): Verschiebt den Ã¼bergebenen String.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(std::string &&str)
+		: name(std::move(str)), arrayIndex(computeArrayIndex(name)) {}
+
+	// constexpr Konstruktor mit uint32_t.
+	// Hier wird der Name mittels to_string_constexpr gesetzt.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(uint32_t num)
+		: name(to_string_constexpr(num)), arrayIndex(num) {}
+
+	// Konstruktor mit std::string_view und uint32_t: Beide Werte werden direkt gesetzt.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(std::pair<std::string, uint32_t> symbol)
+		: name(std::move(symbol.first)), arrayIndex(symbol.second) {}
+
+	// Konstruktor mit std::string_view und uint32_t: Beide Werte werden direkt gesetzt.
+#if __cplusplus >= 202002L || _MSVC_LANG >= 202002L
+	constexpr
+#endif
+		CScriptPropertyName(std::pair<std::string_view, uint32_t> symbol)
+		: name(symbol.first), arrayIndex(symbol.second) {}
+
+	// Wir definieren drei Kategorien, die fÃ¼r den Vergleich herangezogen werden.
+	// - Symbol: arrayIndex != uint32_t(-1) und name.empty()
+	// - String: arrayIndex == uint32_t(-1)
+	// - ArrayIndex: arrayIndex != uint32_t(-1) und !name.empty()
+	enum class Category {
+		Symbol,    // Kleinster Typ
+		String,    // Mittlerer Typ
+		ArrayIndex // GrÃ¶ÃŸter Typ
+	};
+
+	// Ermittelt die Kategorie des Objekts.
+	constexpr Category getCategory() const {
+		return (arrayIndex != uint32_t(-1))
+			? (name.empty() ? Category::Symbol : Category::ArrayIndex)
+			: Category::String;
+	}
+
+	// Vergleichsoperator zwischen zwei CScriptChildName Objekten.
+	// Es gilt die Ordnung: ArrayIndex < String < Symbol.
+	bool lessArayStringSymbol(const CScriptPropertyName &rhs) const;
+
+	// Vergleichsoperator zwischen zwei CScriptChildName Objekten.
+	// Es gilt die Ordnung: Symbol < String < ArrayIndex.
+	bool operator<(const CScriptPropertyName &rhs) const;
+
+	// Vergleichsoperator fÃ¼r einen Vergleich mit einem uint32_t (als Array-Index).
+	bool operator<(uint32_t rhs) const;
+
+	// Vergleichsoperator fÃ¼r einen Vergleich mit einem std::string_view (als String).
+	bool operator<(std::string_view rhs) const;
+
+	bool operator==(const CScriptPropertyName &other) const { return arrayIndex == other.arrayIndex && name == other.name; }
+	bool operator!=(const CScriptPropertyName &other) const { return arrayIndex != other.arrayIndex || name != other.name; }
+
+	const std::string &toString() const { return name; }
+	uint32_t toIndex() const { return arrayIndex; }
+	uint32_t toArrayIndex() const { return getCategory() == Category::ArrayIndex ? arrayIndex : std::numeric_limits<uint32_t>::max(); }
+	bool isArrayIndex() const { return getCategory() == Category::ArrayIndex; }
+	bool empty() const { return name.empty() && arrayIndex == std::numeric_limits<uint32_t>::max(); }
+
 private:
-	static int64_t name2arrayIdx(const std::string &Name);
-	std::string name;
-	int64_t idx; /* -1 ==> normal Name; >=0 ==> arrayIdx; <-1 ==> Symbol*/
+	std::string name;        // EnthÃ¤lt den Namen
+	uint32_t arrayIndex = std::numeric_limits<uint32_t>::max();     // EnthÃ¤lt den Array-Index
+
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// CScriptSymbolManager
+//////////////////////////////////////////////////////////////////////////
+
+class CScriptSymbolManager {
+public:
+	static CScriptPropertyName getSymbolId(std::string name, bool persistent = false) {
+#ifndef NO_THREADING
+		CScriptUniqueLock lock(mutex);
+#endif
+		if (persistent) {
+			auto it = symbolTable.find(name);
+			if (it != symbolTable.end()) return CScriptPropertyName({ std::string_view{}, it->second });
+		}
+
+		uint32_t id = static_cast<uint32_t>(symbolNames.size());
+		symbolNames.push_back(std::string(name));
+
+		if (persistent) {
+			symbolTable[name] = id;
+		}
+
+		return CScriptPropertyName({ std::string_view{}, id });
+	}
+	static std::string toString(uint32_t id) {
+#ifndef NO_THREADING
+		CScriptUniqueLock lock(mutex);
+#endif
+		if (id < symbolNames.size())
+			return "Symbol(" + symbolNames[id] + ")";
+		return "Symbol()";
+	}
+	static std::pair<std::string,bool> keyFor(uint32_t id) {
+#ifndef NO_THREADING
+		CScriptUniqueLock lock(mutex);
+#endif
+		if (id < symbolNames.size()) {
+			auto &name = symbolNames[id];
+			auto it = symbolTable.find(name);
+			if (it != symbolTable.end()) return { name, true };
+		}
+		return { std::string(), false };
+	}
+private:
+	static std::map<std::string, uint32_t> symbolTable;
+	static std::vector<std::string> symbolNames;
+#ifndef NO_THREADING
+	static CScriptMutex mutex;
+#endif
 };
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVar
 //////////////////////////////////////////////////////////////////////////
-
 
 // Compile-Time Hash-Funktion (FNV-1a Algorithmus)
 constexpr uint32_t fnv1aHash(const char* str, uint32_t hash = 0x811C9DC5) {
@@ -969,7 +1096,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVar");
 
-	virtual bool isDerivedFrom(uint32_t parentHash) const {	return classHash == parentHash;  /* Prüft nur sich selbst*/ }
+	virtual bool isDerivedFrom(uint32_t parentHash) const {	return classHash == parentHash;  /* PrÃ¼ft nur sich selbst*/ }
 	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr) {
 		if (basePtr && basePtr->isDerivedFrom(T::classHash)) {
 			return std::static_pointer_cast<T>(basePtr);
@@ -1001,6 +1128,7 @@ public:
 	virtual bool isAccessor();	///< is an Accessor
 	virtual bool isNull();		///< is Null
 	virtual bool isUndefined();	///< is Undefined
+	virtual bool isUninitialized();	///< is Uninitialized meens the var is in the Temporal Dead Zone
 	bool isNullOrUndefined();	///< is Null or Undefined
 	virtual bool isNaN();		///< is NaN
 	virtual bool isString();	///< is String
@@ -1012,6 +1140,7 @@ public:
 	virtual bool isRealNumber();///< is isInt | isDouble
 	virtual bool isNumber();	///< is isNaN | isInt | isDouble | isInfinity
 	virtual bool isPrimitive();	///< isNull | isUndefined | isNaN | isString | isInt | isDouble | isInfinity
+	virtual bool isSymbol();
 
 	virtual bool isFunction();	///< is CScriptVarFunction / CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
 	virtual bool isNative();	///< is CScriptVarFunctionNativeCallback / CScriptVarFunctionNativeClass
@@ -1046,6 +1175,9 @@ public:
 	std::string toString(int32_t radix=0); ///< shortcut for this->toPrimitive_hintString()->toCString();
 	std::string toString(CScriptResult &execute, int32_t radix=0); ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
 
+	CScriptPropertyName toPropertyName();
+	CScriptPropertyName toPropertyName(CScriptResult &execute);
+
 	int DEPRECATED("getInt() is deprecated use toNumber().toInt32 instead") getInt();
 	bool DEPRECATED("getBool() is deprecated use toBoolean() instead") getBool();
 	double DEPRECATED("getDouble() is deprecated use toNumber().toDouble() instead") getDouble();
@@ -1060,7 +1192,7 @@ public:
 	virtual CScriptVarPtr toObject()=0;
 
 	CScriptVarPtr toIterator(IteratorMode Mode=RETURN_ARRAY);
-	CScriptVarPtr toIterator(CScriptResult &execute, IteratorMode Mode=RETURN_ARRAY);
+	CScriptVarPtr toIterator(CScriptResult &execute, IteratorMode Mode = RETURN_ARRAY);
 
 //	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, bool &hasRecursion); ///< get Data as a parsable javascript string
 #define getParsableStringRecursionsCheckBegin() do{		\
@@ -1083,8 +1215,8 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 
 
-	CScriptVarPtr getOwnPropertyDescriptor(const std::string &Name);
-	const char *defineProperty(const std::string &Name, CScriptVarPtr Attributes);
+	CScriptVarPtr getOwnPropertyDescriptor(const CScriptPropertyName &Name);
+	const char *defineProperty(const CScriptPropertyName &Name, CScriptVarPtr Attributes);
 
 	/// flags
 	void setExtensible(bool On=true)	{ extensible=On; }
@@ -1096,30 +1228,25 @@ public:
 	bool isFrozen() const;
 
 	/// find
-	CScriptVarLinkPtr findChild(const std::string &childName); ///< Tries to find a child with the given name, may return 0
-	CScriptVarLinkWorkPtr DEPRECATED("findChildWithStringChars is deprecated use getOwnProperty instead") findChildWithStringChars(const std::string &childName);
-	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName); ///< Tries to find a child with the given name, may return 0 or a faked porperty
-	CScriptVarLinkPtr findChildInPrototypeChain(const std::string &childName);
-	CScriptVarLinkWorkPtr findChildWithPrototypeChain(const std::string &childName);
-	CScriptVarLinkPtr findChildByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
-	CScriptVarLinkPtr findChildOrCreate(const std::string &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
-	CScriptVarLinkPtr findChildOrCreateByPath(const std::string &path); ///< Tries to find a child with the given path (separated by dots)
-	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0);
+	CScriptVarLinkPtr findChild(const CScriptPropertyName &childName); ///< Tries to find a child with the given name, may return 0
+	CScriptVarLinkWorkPtr DEPRECATED("findChildWithStringChars is deprecated use getOwnProperty instead") findChildWithStringChars(const CScriptPropertyName &childName);
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const CScriptPropertyName &childName); ///< Tries to find a child with the given name, may return 0 or a faked porperty
+	CScriptVarLinkPtr findChildInPrototypeChain(const CScriptPropertyName &childName);
+	CScriptVarLinkWorkPtr findChildWithPrototypeChain(const CScriptPropertyName &childName);
+	CScriptVarLinkPtr findChildByPath(const std::string_view path); ///< Tries to find a child with the given path (separated by dots)
+	CScriptVarLinkPtr findChildOrCreate(const CScriptPropertyName &childName/*, int varFlags=SCRIPTVAR_UNDEFINED*/); ///< Tries to find a child with the given name, or will create it with the given flags
+	CScriptVarLinkPtr findChildOrCreateByPath(const std::string_view path); ///< Tries to find a child with the given path (separated by dots)
+	virtual void keys(KEY_STRING_SET_t &Keys, bool OnlyEnumerable = true, uint32_t ID = 0);
 	/// add & remove
-	CScriptVarLinkPtr addChild(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
-	CScriptVarLinkPtr addChild(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChild(std::to_string(childName), child, linkFlags); }
-	CScriptVarLinkPtr DEPRECATED("addChildNoDup is deprecated use addChildOrReplace instead!") addChildNoDup(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
-	CScriptVarLinkPtr addChildOrReplace(const std::string &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
-	CScriptVarLinkPtr addChildOrReplace(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChildOrReplace(std::to_string(childName), child, linkFlags); }
+	CScriptVarLinkPtr addChild(const CScriptPropertyName &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
+	//CScriptVarLinkPtr addChild(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChild(std::to_string(childName), child, linkFlags); }
+	CScriptVarLinkPtr DEPRECATED("addChildNoDup is deprecated use addChildOrReplace instead!") addChildNoDup(const CScriptPropertyName &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);
+	CScriptVarLinkPtr addChildOrReplace(const CScriptPropertyName &childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT); ///< add a child overwriting any with the same name
+	//CScriptVarLinkPtr addChildOrReplace(uint32_t childName, const CScriptVarPtr &child, int linkFlags = SCRIPTVARLINK_DEFAULT);// { return addChildOrReplace(std::to_string(childName), child, linkFlags); }
 	bool removeLink(CScriptVarLinkPtr &link); ///< Remove a specific link (this is faster than finding via a child)
-	bool removeChild(const std::string &childName); ///< Remove a specific child
+	bool removeChild(const CScriptPropertyName &childName); ///< Remove a specific child
 	virtual void removeAllChildren();
 
-	/// useful for native functions
-	CScriptVarPtr getProperty(const std::string &name);
-	CScriptVarPtr getProperty(uint32_t idx);
-	void setProperty(const std::string &name, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false);
-	void setProperty(uint32_t idx, const CScriptVarPtr &value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false);
 	virtual uint32_t getLength(); ///< get the value of the "length"-property if it in the range of 0 to 32^2-1 otherwise returns 0
 
 
@@ -1197,20 +1324,22 @@ public:
 class CScriptVarLink : public std::enable_shared_from_this<CScriptVarLink>, public fixed_size_object<CScriptVarLink>
 {
 private: // prevent gloabal creating
-	CScriptVarLink(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
+	CScriptVarLink(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT);
 private: // prevent Copy
 	CScriptVarLink(const CScriptVarLink& link) = delete; ///< Copy constructor
 	CScriptVarLink &operator=(const CScriptVarLink& link) = delete; ///< Copy constructor
 public:
-	static inline std::shared_ptr<CScriptVarLink> create(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {
+	static inline std::shared_ptr<CScriptVarLink> create(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT) {
 		return std::shared_ptr<CScriptVarLink>(new CScriptVarLink(var, name, flags));
-
 	}
 	~CScriptVarLink();
 
-	const std::string &getName() const { return name; } ///< das Herzstück der Name
+	const CScriptPropertyName &getName() const { return name; } ///< das HerzstÃ¼ck der Name
+	//const std::string &getName() const { return name.getName(); } ///< das HerzstÃ¼ck der Name
+	//uint32_t getArrayIndex() const { return name.getArrayIndex(); } ///< das HerzstÃ¼ck der Name als arrayIndex
 
-	void reName(const std::string newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array
+	void reName(const std::string_view newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array
+	void reName(uint32_t newName) { name = newName; } ///< !!!! Danger !!!! - need resort of childs-array
 
 	const CScriptVarPtr &getVarPtr() const { return var; }
 	const CScriptVarPtr &setVarPtr(const CScriptVarPtr &Var) { return var = Var; } ///< simple Replace the Variable pointed to
@@ -1223,6 +1352,7 @@ public:
 	void setConfigurable(bool On) { On ? (flags |= SCRIPTVARLINK_CONFIGURABLE) : (flags &= ~SCRIPTVARLINK_CONFIGURABLE); }
 	bool isEnumerable() const { return (flags & SCRIPTVARLINK_ENUMERABLE) != 0; }
 	void setEnumerable(bool On) { On ? (flags |= SCRIPTVARLINK_ENUMERABLE) : (flags &= ~SCRIPTVARLINK_ENUMERABLE); }
+	bool isImmutable() const { return (flags & SCRIPTVARLINK_IMMUTABLE) != 0; }
 
 	CScriptVarPtr getOwner() { return owner.lock(); };
 	void setOwner(const CScriptVarPtr &Owner) { owner = Owner; }
@@ -1250,8 +1380,20 @@ public:
 		return var->toString(execute, radix); }
 	CScriptVarPtr toObject() { return var->toObject(); };
 
+	CScriptPropertyName toPropertyName() { ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
+		return var->toPropertyName();
+	}
+	CScriptPropertyName toPropertyName(CScriptResult &execute) { ///< shortcut for this->toPrimitive_hintString(execute)->toCString();
+		return var->toPropertyName(execute);
+	}
+
+	bool operator<(uint32_t rhs) const { return name < rhs; }
+	bool operator<(const std::string_view rhs) const { return name < rhs; }
+	bool operator<(const CScriptPropertyName &rhs) const { return name < rhs; }
 private:
-	std::string name;
+	CScriptPropertyName name;
+	//std::string name;
+	//uint32_t arrayIndex = std::numeric_limits<uint32_t>::max();
 	std::weak_ptr<CScriptVar> owner;
 	uint32_t flags;
 	CScriptVarPtr var;
@@ -1267,9 +1409,9 @@ public:
 	// construct
 	CScriptVarLinkPtr() : link(0) {} ///< 0-Pointer
 
-	CScriptVarLinkPtr(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : link(CScriptVarLink::create(var, name, flags)) {}
+	CScriptVarLinkPtr(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT) : link(CScriptVarLink::create(var, name, flags)) {}
 
-	CScriptVarLinkPtr& operator()(const CScriptVarPtr& var, const std::string& name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT);
+	CScriptVarLinkPtr &operator()(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT);
 
 	CScriptVarLinkWorkPtr getter();
 	CScriptVarLinkWorkPtr getter(CScriptResult& execute);
@@ -1279,8 +1421,11 @@ public:
 	operator bool() const { return (bool)link && (bool)link->getVarPtr(); }
 
 	// for sorting in child-list
-	bool operator<(const std::string& rhs) const;
-//	bool operator ==(const CScriptVarLinkPtr& rhs) const { return link == rhs.link; }
+	bool operator<(uint32_t rhs) const;
+	bool operator<(const std::string_view rhs) const;
+	bool operator<(const CScriptPropertyName &rhs) const;
+
+	//	bool operator ==(const CScriptVarLinkPtr& rhs) const { return link == rhs.link; }
 	// access to CScriptVarLink
 	auto operator ->() const { return link; }
 
@@ -1288,7 +1433,7 @@ public:
 	void clear() { link.reset(); }
 
 protected:
-	std::shared_ptr< CScriptVarLink> link;
+	std::shared_ptr<CScriptVarLink> link;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1304,12 +1449,12 @@ class CScriptVarLinkWorkPtr : public CScriptVarLinkPtr {
 public:
 	// construct
 	CScriptVarLinkWorkPtr() {}
-	CScriptVarLinkWorkPtr(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLinkPtr(var, name, flags) {}
+	CScriptVarLinkWorkPtr(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT) : CScriptVarLinkPtr(var, name, flags) {}
 //	CScriptVarLinkWorkPtr(CScriptVarLink *Link) : CScriptVarLinkPtr(Link) { if(link) referencedOwner = link->getOwner(); } // creates a new CScriptVarLink (from new);
 	CScriptVarLinkWorkPtr(const CScriptVarLinkPtr &Copy) : CScriptVarLinkPtr(Copy) { if(link) referencedOwner = link->getOwner(); }
 
 	// reconstruct
-	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const std::string &name = TINYJS_TEMP_NAME, int flags = SCRIPTVARLINK_DEFAULT) {CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.reset(); return *this; }
+	CScriptVarLinkWorkPtr &operator()(const CScriptVarPtr &var, const CScriptPropertyName &name = "", int flags = SCRIPTVARLINK_DEFAULT) { CScriptVarLinkPtr::operator()(var, name, flags); referencedOwner.reset(); return *this; }
 
 	// copy
 	CScriptVarLinkWorkPtr(const CScriptVarLinkWorkPtr &Copy) : CScriptVarLinkPtr(Copy), referencedOwner(Copy.referencedOwner) {}
@@ -1373,12 +1518,43 @@ public:
 	virtual bool toBoolean() override;							/// false by default
 	virtual CNumber toNumber_Callback()=0;
 	virtual std::string toCString(int radix=0)=0;
+	virtual CScriptPropertyName toPropertyName();
 
 	virtual CScriptVarPtr toObject() override;
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) override;
 protected:
 };
 
+
+//////////////////////////////////////////////////////////////////////////
+/// CScriptVarUndefined
+//////////////////////////////////////////////////////////////////////////
+
+define_dummy_t(Symbol);
+define_ScriptVarPtr_Type(Symbol);
+class CScriptVarSymbol : public CScriptVarPrimitive {
+protected:
+	CScriptVarSymbol(CTinyJS *Context, const CScriptPropertyName &Objc);
+	// custom RTTI
+	static constexpr uint32_t classHash = fnv1aHash("CScriptVarSymbol");
+	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr);
+public:
+
+//	virtual bool isUndefined() override; // { return true; }
+
+	virtual CNumber toNumber_Callback() override; // { return NaN; }
+	virtual std::string toCString(int radix = 0) override;// { return "undefined"; }
+	virtual CScriptPropertyName toPropertyName() override;
+
+	virtual std::string getVarType() override; // { return "undefined"; }
+	virtual bool isSymbol() override;
+
+	friend inline define_newScriptVar_Fnc(Symbol, CTinyJS *Context, const CScriptPropertyName &Objc);
+private:
+	CScriptPropertyName symbol;
+};
+inline define_newScriptVar_Fnc(Symbol, CTinyJS *Context, const CScriptPropertyName &Objc) { return CScriptVarPtr(new CScriptVarSymbol(Context, Objc)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarUndefined
@@ -1404,13 +1580,47 @@ public:
 
 	virtual std::string getVarType() override; // { return "undefined"; }
 	friend inline define_DEPRECATED_newScriptVar_Fnc(Undefined, CTinyJS* Context, Undefined_t) { return CScriptVarPtr(new CScriptVarUndefined(Context)); }
-	friend inline define_newScriptVar_NamedFnc(Undefined, CTinyJS* Context) { return CScriptVarPtr(new CScriptVarUndefined(Context)); }
+	friend inline define_newScriptVar_NamedFnc(Undefined, CTinyJS *Context);
 
 	//friend inline CScriptVarPtr newScriptVarUndefined_ein_test(CTinyJS* Context) { return new CScriptVarUndefined(Context); }
 
 };
+inline define_newScriptVar_NamedFnc(Undefined, CTinyJS *Context) { return CScriptVarPtr(new CScriptVarUndefined(Context)); }
 //using Undefined_t = CScriptVarUndefined::Undefined_t;
 //static inline Undefined_t Undefined;
+
+//////////////////////////////////////////////////////////////////////////
+/// CScriptVarUninitialized
+//////////////////////////////////////////////////////////////////////////
+
+define_dummy_t(Uninitialized);
+//define_ScriptVarPtr_Type(Undefined);
+class CScriptVarUninitialized : public CScriptVarPrimitive {
+protected:
+	CScriptVarUninitialized(CTinyJS *Context);
+	// custom RTTI
+	static constexpr uint32_t classHash = fnv1aHash("CScriptVarUninitialized");
+	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarPrimitive::isDerivedFrom(parentHash); }
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr);
+public:
+	//	static inline struct Undefined_t {} Undefined;
+
+	virtual bool isUninitialized() override; // { return true; }
+
+	virtual CNumber toNumber_Callback() override; // { return NaN; }
+	virtual std::string toCString(int radix = 0) override;// { return "undefined"; }
+
+	virtual std::string getVarType() override; // { return "undefined"; }
+
+	friend inline define_DEPRECATED_newScriptVar_Fnc(Uninitialized, CTinyJS *Context, Uninitialized_t) { return CScriptVarPtr(new CScriptVarUninitialized(Context)); }
+	friend inline define_newScriptVar_NamedFnc(Uninitialized, CTinyJS *Context);
+
+	//friend inline CScriptVarPtr newScriptVarUndefined_ein_test(CTinyJS* Context) { return new CScriptVarUndefined(Context); }
+
+};
+inline define_newScriptVar_NamedFnc(Uninitialized, CTinyJS *Context) { return CScriptVarPtr(new CScriptVarUninitialized(Context)); }
+
+
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarNull
@@ -1435,8 +1645,9 @@ public:
 	virtual std::string getVarType() override; // { return "null"; }
 
 	friend inline define_DEPRECATED_newScriptVar_Fnc(Null, CTinyJS* Context, Null_t) { return CScriptVarPtr(new CScriptVarNull(Context)); }
-	friend inline define_newScriptVar_NamedFnc(Null, CTinyJS* Context) { return CScriptVarPtr(new CScriptVarNull(Context)); }
+	friend inline define_newScriptVar_NamedFnc(Null, CTinyJS *Context);
 };
+inline define_newScriptVar_NamedFnc(Null, CTinyJS *Context) { return CScriptVarPtr(new CScriptVarNull(Context)); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
@@ -1469,8 +1680,8 @@ public:
 	virtual CScriptVarPtr toObject() override;
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) override;
 
-	virtual CScriptVarLinkWorkPtr getOwnProperty(const std::string &childName) override;
-	virtual void keys(STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0) override;
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const CScriptPropertyName &childName) override;
+	virtual void keys(KEY_STRING_SET_t &Keys, bool OnlyEnumerable = true, uint32_t ID = 0) override;
 
 
 	size_t DEPRECATED("stringLength is deprecated use getLength instead!") stringLength() { return data.size(); }
@@ -1548,6 +1759,7 @@ public:
 
 	CNumber binary(const CNumber &Value, char Mode) const;
 	CNumber clamp(const CNumber &min, const CNumber &max) const;
+	CNumber clampIndex(const CNumber &len) const;
 
 	int less(const CNumber &Value) const;
 	bool equal(const CNumber &Value) const;
@@ -1721,6 +1933,8 @@ public:
 
 	virtual CScriptVarPtr valueOf_CallBack() override;
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) override;
+	virtual CScriptVarLinkWorkPtr getOwnProperty(const CScriptPropertyName &childName) override;
+	virtual void keys(KEY_STRING_SET_t &Keys, bool OnlyEnumerable=true, uint32_t ID=0) override;
 	virtual void setTemporaryMark_recursive(uint32_t ID) override;
 protected:
 private:
@@ -1836,7 +2050,7 @@ private:
 //	uint32_t length;
 	friend define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t);
 };
-inline define_newScriptVar_Fnc(Array, CTinyJS* Context, Array_t) { return std::shared_ptr<CScriptVarArray>(new CScriptVarArray(Context))->init(); }
+inline define_newScriptVar_Fnc(Array, CTinyJS *Context, Array_t) { return std::shared_ptr<CScriptVarArray>(new CScriptVarArray(Context))->init(); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarRegExp
@@ -1947,7 +2161,7 @@ public:
 
 	virtual bool isBounded() override;	///< is CScriptVarFunctionBounded
 	virtual void setTemporaryMark_recursive(uint32_t ID) override;
-	CScriptVarPtr callFunction(CScriptResult &execute, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	CScriptVarPtr callFunction(CScriptResult &execute, const std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis = 0);
 protected:
 private:
 	CScriptVarFunctionPtr boundedFunction;
@@ -1967,27 +2181,10 @@ define_ScriptVarPtr_Type(FunctionNative);
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
 	CScriptVarFunctionNative(CTinyJS *Context, JSCallback Callback, void *Userdata);
-	CScriptVarPtr init(const char* Name, const char* Args) {
+	CScriptVarPtr init(const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args) {
 		std::shared_ptr<CScriptTokenDataFnc> FncData = CScriptTokenDataFnc::create(LEX_R_FUNCTION);
-		if (Name) FncData->name = Name;
-		if (Args) {
-			CScriptLex lex(Args);
-			uint16_t end_tk = LEX_EOF;
-			if (lex.tk == '(') {
-				end_tk = ')';
-				lex.match('(');
-			}
-			while (lex.tk != end_tk) {
-				bool rest = lex.tk == LEX_SPREAD_REST;
-				if (rest) lex.match(LEX_SPREAD_REST);
-				FncData->arguments.push_back(CScriptToken(rest ? LEX_T_DESTRUCTURING_VAR_REST : LEX_T_DESTRUCTURING_VAR, lex.tkStr));
-				lex.match(LEX_ID);
-				if (rest) break;
-				if (lex.tk != end_tk) lex.match(',', end_tk);
-			}
-			lex.match(end_tk);
-			if (end_tk != LEX_EOF) lex.match(LEX_EOF);
-		}
+		FncData->name = Name;
+		FncData->arguments = Args;
 		setFunctionData(FncData);
 		return shared_from_this();
 	}
@@ -2000,16 +2197,16 @@ public:
 
 	void callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name = 0, const char *Args = 0);// { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
 	template<typename T>
-	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name = 0, const char *Args = 0);
+	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
 private:
 	JSCallback jsCallback; ///< Callback for native functions
 	void *jsUserData; ///< user data passed as second argument to native functions
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const char *Name/* = 0*/, const char *Args/* = 0*/) { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args) { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
 template<typename T>
-inline define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const char *Name/* = 0*/, const char *Args/* = 0*/) {
+inline define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args) {
 	return newScriptVar(Context, [ClassPtr, ClassFnc](const CFunctionsScopePtr scope, void *data) {
 		(ClassPtr->*ClassFnc)(scope, data);
 		}, Userdata, Name, Args);
@@ -2028,9 +2225,9 @@ protected:
 	CScriptVarPtr init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData);
 	template<class C> CScriptVarPtr init(C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) {
 		if (getterFnc)
-			addChild(TINYJS_ACCESSOR_GET_VAR, TinyJS::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
+			addChild(context->symbol_accessor_get, TinyJS::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
 		if (setterFnc)
-			addChild(TINYJS_ACCESSOR_SET_VAR, TinyJS::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
+			addChild(context->symbol_accessor_set, TinyJS::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
 		return shared_from_this();
 	}
 	CScriptVarPtr init(const CScriptVarFunctionPtr& getter, const CScriptVarFunctionPtr& setter);
@@ -2092,7 +2289,7 @@ protected: // only derived classes or friends can be created
 public:
 	virtual CScriptVarPtr scopeVar(); ///< to create var like: var a = ...
 	virtual CScriptVarPtr scopeLet(); ///< to create var like: let a = ...
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName);
+	virtual CScriptVarLinkWorkPtr findInScopes(const CScriptPropertyName &childName);
 	virtual CScriptVarScopePtr getParent();
 	friend define_newScriptVar_Fnc(Scope, CTinyJS *Context, Scope_t);
 };
@@ -2108,24 +2305,21 @@ class CScriptVarScopeFnc : public CScriptVarScope {
 protected: // only derived classes or friends can be created
 	CScriptVarScopeFnc(CTinyJS *Context) // constructor for FncScope
 		: CScriptVarScope(Context) {}
-	CScriptVarPtr init(const CScriptVarScopePtr& Closure) {
-		closure = Closure ? addChild(TINYJS_FUNCTION_CLOSURE_VAR, Closure, 0) : CScriptVarLinkPtr();
-		return shared_from_this();
-	}
+	CScriptVarPtr init(const CScriptVarScopePtr& Closure);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeFnc");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScope::isDerivedFrom(parentHash); }
 	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) override;
+	virtual CScriptVarLinkWorkPtr findInScopes(const CScriptPropertyName &childName) override;
 
 	void setReturnVar(const CScriptVarPtr &var); ///< Set the result value. Use this when setting complex return data as it avoids a deepCopy()
 
 	#define DEPRECATED_getParameter DEPRECATED("getParameter is deprecated use getArgument instead")
-	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string &name);
+	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string_view &name);
 	DEPRECATED_getParameter CScriptVarPtr getParameter(int Idx);
-	CScriptVarPtr getArgument(const std::string &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
+	CScriptVarPtr getArgument(const std::string_view &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
 	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
 	DEPRECATED("getParameterLength is deprecated use getArgumentsLength instead") int getParameterLength(); ///< If this is a function, get the count of parameters
 	uint32_t getArgumentsLength(); ///< If this is a function, get the count of parameters
@@ -2134,20 +2328,33 @@ public:
 	void throwError(ERROR_TYPES ErrorType, const char *message);
 
 	void assign(CScriptVarLinkWorkPtr &lhs, CScriptVarPtr rhs, bool ignoreReadOnly=false, bool ignoreNotOwned=false, bool ignoreNotExtensible=false);
-	CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, const std::string &name) { return Objc->findChildWithPrototypeChain(name); }
-	CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, uint32_t idx)  { return Objc->findChildWithPrototypeChain(std::to_string(idx)); }
-	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, const std::string &name) { return getProperty(Objc, name).getter(); } // short for getProperty().getter()
-	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, uint32_t idx) { return getProperty(Objc, idx).getter(); } // short for getProperty().getter()
+	CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, const CScriptPropertyName &name) {
+		auto property = Objc->findChildWithPrototypeChain(name);
+		if (!property) {
+			property(constScriptVar(Undefined), name);
+			property.setReferencedOwner(Objc);
+		}
+		return property;
+	}
+	//CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, uint32_t idx)  { return getProperty(Objc, std::to_string(idx)); }
+	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, const CScriptPropertyName &name) { return getProperty(Objc, name).getter(); } // short for getProperty().getter()
+	//CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, uint32_t idx) { return getProperty(Objc, idx).getter(); } // short for getProperty().getter()
 	uint32_t getLength(const CScriptVarPtr &Objc) { return Objc->getLength(); }
-	void setProperty(const CScriptVarPtr &Objc, const std::string &name, const CScriptVarPtr &_value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
-		CScriptVarLinkWorkPtr property = getProperty(Objc, name);
-		setProperty(property, _value, ignoreReadOnly, ignoreNotExtensible);
+	void setProperty(const CScriptVarPtr &Objc, const CScriptPropertyName &name, const CScriptVarPtr &_value, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool addIfNotExist = false);
+	//void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &_value, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool addIfNotExist = false) {
+	//	setProperty(Objc, std::to_string(idx), _value, ignoreReadOnly, ignoreNotExtensible, addIfNotExist);
+	//}
+	void setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVarPtr &rhs, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool ignoreNotOwned = false, bool addIfNotExist = false);
+	void removeOwnProperty(const CScriptVarPtr &Objc, const CScriptPropertyName &name) {
+		SCRIPTVAR_CHILDS_it it = lower_bound(Objc->Childs.begin(), Objc->Childs.end(), name);
+		if (it != Objc->Childs.end() && (*it)->getName() == name) {
+			if ((*it)->isConfigurable()) 
+				Objc->Childs.erase(it);
+			else
+				throw newScriptVarError(context, TypeError, ("Cannot delete property '" + (*it)->getName().toString() + "'").c_str());
+		}
 	}
-	void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &_value, bool ignoreReadOnly=false, bool ignoreNotExtensible=false) {
-		setProperty(Objc, std::to_string(idx), _value, ignoreReadOnly, ignoreNotExtensible);
-	}
-	void setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVarPtr &rhs, bool ignoreReadOnly=false, bool ignoreNotExtensible=false, bool ignoreNotOwned=false);
-
+	//void removeOwnProperty(const CScriptVarPtr &Objc, uint32_t idx) { return removeOwnProperty(Objc, std::to_string(idx)); }
 protected:
 	CScriptVarLinkPtr closure;
 	friend define_newScriptVar_Fnc(ScopeFnc, CTinyJS *Context, ScopeFnc_t, const CScriptVarScopePtr &Closure);
@@ -2163,16 +2370,17 @@ define_ScriptVarPtr_Type(ScopeLet);
 class CScriptVarScopeLet : public CScriptVarScope {
 protected: // only derived classes or friends can be created
 	CScriptVarScopeLet(const CScriptVarScopePtr &Parent); // constructor for LetScope
-	CScriptVarPtr init(const CScriptVarScopePtr& Parent);
+	CScriptVarPtr init(const CScriptVarScopePtr &Parent);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeLet");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScope::isDerivedFrom(parentHash); }
 	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) override;
+	virtual CScriptVarLinkWorkPtr findInScopes(const CScriptPropertyName &childName) override;
 	virtual CScriptVarPtr scopeVar() override; ///< to create var like: var a = ...
 	virtual CScriptVarScopePtr getParent() override;
+	CScriptVarScopePtr cloneChilds(const CScriptVarScopePtr &Other);
 	void setletExpressionInitMode(bool Mode) { letExpressionInitMode = Mode; }
 protected:
 	CScriptVarLinkPtr parent;
@@ -2190,10 +2398,7 @@ define_ScriptVarPtr_Type(ScopeWith);
 class CScriptVarScopeWith : public CScriptVarScopeLet {
 protected:
 	CScriptVarScopeWith(const CScriptVarScopePtr &Parent) : CScriptVarScopeLet(Parent) {}
-	CScriptVarPtr init(const CScriptVarScopePtr& Parent, const CScriptVarPtr& With) {
-		with = addChild(TINYJS_SCOPE_WITH_VAR, With, 0);
-		return CScriptVarScopeLet::init(Parent);
-	}
+	CScriptVarPtr init(const CScriptVarScopePtr& Parent, const CScriptVarPtr& With);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarScopeWith");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarScopeLet::isDerivedFrom(parentHash); }
@@ -2201,7 +2406,7 @@ protected:
 public:
 
 	virtual CScriptVarPtr scopeLet() override; ///< to create var like: let a = ...
-	virtual CScriptVarLinkWorkPtr findInScopes(const std::string &childName) override;
+	virtual CScriptVarLinkWorkPtr findInScopes(const CScriptPropertyName &childName) override;
 private:
 	CScriptVarLinkPtr with;
 	friend define_newScriptVar_Fnc(ScopeWith, CTinyJS *Context, ScopeWith_t, const CScriptVarScopePtr &Parent, const CScriptVarPtr &With);
@@ -2231,8 +2436,8 @@ public:
 private:
 	IteratorMode mode;
 	CScriptVarPtr object;
-	STRING_SET_t keys;
-	STRING_SET_it pos;
+	KEY_STRING_SET_t keys;
+	KEY_STRING_SET_it pos;
 	friend define_newScriptVar_NamedFnc(DefaultIterator, CTinyJS *, const CScriptVarPtr &, IteratorMode);
 
 };
@@ -2373,7 +2578,6 @@ public:
 	~CTinyJS();
 
 	void execute(CScriptTokenizer &Tokenizer);
-	void execute(const char *Code, const std::string &File="", int Line=0, int Column=0);
 	void execute(const std::string &Code, const std::string &File="", int Line=0, int Column=0);
 	/** Evaluate the given code and return a link to a javascript object,
 	 * useful for (dangerous) JSON parsing. If nothing to return, will return
@@ -2381,26 +2585,10 @@ public:
 	 * automatically unref the result as it goes out of scope. If you want to
 	 * keep it, you must use ref() and unref() */
 	CScriptVarLinkPtr evaluateComplex(CScriptTokenizer &Tokenizer);
-	/** Evaluate the given code and return a link to a javascript object,
-	 * useful for (dangerous) JSON parsing. If nothing to return, will return
-	 * 'undefined' variable type. CScriptVarLink is returned as this will
-	 * automatically unref the result as it goes out of scope. If you want to
-	 * keep it, you must use ref() and unref() */
-	CScriptVarLinkPtr evaluateComplex(const char *code, const std::string &File="", int Line=0, int Column=0);
-	/** Evaluate the given code and return a link to a javascript object,
-	 * useful for (dangerous) JSON parsing. If nothing to return, will return
-	 * 'undefined' variable type. CScriptVarLink is returned as this will
-	 * automatically unref the result as it goes out of scope. If you want to
-	 * keep it, you must use ref() and unref() */
 	CScriptVarLinkPtr evaluateComplex(const std::string &code, const std::string &File="", int Line=0, int Column=0);
 	/** Evaluate the given code and return a string. If nothing to return, will return
 	 * 'undefined' */
 	std::string evaluate(CScriptTokenizer &Tokenizer);
-	/** Evaluate the given code and return a string. If nothing to return, will return
-	 * 'undefined' */
-	std::string evaluate(const char *code, const std::string &File="", int Line=0, int Column=0);
-	/** Evaluate the given code and return a string. If nothing to return, will return
-	 * 'undefined' */
 	std::string evaluate(const std::string &code, const std::string &File="", int Line=0, int Column=0);
 
 	native_require_read_fnc setRequireReadFnc(native_require_read_fnc fnc) {
@@ -2435,7 +2623,7 @@ public:
 		\endcode
 	*/
 private:
-	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, std::string &args);
+	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, FUNCTION_ARGUMENTS_VECT &args);
 public:
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT);
 	template <typename C>
@@ -2454,6 +2642,7 @@ public:
 	template<typename T1, typename T2>	CScriptVarPtr newScriptVar(T1 t1, T2 t2) { return TinyJS::newScriptVar(this, t1, t2); }
 	template<typename T1, typename T2, typename T3>	CScriptVarPtr newScriptVar(T1 t1, T2 t2, T3 t3) { return TinyJS::newScriptVar(this, t1, t2, t3); }
 	const CScriptVarPtr &constScriptVar(Undefined_t)		{ return constUndefined; }
+	const CScriptVarPtr &constScriptVar(Uninitialized_t)	{ return constUninitialized; }
 	const CScriptVarPtr &constScriptVar(Null_t)				{ return constNull; }
 	const CScriptVarPtr &constScriptVar(NaN_t)				{ return constNaN; }
 	const CScriptVarPtr &constScriptVar(Infinity _t)		{ return _t.Sig()<0 ? constInfinityNegative : constInfinityPositive; }
@@ -2478,6 +2667,8 @@ private:
 		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; }
 		void addFncScope(const CScriptVarScopePtr &_Scope) { context->scopes.push_back(_Scope); count++; }
 		CScriptVarScopeLetPtr addLetScope() { count++; return context->scopes.back() = TinyJS::newScriptVar(context, ScopeLet, context->scopes.back()); }
+		CScriptVarScopeLetPtr cloneLetScope() {
+		}
 		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = TinyJS::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
 	private:
 		CTinyJS *context;
@@ -2485,6 +2676,14 @@ private:
 	};
 	friend class CScopeControl;
 public:
+	CScriptPropertyName symbol_iterator;
+	CScriptPropertyName symbol_return_var;
+	CScriptPropertyName symbol_function_closure;
+	CScriptPropertyName symbol_scope_parent;
+	CScriptPropertyName symbol_scope_with;
+	CScriptPropertyName symbol_accessor_get;
+	CScriptPropertyName symbol_accessor_set;
+
 	CScriptVarPtr objectPrototype; /// Built in object class
 	CScriptVarPtr objectPrototype_valueOf; /// Built in object class
 	CScriptVarPtr objectPrototype_toString; /// Built in object class
@@ -2502,6 +2701,7 @@ public:
 private:
 	CScriptVarPtr errorPrototypes[ERROR_COUNT]; /// Built in error class
 	CScriptVarPtr constUndefined;
+	CScriptVarPtr constUninitialized;
 	CScriptVarPtr constNull;
 	CScriptVarPtr constNaN;
 	CScriptVarPtr constInfinityPositive;
@@ -2516,19 +2716,19 @@ private:
 	void CheckRightHandVar(CScriptResult &execute, CScriptVarLinkWorkPtr &link)
 	{
 		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
-			throwError(execute, ReferenceError, link->getName() + " is not defined", t->getPrevPos());
+			throwError(execute, ReferenceError, link->getName().toString() + " is not defined", t->getPrevPos());
 	}
 
 	void CheckRightHandVar(CScriptResult &execute, CScriptVarLinkWorkPtr &link, CScriptTokenizer::ScriptTokenPosition &Pos)
 	{
 		if(execute && link && !link->isOwned() && !link.hasReferencedOwner() && !link->getName().empty())
-			throwError(execute, ReferenceError, link->getName() + " is not defined", Pos);
+			throwError(execute, ReferenceError, link->getName().toString() + " is not defined", Pos);
 	}
 
 public:
 	// function call
-	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This=0, CScriptVarPtr *newThis=0);
-	CScriptVarPtr callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
+	CScriptVarPtr callFunction(const CScriptVarFunctionPtr &Function, const std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This=0, CScriptVarPtr *newThis=0);
+	CScriptVarPtr callFunction(CScriptResult &execute, const CScriptVarFunctionPtr &Function, const std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis=0);
 	//////////////////////////////////////////////////////////////////////////
 #ifndef NO_GENERATORS
 	std::vector<CScriptVarGenerator *> generatorStack;
@@ -2540,8 +2740,7 @@ public:
 	// parsing - in order of precedence
 	CScriptVarPtr mathsOp(CScriptResult &execute, const CScriptVarPtr &a, const CScriptVarPtr &b, int op);
 private:
-	void assign_destructuring_var(CScriptResult &execute, const std::shared_ptr<CScriptTokenDataDestructuringVar> &Objc, const CScriptVarPtr &Val, const CScriptVarPtr &Scope);
-	void execute_var_init(CScriptResult &execute, bool hideLetScope);
+	std::vector<CScriptVarPtr> execute_spread(CScriptResult &execute, IteratorMode Mode/*=RETURN_ARRAY*/);
 	void execute_destructuring(CScriptResult &execute, const std::shared_ptr<CScriptTokenDataObjectLiteral> &Objc, const CScriptVarPtr &Val, const std::string &Path);
 	CScriptVarLinkWorkPtr execute_literals(CScriptResult &execute);
 	CScriptVarLinkWorkPtr execute_member(CScriptVarLinkWorkPtr &parent, CScriptResult &execute);
@@ -2569,7 +2768,7 @@ public:
 private:
 	//////////////////////////////////////////////////////////////////////////
 	/// addNative-helper
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, CScriptVarFunctionNativePtr Var, int LinkFlags);
+	//CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, CScriptVarFunctionNativePtr Var, int LinkFlags);
 
 	//////////////////////////////////////////////////////////////////////////
 	/// throws an Error & Exception
@@ -2604,6 +2803,7 @@ private:
 	void native_Object_prototype_toString(const CFunctionsScopePtr &c, void *data);
 
 	void native_Array(const CFunctionsScopePtr &c, void *data);
+	void native_Array___iterrator__(const CFunctionsScopePtr &c, void *data);
 
 	void native_String(const CFunctionsScopePtr &c, void *data);
 
@@ -2624,7 +2824,9 @@ private:
 	void native_Function_prototype_bind(const CFunctionsScopePtr &c, void *data);
 	void native_Function_prototype_isGenerator(const CFunctionsScopePtr &c, void *data);
 
-	void native_Date(const CFunctionsScopePtr &c, void *data);
+//	void native_Date(const CFunctionsScopePtr &c, void *data);
+	void native_Symbol(const CFunctionsScopePtr &c, void *data);
+	void native_Symbol_keyFor(const CFunctionsScopePtr &c, void *data);
 
 	void native_Error(const CFunctionsScopePtr &c, void *data);
 	void native_EvalError(const CFunctionsScopePtr &c, void *data);

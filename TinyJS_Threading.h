@@ -36,10 +36,12 @@
 #	include <mutex>
 #	include <condition_variable>
 typedef std::mutex CScriptMutex;
-typedef std::unique_lock<std::mutex> CScriptUniqueLock;
+#define CScriptUniqueLock std::unique_lock 
 typedef std::condition_variable CScriptCondVar;
 
 #else
+
+#	include<chrono>
 
 class CScriptMutex {
 public:
@@ -73,12 +75,17 @@ public:
 	CScriptCondVar();
 	~CScriptCondVar();
 	void notify_one() { condVar->notify_one(); }
+	void notify_all() { condVar->notify_all(); }
 	void wait(CScriptUniqueLock<CScriptMutex> &Lock) { condVar->wait(Lock); }
 	class CScriptCondVar_t {
 	public:
 		virtual ~CScriptCondVar_t();
-		virtual void notify_one()=0;
-		virtual void wait(CScriptUniqueLock<CScriptMutex> &Lock)=0;
+		virtual void notify_one() = 0;
+		virtual void notify_all() = 0;
+		virtual void wait(CScriptUniqueLock<CScriptMutex> &lock) = 0;
+		virtual int wait_for(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::duration<long, std::milli> rel_time) = 0;
+		virtual int wait_until(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::system_clock::time_point abs_time) = 0;
+		virtual int wait_until(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::steady_clock::time_point abs_time) = 0;
 	};
 private:
 	CScriptCondVar_t *condVar;
@@ -91,7 +98,7 @@ public:
 	CScriptThread();
 	virtual ~CScriptThread();
 	static void yield();
-	void Run() { thread->Run(); }
+	int Run(uint32_t timeout_ms = 800) { return thread->Run(timeout_ms); }
 	int Stop(bool Wait=true) { return thread->Stop(Wait); }
 	int retValue() { return thread->retValue(); }
 	virtual int ThreadFnc()=0;
@@ -102,7 +109,7 @@ public:
 	class CScriptThread_t{
 	public:
 		virtual ~CScriptThread_t(){}
-		virtual void Run()=0;
+		virtual int Run(uint32_t timeout_ms)=0;
 		virtual int Stop(bool Wait)=0;
 		virtual bool isActiv()=0;
 		virtual bool isRunning()=0;
@@ -126,13 +133,11 @@ protected:
 private:
 	virtual int ThreadFnc();
 	virtual void ThreadFncFinished();
-	void notify_and_wait(CScriptCondVar &notifyCondVar, CScriptCondVar &waitCondVar, bool &waitFlag);
+	//void notify_and_wait(CScriptCondVar &notifyCondVar, CScriptCondVar &waitCondVar, bool &waitFlag);
 	CScriptMutex mutex;
 	CScriptCondVar mainCondVar, coroutineCondVar;
 	volatile int mainNotifies, coroutineNotifies;
 };
-
-#ifdef SPINLOCK_IN_POOL_ALLOCATOR
 
 #include <atomic>
 class CScriptSpinLock {
@@ -143,7 +148,6 @@ public:
 private:
 	std::atomic_flag flag;
 };
-#endif
 
 #endif // NO_THREADING
 #endif // TinyJS_Threading_h__

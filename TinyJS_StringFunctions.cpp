@@ -283,7 +283,7 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 			if(regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)) {
 				do {
 					offset = match_begin-str.begin();
-					retVar->addChild(std::to_string(idx++), c->newScriptVar(std::string(match_begin, match_end)));
+					retVar->addChild(idx++, c->newScriptVar(std::string(match_begin, match_end)));
 #if 1 /* Fix from "vcmpeq" (see Issue 14) currently untested */
 					if (match_begin == match_end) {
 						if (search_begin != str.end())

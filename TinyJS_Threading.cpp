@@ -29,6 +29,7 @@
 
 #include "TinyJS_Threading.h"
 #include <exception>
+#include <chrono>
 #include <cstdio>
 #include <cstddef>
 
@@ -111,10 +112,9 @@ class condition_variable_impl
 public:
 	condition_variable_impl() : mNumWaiters(0), mSemaphore(CreateEvent(NULL, FALSE, FALSE, NULL)), mWakeEvent(CreateEvent(NULL, FALSE, FALSE, NULL)) {}
 	~condition_variable_impl() { CloseHandle(mSemaphore); CloseHandle(mWakeEvent); }
-	void wait(pthread_mutex_t* lock)
-	{
+	void wait(pthread_mutex_t *lock) {
 		{
-			CScriptUniqueLock<CScriptMutex> lock(mMutex);
+			CScriptUniqueLock<CScriptMutex> quard(mMutex);
 			mNumWaiters++;
 		}
 		pthread_mutex_unlock(lock);
@@ -123,42 +123,86 @@ public:
 		SetEvent(mWakeEvent);
 		pthread_mutex_lock(lock);
 	}
+	int wait_until(pthread_mutex_t *lock, timespec *ts) {
+		{
+			CScriptUniqueLock<CScriptMutex> quard(mMutex);
+			mNumWaiters++;
+		}
+		auto rel_time = std::chrono::steady_clock::time_point(std::chrono::seconds(ts->tv_sec) + std::chrono::nanoseconds(ts->tv_nsec)) - std::chrono::steady_clock::now();
+		if (rel_time.count() <= 0) return ETIMEDOUT;
+		pthread_mutex_unlock(lock);
+		auto ret = WaitForSingleObject(mSemaphore, std::chrono::duration_cast<std::chrono::duration<DWORD, std::milli>>(rel_time).count());
+		mNumWaiters--;
+		SetEvent(mWakeEvent);
+		pthread_mutex_lock(lock);
+		return ret == WAIT_TIMEOUT ? ETIMEDOUT : 0;
+	}
 	void notify_one()
 	{
-		CScriptUniqueLock<CScriptMutex> lock(mMutex);
+		CScriptUniqueLock<CScriptMutex> quard(mMutex);
 		if (!mNumWaiters) return;
 		SetEvent(mSemaphore);
 		WaitForSingleObject(mWakeEvent, INFINITE);
 	}
+	void notify_all() {
+		while (mNumWaiters) notify_one();
+	}
 private:
 	CScriptMutex mMutex;
-	volatile int mNumWaiters;
+	std::atomic<int> mNumWaiters;
 	HANDLE mSemaphore;
 	HANDLE mWakeEvent;
 };
 
 
+#	define pthread_condattr_t struct {}
+#	define pthread_condattr_init(a) do { (void*)(a); } while(0)
+#	define pthread_condattr_destroy(a) do {} while(0)
+#	define CLOCK_MONOTONIC 1
+#	define pthread_condattr_setclock(a, c) do {} while(0)
 #	define pthread_cond_t condition_variable_impl
 #	define pthread_cond_init(c, a) do {} while(0)
 #	define pthread_cond_destroy(c) do {} while(0)
 #	define pthread_cond_wait(c, m) (c)->wait(m)
+#	define pthread_cond_timedwait(c, m, t) (c)->wait_until(m, t)
 #	define pthread_cond_signal(c) (c)->notify_one()
+#	define pthread_cond_broadcast(c) (c)->notify_all()
 #endif
 
 class CScriptCondVar_impl : public CScriptCondVar::CScriptCondVar_t {
 public:
 	CScriptCondVar_impl(CScriptCondVar *_this) : This(_this) {
-		pthread_cond_init(&cond, NULL);
+		pthread_condattr_t attr;
+		pthread_condattr_init(&attr);
+		pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+		pthread_cond_init(&cond, &attr);
+		pthread_condattr_destroy(&attr);
 	}
 	virtual ~CScriptCondVar_impl() {
 		pthread_cond_destroy(&cond);
 	}
 	CScriptCondVar *This;
-	virtual void notify_one() {
+	virtual void notify_one() override {
 		pthread_cond_signal(&cond);
 	}
-	virtual void wait(CScriptUniqueLock<CScriptMutex> &Lock) {
-		pthread_cond_wait(&cond, (pthread_mutex_t *)Lock.mutex.getRealMutex());
+	virtual void notify_all() override {
+		pthread_cond_broadcast(&cond);
+	}
+	virtual void wait(CScriptUniqueLock<CScriptMutex> &lock) override {
+		pthread_cond_wait(&cond, (pthread_mutex_t *)lock.mutex.getRealMutex());
+	}
+	virtual int wait_for(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::duration<long, std::milli> rel_time) override {
+		return wait_until(lock, std::chrono::steady_clock::now() + rel_time);
+	}
+	virtual int wait_until(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::steady_clock::time_point abs_time) override {
+		struct timespec ts;
+		auto duration = abs_time.time_since_epoch();
+		ts.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+		ts.tv_nsec = std::chrono::duration_cast<std::chrono::duration<long, std::nano>>(duration % std::chrono::seconds(1)).count();
+		return pthread_cond_timedwait(&cond, (pthread_mutex_t *)lock.mutex.getRealMutex(), &ts) == ETIMEDOUT ? 1 : 0;
+	}
+	virtual int wait_until(CScriptUniqueLock<CScriptMutex> &lock, std::chrono::system_clock::time_point abs_time) override {
+		return wait_for(lock, std::chrono::duration_cast<std::chrono::duration<long, std::milli>>(abs_time - std::chrono::system_clock::now()));
 	}
 	pthread_cond_t cond;
 };
@@ -185,9 +229,9 @@ CScriptCondVar::~CScriptCondVar() {
 #	define pthread_attr_init(a) do {} while(0)
 #	define pthread_attr_destroy(a) do {} while(0)
 #	define pthread_t std::thread
-#	define pthread_create(t, attr, fnc, a) *(t) = std::thread(fnc, this);
+#	define pthread_create(t, attr, fnc, a) *(t) = std::thread(fnc, a);
 #	define pthread_join(t, v) t.join();
-#	define sched_yield std::thread::yield
+#	define sched_yield std::this_thread::yield
 #elif !defined(HAVE_PTHREAD)
 // simple pthreads 4 windows
 #	define pthread_attr_t SIZE_T
@@ -209,17 +253,22 @@ public:
 	virtual ~CScriptThread_impl() {
 
 	}
-	virtual void Run() {
-		if(started) return;
+	virtual int Run(uint32_t timeout_ms) override {
+		if(started) return 0;
 		activ = true;
 //		pthread_attr_t attribute;
 //		pthread_attr_init(&attribute);
 //		pthread_attr_setstacksize(&attribute,1024);
 		pthread_create(&thread, NULL /*&attribute*/, (void*(*)(void*))ThreadFnc, this);
 //		pthread_attr_destroy(&attribute);
-		while(!started);
+		auto endtime = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+		while (!started) {
+			sched_yield();
+			if (endtime < std::chrono::steady_clock::now()) return 1;
+		}
+		return 0;
 	}
-	virtual int Stop(bool Wait) {
+	virtual int Stop(bool Wait) override {
 		activ = false;
 		if(Wait && started) {
 			pthread_join(thread, &retvar);
@@ -227,10 +276,10 @@ public:
 		}
 		return -1;
 	}
-	virtual int retValue() { return (int)((ptrdiff_t)retvar); }
-	virtual bool isActiv() { return activ; }
-	virtual bool isRunning() { return running; }
-	virtual bool isStarted() { return started; }
+	virtual int retValue() override { return (int)((ptrdiff_t)retvar); }
+	virtual bool isActiv() override { return activ; }
+	virtual bool isRunning() override { return running; }
+	virtual bool isStarted() override { return started; }
 	static void *ThreadFnc(CScriptThread_impl *This) {
 		This->running = This->started = true;
 		This->retvar = (void*)((ptrdiff_t)This->This->ThreadFnc());
@@ -239,9 +288,9 @@ public:
 		return This->retvar;
 	}
 	void *retvar;
-	volatile bool activ;
-	volatile bool running;
-	volatile bool started;
+	std::atomic<bool> activ;
+	std::atomic<bool> running;
+	std::atomic<bool> started;
 	CScriptThread *This;
 	pthread_t thread;
 };

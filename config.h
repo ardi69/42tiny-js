@@ -164,6 +164,6 @@
 #	define SPINLOCK_IN_POOL_ALLOCATOR 1
 #endif
 
-#undef HAVE_CXX_THREADS
+//#undef HAVE_CXX_THREADS
 
 #endif // _42TinyJS_config_h__

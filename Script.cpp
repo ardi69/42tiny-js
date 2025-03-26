@@ -80,14 +80,14 @@ int main(int , char **)
 	topOfStack = &dummy;
 	CTinyJS *js = new CTinyJS();
 	/* Add a native function */
-	js->addNative("function print(text)", &js_print, 0);
+	js->addNative("function print(...text)", &js_print, 0);
 	js->addNative("function console.log(text)", &js_print, 0);
 	//  js->addNative("function dump()", &js_dump, js);
 	/* Execute out bit of code - we could call 'evaluate' here if
 		we wanted something returned */
 	js->setStackBase(topOfStack-(sizeOfStack-sizeOfSafeStack));
 	try {
-		js->execute("var lets_quit = 0; function quit() { lets_quit = 1; } dump = this.dump;");
+		js->execute(" lets_quit = 0; function quit() { lets_quit = 1; } dump = this.dump;");
 		js->execute("print(\"Interactive mode... Type quit(); to exit, or print(...); to print something, or dump() to dump the symbol table!\");");
 	} catch (CScriptException &e) {
 		std::cout << e.toString() << std::endl;

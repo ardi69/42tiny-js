@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 42TinyJS
  *
  * A fork of TinyJS with the goal to makes a more JavaScript/ECMA compliant engine
@@ -137,8 +137,8 @@ public:
 
 
 
-	static int32_t leapsThruEndOf(int32_t y) { return (y+4)/4 - y/100 + y/400; }
-	static int32_t isLeapYear(int32_t y) { return (!(y % 4) && (y % 100)) || !(y % 400); }
+	static constexpr int32_t leapsThruEndOf(int32_t y) { return (y+4)/4 - y/100 + y/400; }
+	static constexpr int32_t isLeapYear(int32_t y) { return ((!(y % 4) && (y % 100)) || !(y % 400)) ? 1 : 0; }
 	static const int32_t monthLengths[2][12];
 	static const int32_t firstDayOfMonth[2][13];
 private:
@@ -641,7 +641,16 @@ int64_t CScriptTime::setFullYear( int32_t Year, int32_t Month, int32_t Day ) {
 }
 
 
-
+template <int32_t RANGE>
+constexpr void normalize(int32_t &higherUnit, int32_t &lowerUnit) {
+	if (lowerUnit >= RANGE) {
+		higherUnit += lowerUnit / RANGE;
+		lowerUnit %= RANGE;
+	} else if (lowerUnit < 0) {
+		higherUnit += (lowerUnit / RANGE) - 1;
+		lowerUnit = (lowerUnit % RANGE) + RANGE;
+	}
+}
 int64_t CScriptTime::fix()
 {
 	int prevent_endless_loop = 0;
@@ -649,6 +658,18 @@ recalc:
 	int64_t time_of_year;
 	tm_offset = 0;
 	tm_time = -62167219200000;
+/*
+
+	// Normalisierung mit festen Bereichsgrenzen
+	normalize<1000>(tm_sec, tm_msec); // Millisekunden → Sekunden
+	normalize<60>(tm_min, tm_sec);    // Sekunden → Minuten
+	normalize<60>(tm_hour, tm_min);   // Minuten → Stunden
+	normalize<24>(tm_mday, tm_hour);  // Stunden → Tage
+	normalize<12>(tm_year, tm_mon);   // Monate → Jahre
+*/
+
+	tm_time += tm_msec + tm_sec * 1000 + tm_min * 60 * 1000 + tm_hour * 60 * 60 * 1000;
+
 	if(tm_msec >= 1000) {
 		tm_sec += tm_msec / 1000;
 		tm_msec %= 1000;
@@ -694,7 +715,7 @@ recalc:
 
 	//	for(int i=0, isLeap=isLeapYear(tm_year) ; i<tm_mon; ++i)
 	//		days += monthLengths[isLeap][i];
-	days += firstDayOfMonth[isLeapYear(tm_year)][tm_mon];
+	days += firstDayOfMonth[isLeapYear(tm_year)][tm_mon % 12];
 
 	tm_time += int64_t(days) * 24 * 60 * 60 * 1000;
 	tm_wday = (days+6) % 7;
@@ -761,7 +782,7 @@ protected:
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarDate");
 	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
-	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
+//	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
 	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual ~CScriptVarDate();
@@ -1022,7 +1043,7 @@ DATE_PROTOTYPE_GET(getTimezoneOffset)
 // ----------------------------------------------- Register Functions
 extern "C" void _registerDateFunctions(CTinyJS *tinyJS) {
 	CScriptVarPtr var = tinyJS->addNative("function Date(year, month, day, hour, minute, second, millisecond)", scDate, 0, SCRIPTVARLINK_CONSTANT);
-	CScriptVarPtr datePrototype = var->findChild(TINYJS_PROTOTYPE_CLASS);
+	CScriptVarPtr datePrototype = var->findChild("prototype");
 	datePrototype->addChild("valueOf", tinyJS->objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	datePrototype->addChild("toString", tinyJS->objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Date.__constructor__()", scDate_Constructor, 0, SCRIPTVARLINK_CONSTANT);
