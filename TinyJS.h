@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define TINY_JS_VERSION 0.10.0
+#define TINY_JS_VERSION 0.10.1
 
 #include <string>
 #include <vector>
@@ -55,6 +55,7 @@
 #include <iostream>
 #include <sstream>
 #include <functional>
+#include <algorithm>
 
 #include "config.h"
 
@@ -780,7 +781,8 @@ public:
 	};
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
-	CScriptTokenizer(const std::string &Code, const std::string &File="", int Line=0, int Column=0);
+	CScriptTokenizer(const std::string &Code, const std::string &File = "", int Line = 0, int Column = 0);
+	CScriptTokenizer(nullptr_t, const std::string &File = "", int Line = 0, int Column = 0) : CScriptTokenizer("", File, Line, Column) {}
 
 public:
 
@@ -1025,7 +1027,7 @@ public:
 #endif
 		if (persistent) {
 			auto it = symbolTable.find(name);
-			if (it != symbolTable.end()) return CScriptPropertyName({ std::string_view{}, it->second });
+			if (it != symbolTable.end()) return CScriptPropertyName(std::make_pair(std::string_view(), it->second));
 		}
 
 		uint32_t id = static_cast<uint32_t>(symbolNames.size());
@@ -1035,7 +1037,7 @@ public:
 			symbolTable[name] = id;
 		}
 
-		return CScriptPropertyName({ std::string_view{}, id });
+		return CScriptPropertyName(std::make_pair(std::string_view(), id));
 	}
 	static std::string toString(uint32_t id) {
 #ifndef NO_THREADING
@@ -1070,7 +1072,7 @@ private:
 
 // Compile-Time Hash-Funktion (FNV-1a Algorithmus)
 constexpr uint32_t fnv1aHash(const char* str, uint32_t hash = 0x811C9DC5) {
-	return (*str) ? fnv1aHash(str + 1, (hash ^ static_cast<uint32_t>(*str)) * 0x01000193) : hash;
+	return (*str) ? fnv1aHash(str + 1, static_cast<uint32_t>((hash ^ static_cast<uint32_t>(*str)) * static_cast <uint64_t>(0x01000193))) : hash;
 }
 // Compile-Time Hash-Funktion (FNV-1a 64 Bit)
 constexpr uint64_t fnv1aHash64(const char* str, uint64_t hash = 0xcbf29ce484222325) {
@@ -2197,14 +2199,14 @@ public:
 
 	void callFunction(const CFunctionsScopePtr &c) { jsCallback(c, jsUserData); }
 
-	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
+	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args);
 	template<typename T>
 	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
 private:
 	JSCallback jsCallback; ///< Callback for native functions
 	void *jsUserData; ///< user data passed as second argument to native functions
 };
-inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args) { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
+inline define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{}) { return std::shared_ptr<CScriptVarFunctionNative>(new CScriptVarFunctionNative(Context, Callback, Userdata))->init(Name, Args); }
 template<typename T>
 inline define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args) {
 	return newScriptVar(Context, [ClassPtr, ClassFnc](const CFunctionsScopePtr scope, void *data) {
@@ -2223,12 +2225,14 @@ class CScriptVarAccessor : public CScriptVarObject {
 protected:
 	CScriptVarAccessor(CTinyJS* Context) : CScriptVarObject(Context) {}
 	CScriptVarPtr init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData);
-	template<class C> CScriptVarPtr init(C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) {
-		if (getterFnc)
+	template<class C> inline CScriptVarPtr init(C* class_ptr, void(C::* getterFnc)(const CFunctionsScopePtr&, void*), void* getterData, void(C::* setterFnc)(const CFunctionsScopePtr&, void*), void* setterData) {
+		return init([=](const CFunctionsScopePtr &c, void *data) { (class_ptr->*getterFnc)(c, data); }, getterData, [=](const CFunctionsScopePtr &c, void *data) { (class_ptr->*setterFnc)(c, data); }, setterData);
+/*		if (getterFnc)
 			addChild(context->symbol_accessor_get, TinyJS::newScriptVar(context, class_ptr, getterFnc, getterData), 0);
 		if (setterFnc)
 			addChild(context->symbol_accessor_set, TinyJS::newScriptVar(context, class_ptr, setterFnc, setterData), 0);
 		return shared_from_this();
+*/
 	}
 	CScriptVarPtr init(const CScriptVarFunctionPtr& getter, const CScriptVarFunctionPtr& setter);
 	// custom RTTI
@@ -2346,7 +2350,7 @@ public:
 	//}
 	void setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVarPtr &rhs, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool ignoreNotOwned = false, bool addIfNotExist = false);
 	void removeOwnProperty(const CScriptVarPtr &Objc, const CScriptPropertyName &name) {
-		SCRIPTVAR_CHILDS_it it = lower_bound(Objc->Childs.begin(), Objc->Childs.end(), name);
+		SCRIPTVAR_CHILDS_it it = std::lower_bound(Objc->Childs.begin(), Objc->Childs.end(), name);
 		if (it != Objc->Childs.end() && (*it)->getName() == name) {
 			if ((*it)->isConfigurable()) 
 				Objc->Childs.erase(it);
@@ -2575,7 +2579,19 @@ typedef int (*native_require_read_fnc)(const std::string &Fname, std::string &Da
 class CTinyJS {
 public:
 	CTinyJS();
+	CTinyJS(std::initializer_list<std::function<void(CTinyJS *tinyJS)>> registerFuncions);
 	~CTinyJS();
+
+	enum class LOGLEVEL {
+		LOG,
+		ERROR,
+		WARN,
+		INFO,
+		DEBUG,
+	};
+	void setConsole(LOGLEVEL logLevel) { consoleLogLevel = logLevel; }
+	void setConsole(std::ostream &logStream) { consoleOut = &logStream; }
+	void setConsole(std::ostream &logStream, LOGLEVEL logLevel) { consoleOut = &logStream; consoleLogLevel = logLevel; }
 
 	void execute(CScriptTokenizer &Tokenizer);
 	void execute(const std::string &Code, const std::string &File="", int Line=0, int Column=0);
@@ -2849,7 +2865,13 @@ private:
 
 	void native_JSON_parse(const CFunctionsScopePtr &c, void *data);
 
+	void native_console_log(const CFunctionsScopePtr &c, void *data);
+	void native_console_time(const CFunctionsScopePtr &c, void *data);
+	void native_console_timeLog(const CFunctionsScopePtr &c, void *data);
 
+	std::ostream *consoleOut = &std::cout;
+	LOGLEVEL consoleLogLevel = LOGLEVEL::INFO;
+	std::map<std::string, std::chrono::steady_clock::time_point> consoleTime;
 	uint32_t uniqueID;
 	int32_t currentMarkSlot;
 	void *stackBase;

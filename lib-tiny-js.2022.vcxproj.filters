@@ -44,16 +44,10 @@
     <ClInclude Include="pool_allocator.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
-    <ClInclude Include="time_logger.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
     <ClInclude Include="config.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
     <ClInclude Include="TinyJS_Threading.h">
-      <Filter>Headerdateien</Filter>
-    </ClInclude>
-    <ClInclude Include="test.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>

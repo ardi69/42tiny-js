@@ -3047,7 +3047,7 @@ cant_redefine:
 
 TinyJS::CScriptVarLinkPtr CScriptVar::findChild(const CScriptPropertyName &childName) {
 	if(Childs.empty()) return CScriptVarPtr();
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
+	SCRIPTVAR_CHILDS_it it = std::lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it != Childs.end() && (*it)->getName() == childName)
 		return *it;
 	return CScriptVarPtr();
@@ -3170,7 +3170,7 @@ void CScriptVar::keys(KEY_STRING_SET_t &Keys, bool OnlyEnumerable/*=true*/, uint
 /// add & remove
 CScriptVarLinkPtr CScriptVar::addChild(const CScriptPropertyName &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
 	CScriptVarLinkPtr link;
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
+	SCRIPTVAR_CHILDS_it it = std::lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		link = CScriptVarLinkPtr(child?child:constScriptVar(Undefined), childName, linkFlags);
 		link->setOwner(shared_from_this());
@@ -3190,7 +3190,7 @@ CScriptVarLinkPtr CScriptVar::addChildNoDup(const CScriptPropertyName &childName
 	return addChildOrReplace(childName, child, linkFlags);
 }
 CScriptVarLinkPtr CScriptVar::addChildOrReplace(const CScriptPropertyName &childName, const CScriptVarPtr &child, int linkFlags /*= SCRIPTVARLINK_DEFAULT*/) {
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
+	SCRIPTVAR_CHILDS_it it = std::lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it == Childs.end() || (*it)->getName() != childName) {
 		CScriptVarLinkPtr link(child, childName, linkFlags);
 		link->setOwner(shared_from_this());
@@ -3204,7 +3204,7 @@ CScriptVarLinkPtr CScriptVar::addChildOrReplace(const CScriptPropertyName &child
 
 bool CScriptVar::removeLink(CScriptVarLinkPtr &link) {
 	if (!link) return false;
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), link->getName());
+	SCRIPTVAR_CHILDS_it it = std::lower_bound(Childs.begin(), Childs.end(), link->getName());
 	if(it != Childs.end() && (*it) == link) {
 		Childs.erase(it);
 #ifdef _DEBUG
@@ -3217,7 +3217,7 @@ bool CScriptVar::removeLink(CScriptVarLinkPtr &link) {
 }
 
 bool CScriptVar::removeChild(const CScriptPropertyName &childName) {
-	SCRIPTVAR_CHILDS_it it = lower_bound(Childs.begin(), Childs.end(), childName);
+	SCRIPTVAR_CHILDS_it it = std::lower_bound(Childs.begin(), Childs.end(), childName);
 	if(it != Childs.end() && (*it)->getName() == childName) {
 		Childs.erase(it);
 #ifdef _DEBUG
@@ -5310,10 +5310,24 @@ CTinyJS::CTinyJS() {
 	root->addChild("JSON", newScriptVar(Object), SCRIPTVARLINK_BUILDINDEFAULT);
 	addNative("function JSON.parse(text, reviver)", this, &CTinyJS::native_JSON_parse);
 
+	root->addChild("console", newScriptVar(Object), SCRIPTVARLINK_BUILDINDEFAULT);
+	addNative("function console.log(...msg)", this, &CTinyJS::native_console_log, (void *)LOGLEVEL::LOG);
+	addNative("function console.error(...msg)", this, &CTinyJS::native_console_log, (void *)LOGLEVEL::ERROR);
+	addNative("function console.warn(...msg)", this, &CTinyJS::native_console_log, (void *)LOGLEVEL::WARN);
+	addNative("function console.info(...msg)", this, &CTinyJS::native_console_log, (void *)LOGLEVEL::INFO);
+	addNative("function console.debug(...msg)", this, &CTinyJS::native_console_log, (void *)LOGLEVEL::DEBUG);
+	addNative("function console.time()", this, &CTinyJS::native_console_time);
+	addNative("function console.timeLog(name, ...rest)", this, &CTinyJS::native_console_timeLog);
+	addNative("function console.timeEnd(name, ...rest)", this, &CTinyJS::native_console_timeLog, (void *)1);
+
 	_registerFunctions(this);
 	_registerStringFunctions(this);
 	_registerMathFunctions(this);
 	_registerDateFunctions(this);
+}
+
+CTinyJS::CTinyJS(std::initializer_list<std::function<void(CTinyJS *tinyJS)>> registerFuncions) : CTinyJS() {
+	for (auto &fnc : registerFuncions) fnc(this);
 }
 
 CTinyJS::~CTinyJS() {
@@ -5381,31 +5395,31 @@ CScriptVarLinkPtr CTinyJS::evaluateComplex(CScriptTokenizer &Tokenizer) {
 	try {
 		do {
 			execute_statement(execute);
-			while (t->tk==';') t->match(';'); // skip empty statements
-		} while (t->tk!=LEX_EOF);
+			while (t->tk == ';') t->match(';'); // skip empty statements
+		} while (t->tk != LEX_EOF);
 	} catch (...) {
 		haveTry = false;
-		t=0; // clean up Tokenizer
+		t = 0; // clean up Tokenizer
 		throw; //
 	}
-	t=0;
+	t = 0;
 	ClearUnreferedVars(execute.value);
-	if (_DEBUG) {
-		uint32_t UniqueID = allocUniqueID();
-		bool found = false;
-		setTemporaryID_recursive(UniqueID);
-		if (execute.value) execute.value->setTemporaryMark_recursive(UniqueID);
-		for (CScriptVar *p = first; p; p = p->next) {
-			if (p->getTemporaryMark() != UniqueID) {
-				if (!found) {
-					found = true;
-					printf("found unreffereced vars:\n");
-				}
-				printf("%s %p\n", p->getVarType().c_str(), p);
+#ifdef _DEBUG
+	uint32_t UniqueID = allocUniqueID();
+	bool found = false;
+	setTemporaryID_recursive(UniqueID);
+	if (execute.value) execute.value->setTemporaryMark_recursive(UniqueID);
+	for (CScriptVar *p = first; p; p = p->next) {
+		if (p->getTemporaryMark() != UniqueID) {
+			if (!found) {
+				found = true;
+				printf("found unreffereced vars:\n");
 			}
+			printf("%s %p\n", p->getVarType().c_str(), p);
 		}
-		freeUniqueID();
 	}
+	freeUniqueID();
+#endif
 
 	if (execute.value)
 		return CScriptVarLinkPtr(execute.value);
@@ -5490,7 +5504,10 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 
 	// If the function has a name, register it in the scope
 	if (Fnc->name.size()) functionRoot->addChild(Fnc->name, Function);
-	functionRoot->addChild("new.target", newThis ? Function : constUndefined);
+	if(newThis)
+		functionRoot->addChild("new.target", Function);
+	else
+		functionRoot->addChild("new.target", constUndefined);
 
 	// If the function is not an arrow function, "this" must be explicitly set
 	bool isArrow = Fnc->isArrowFunction();
@@ -5559,7 +5576,8 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 			}
 
 		} else if (restVar) { // If it's a "rest" parameter
-			restVar->addChild(arguments_idx - length_proto, Arguments[arguments_idx]);
+			if (arguments_idx < Arguments.size())
+				restVar->addChild(arguments_idx - length_proto, Arguments[arguments_idx]);
 			if ((arguments_idx + 1) == length) {
 				functionRoot->findChild(Fnc->arguments[length_proto].first.String())->setVarPtr(restVar);
 			}
@@ -6377,7 +6395,7 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 				if (!data->stringsArray) {
 					data->stringsArray = newScriptVar(Array);
 					CScriptVarPtr raw = data->stringsArray->addChild("raw", newScriptVar(Array));
-					for (auto it = 0; it < data->raw.size(); ++it) {
+					for (uint32_t it = 0; it < data->raw.size(); ++it) {
 						CScriptPropertyName idxString(it);
 						std::string str = data->raw[it];
 						raw->addChild(idxString, newScriptVar(str));
@@ -7806,6 +7824,42 @@ void CTinyJS::native_JSON_parse(const CFunctionsScopePtr &c, void *data) {
 
 	if(returnVar)
 		c->setReturnVar(returnVar);
+}
+
+void CTinyJS::native_console_log(const CFunctionsScopePtr &c, void *data) {
+	if (consoleLogLevel <= (LOGLEVEL)(ptrdiff_t)data)
+		*consoleOut << c->getArgument("msg")->toString() << std::endl;
+}
+void CTinyJS::native_console_time(const CFunctionsScopePtr &c, void *data) {
+	std::string name = "default";
+	if (c->getArgumentsLength()) name = c->getArgument(0)->toString();
+	consoleTime[name] = std::chrono::steady_clock::now();
+}
+void CTinyJS::native_console_timeLog(const CFunctionsScopePtr &c, void *data) {
+	std::string name = "default";
+	auto args = c->getArgumentsLength();
+	if (args) name = c->getArgument("name")->toString();
+	auto f = consoleTime.find(name);// = std::chrono::steady_clock::now();
+	if (f != consoleTime.end()) {
+		auto time = std::chrono::steady_clock::now() - f->second;
+		auto sec = std::chrono::duration_cast<std::chrono::seconds>(time).count();
+		auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(time % std::chrono::seconds(1)).count();
+		auto usec = std::chrono::duration_cast<std::chrono::microseconds>(time % std::chrono::milliseconds(1)).count();
+		*consoleOut << name << ": ";
+		if (!msec && !sec && !usec) {
+			*consoleOut << "0 ms";
+		}
+		if (sec) *consoleOut << sec << " s ";
+		if (msec) *consoleOut << msec << " ms ";
+		if (usec) *consoleOut << usec << reinterpret_cast < const char *>(u8" µs ");
+		if (data) {
+			*consoleOut << "- timer ended ";
+			consoleTime.erase(f);
+		}
+	} else
+		*consoleOut << "Timer \"" << name << "\" doesn't exist ";
+	if (args > 1) *consoleOut << c->getArgument("rest")->toString();
+	*consoleOut << std::endl;
 }
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {

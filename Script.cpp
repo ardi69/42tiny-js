@@ -42,8 +42,6 @@
  */
 
 #include "TinyJS.h"
-#include <assert.h>
-#include <stdio.h>
 #include <iostream>
 using namespace TinyJS;
 
@@ -61,28 +59,18 @@ char *topOfStack;
 #define sizeOfSafeStack 50*1024 /* safety area */
 
 
-class end { // this is for VisualStudio debugging stuff. It's holds the console open up to ENTER is pressed
-public:
-	end(){}
-	~end() {
-#ifdef _WIN32
-			system("pause");
-#else
-			printf("press Enter (end)");
-			getchar();
-#endif
-	}
-} end;
+void registerFnc(CTinyJS *js) {
+	js->addNative("function print(...text)", &js_print, 0);
+//	js->addNative("function console.log(text)", &js_print, 0);
+//  js->addNative("function dump()", &js_dump, js);
+}
 
-int main(int , char **)
-{
+
+int main(int , char **) {
 	char dummy;
 	topOfStack = &dummy;
-	CTinyJS *js = new CTinyJS();
+	CTinyJS *js = new CTinyJS{ registerFnc };
 	/* Add a native function */
-	js->addNative("function print(...text)", &js_print, 0);
-	js->addNative("function console.log(text)", &js_print, 0);
-	//  js->addNative("function dump()", &js_dump, js);
 	/* Execute out bit of code - we could call 'evaluate' here if
 		we wanted something returned */
 	js->setStackBase(topOfStack-(sizeOfStack-sizeOfSafeStack));
@@ -103,15 +91,5 @@ int main(int , char **)
 		}
 	}
 	delete js;
-#ifdef _WIN32
-#ifdef _DEBUG
-//  _CrtDumpMemoryLeaks();
-/*
-	no dump momoryleaks here
-	_CrtSetDbgFlag(..) force dump memoryleake after call of all global deconstructors
-*/
-	_CrtSetDbgFlag ( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
-#endif
-#endif
 	return 0;
 }

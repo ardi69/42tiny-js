@@ -36,9 +36,7 @@
 #include <string>
 #include "config.h"
 #ifndef NO_THREADING
-#	if SPINLOCK_IN_POOL_ALLOCATOR
-#		include "TinyJS_Threading.h"
-#	endif
+#	include "TinyJS_Threading.h"
 #endif
 /************************************************************************
  * TinyJS must many many times allocates and frees objects
@@ -48,41 +46,29 @@
  * from the heap.
  ************************************************************************/ 
 
-//#define DEBUG_POOL_ALLOCATOR
-//#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
-#if !defined(DEBUG_POOL_ALLOCATOR) && (defined(_DEBUG) || defined(LOG_POOL_ALLOCATOR_MEMORY_USAGE))
-#	define DEBUG_POOL_ALLOCATOR
-#endif
-
-//**************************************************************************************
+namespace TinyJS {
 
 namespace fixed_size_allocator {
-#ifdef DEBUG_POOL_ALLOCATOR
-	void *alloc(size_t size, const char* for_class);
-#else
-	void *alloc(size_t size);
-#endif
-	void free(void *p, size_t size);
 
-}
+void *alloc(size_t size);
+void free(void *p, size_t size);
 
-template<typename T, int num_objects=64>
+} /* namespace fixed_size_allocator */
+
+template<typename T, int num_objects = 64>
 class fixed_size_object {
 public:
-	static void* operator new(size_t size) {
-#ifdef DEBUG_POOL_ALLOCATOR
-		return fixed_size_allocator::alloc(size, typeid(T).name());
-#else
+	static void *operator new(size_t size) {
 		return fixed_size_allocator::alloc(size);
-#endif
 	}
-	static void* operator new(size_t size, void* p) {
+	static void *operator new(size_t size, void *p) {
 		return p;
 	}
-	static void operator delete(void* p, size_t size) {
+	static void operator delete(void *p, size_t size) {
 		fixed_size_allocator::free(p, size);
 	}
 private:
 };
 
+} /* namespace TinyJS */
 #endif // pool_allocator_h__

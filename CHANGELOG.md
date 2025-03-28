@@ -149,3 +149,20 @@ Version 0.10.0 (2025-03-26 10:39)
 * added Array.prototype.reduce
 * added Array.prototype.reduceRight
 * removed unneeded files
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.1 (2025-03-28 09:00)
+=================================
+
+*updated README.md
+*changed MSVC 2017 c++ standard to c++17
+*changed MSVC 2020 c++ standard to c++20
+*fixed   compilation issues with MSVC 2017 and 2022
+*removed debugging code from the pool allocato
+*updated improved readability of run_tests.cpp and Script.cpp
+*updated time_logger.h to use std::chrono::high_resolution_clock
+*added   console.log, console.debug, console.info, console.warn and console.error
+*added   CTinyJS::setConsole to set log level and output stream
+*added   console.time, console.timeLog, console.timeEnd

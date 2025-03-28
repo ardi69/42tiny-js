@@ -41,20 +41,6 @@
 //#define NO_POOL_ALLOCATOR
 
 /*
- * for debugging-stuff you can define DEBUG_POOL_ALLOCATOR
- * if a memory-leak detected the allocator usage is printed to stderr
- */
-//#define DEBUG_POOL_ALLOCATOR
-
-/*
- * with define LOG_POOL_ALLOCATOR_MEMORY_USAGE
- * the allocator usage is always printed to stderr
- */
-//#define LOG_POOL_ALLOCATOR_MEMORY_USAGE
-
-// NOTE: _DEBUG or LOG_POOL_ALLOCATOR_MEMORY_USAGE implies DEBUG_POOL_ALLOCATOR
-
-/*
  * to increasing of speed a spin lock is used, if available
  * if c++11 <atomic> not available or NO_SPINLOCK_IN_POOL_ALLOCATOR is defined
  * a normal mutex lock is used or noting if NO_THREADING defined

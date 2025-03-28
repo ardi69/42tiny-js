@@ -30,79 +30,60 @@
 
 #ifndef time_logger_h__
 #define time_logger_h__
-#if defined(WITH_TIME_LOGGER)
+#if WITH_TIME_LOGGER
 
-#include <stdint.h>
-#include <stdio.h>
+#include <cstdint>
+#include <iostream>
+#include <iomanip>
 #include <string>
-#ifdef _WIN32
-#include <Windows.h>
-#else
-#include <time.h>
-#endif
+#include <chrono>
+
 class TimeLogger {
 public:
-	TimeLogger(const char *Name, bool Started=false, const char *extName=0) 
+	TimeLogger(const char *Name, bool Start=false, const char *extName=0) 
 		: 
-	name(Name), start_time(gettime()), sum_time(0), calls(0), started(Started) {
-		if(extName) {
-			name+="[";
-			name+=extName;
-			name+="]";
-		}
+	name(Name), start_time(std::chrono::high_resolution_clock::now()), sum_time(0), calls(0) {
+		if (Start) start_time = std::chrono::high_resolution_clock::now();
+		if(extName) name = name + "[" + extName + "]";
 	}
-	TimeLogger(const char *Name, const char *extName, bool Started=false) 
+	TimeLogger(const char *Name, const char *extName, bool Start=false) 
 		: 
-	name(Name), start_time(gettime()), sum_time(0), calls(0), started(Started) {
-		if(extName) {
-			name+="[";
-			name+=extName;
-			name+="]";
-		}
+	name(Name), start_time(), sum_time(0), calls(0) {
+		if (Start) start_time = std::chrono::high_resolution_clock::now();
+		if (extName) name = name + "[" + extName + "]";
 	}
 	~TimeLogger() {
 		printLog();
-//		getchar();
 	}
 	void startTimer() {
-		start_time = gettime();
-		started = true;
+		start_time = std::chrono::high_resolution_clock::now();
 	}
 	void stopTimer() {
-		if(!started) return;
-		sum_time += gettime()-start_time;
+		if(!start_time.time_since_epoch().count()) return;
+		sum_time += std::chrono::high_resolution_clock::now() - start_time;
 		calls++;
-		started = false;
+		start_time = std::chrono::high_resolution_clock::time_point();
 	}
 	void printLog() {
-		if(started) stopTimer();
-		if(calls == 1)
-			printf("Timer( %s ) = %d,%06d sec \n",
-			name.c_str(), (int)(sum_time / 1000000LL), (int)(sum_time % 1000000LL));
-		else if(calls>1)
-		printf("Timer( %s ) = %d,%06d sec (called %d times) -> %.d microsec per call\n",
-		name.c_str(), (int)(sum_time / 1000000LL), (int)(sum_time % 1000000LL),
-		calls, (int)(sum_time/calls));
-		calls = 0; sum_time = 0;
+		if(start_time.time_since_epoch().count()) stopTimer();
+		if (calls >= 1) {
+			std::cout << "Timer(" << name << ") = "
+				<< std::chrono::duration_cast<std::chrono::seconds>(sum_time).count() << "."
+				<< std::setfill('0') << std::setw(6) << std::chrono::duration_cast<std::chrono::microseconds>(sum_time % std::chrono::seconds(1)).count() << std::setw(1)
+				<< " sec";
+			if (calls > 1)
+				std::cout << " (called " << calls << "times) -> " << std::chrono::duration_cast<std::chrono::microseconds>(sum_time % std::chrono::seconds(1)).count() << " microsec per call";
+			std::cout << std::endl;
+		}
+		calls = 0; sum_time = sum_time.zero();
 	}
 private:
-//	static int64_t frequenzy = 0;
 	std::string name;
-	int64_t start_time, sum_time;
+	std::chrono::high_resolution_clock::time_point start_time;
+	std::chrono::high_resolution_clock::duration sum_time;
 	uint32_t calls;
-	bool started;
-	int64_t gettime() {	// set out to time in millisec
-#ifdef _WIN32
-		static LARGE_INTEGER fr = {0};
-		LARGE_INTEGER li;
-		if(fr.QuadPart == 0) QueryPerformanceFrequency(&fr);
-		QueryPerformanceCounter(&li);
-		return (li.QuadPart * 1000000LL) / fr.QuadPart;
-#else
-		return (clock() * 1000000LL) / CLOCKS_PER_SEC;
-#endif
-	};
 };
+
 class _TimeLoggerHelper {
 public:
 	_TimeLoggerHelper(TimeLogger &Tl) : tl(Tl) { tl.startTimer(); }
