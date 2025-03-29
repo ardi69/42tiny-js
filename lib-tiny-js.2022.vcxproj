@@ -138,7 +138,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="pool_allocator.cpp" />
+    <ClCompile Include="TinyJS_PoolAllocator.cpp" />
     <ClCompile Include="TinyJS.cpp" />
     <ClCompile Include="TinyJS_DateFunctions.cpp" />
     <ClCompile Include="TinyJS_Functions.cpp" />
@@ -148,7 +148,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config.h" />
-    <ClInclude Include="pool_allocator.h" />
+    <ClInclude Include="TinyJS_PoolAllocator.h" />
     <ClInclude Include="TinyJS.h" />
     <ClInclude Include="TinyJS_Threading.h" />
   </ItemGroup>

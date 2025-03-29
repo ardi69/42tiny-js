@@ -156,21 +156,23 @@ Version 0.10.0 (2025-03-26 10:39)
 Version 0.10.1 (2025-03-28 09:00)
 =================================
 
-*updated README.md
-*changed MSVC 2017 c++ standard to c++17
-*changed MSVC 2020 c++ standard to c++20
-*fixed   compilation issues with MSVC 2017 and 2022
-*removed debugging code from the pool allocato
-*updated improved readability of run_tests.cpp and Script.cpp
-*updated time_logger.h to use std::chrono::high_resolution_clock
-*added   console.log, console.debug, console.info, console.warn and console.error
-*added   CTinyJS::setConsole to set log level and output stream
-*added   console.time, console.timeLog, console.timeEnd
+* updated README.md
+* changed MSVC 2017 c++ standard to c++17
+* changed MSVC 2020 c++ standard to c++20
+* fixed   compilation issues with MSVC 2017 and 2022
+* removed debugging code from the pool allocato
+* updated improved readability of run_tests.cpp and Script.cpp
+* updated time_logger.h to use std::chrono::high_resolution_clock
+* added   console.log, console.debug, console.info, console.warn and console.error
+* added   CTinyJS::setConsole to set log level and output stream
+* added   console.time, console.timeLog, console.timeEnd
 
 -------------------------------------------------------------------------------
 
 
-Version 0.10.2 (2025-03-29 19:57)
+Version 0.10.2 (2025-03-29 20:18)
 =================================
 
-*added overlodaed versions of addNative to register standard functions like int(int,int)
+* added overlodaed versions of addNative to register standard functions like int(int,int)
+* renamed pool_allocator.h/.cpp to TinyJS_PoolAllocator.h/.cpp
+renamed pool_allocator.h/.cpp to TinyJS_PoolAllocator.h/.cpp

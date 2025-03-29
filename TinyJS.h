@@ -14,7 +14,7 @@
  *
  * Authored / Changed By Armin Diedering <armin@diedering.de>
  *
- * Copyright (C) 2010-2015 ardisoft
+ * Copyright (C) 2010-2025 ardisoft
  *
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -63,7 +63,7 @@
 	template<typename T, int num_objects=64>
 	class fixed_size_object {};
 #else
-#	include "pool_allocator.h"
+#	include "TinyJS_PoolAllocator.h"
 #endif
 #include "TinyJS_Threading.h"
 
