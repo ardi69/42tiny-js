@@ -166,3 +166,11 @@ Version 0.10.1 (2025-03-28 09:00)
 *added   console.log, console.debug, console.info, console.warn and console.error
 *added   CTinyJS::setConsole to set log level and output stream
 *added   console.time, console.timeLog, console.timeEnd
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.2 (2025-03-29 19:57)
+=================================
+
+*added overlodaed versions of addNative to register standard functions like int(int,int)

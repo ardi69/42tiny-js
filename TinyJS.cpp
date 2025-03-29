@@ -4896,13 +4896,13 @@ CScriptVarPtr CScriptVarScopeFnc::getParameter(const std::string_view &name) {
 	return getArgument(name);
 }
 
-CScriptVarPtr CScriptVarScopeFnc::getParameter(int Idx) {
+CScriptVarPtr CScriptVarScopeFnc::getParameter(uint32_t Idx) {
 	return getArgument(Idx);
 }
 CScriptVarPtr CScriptVarScopeFnc::getArgument(const std::string_view &name) {
 	return findChildOrCreate(name);
 }
-CScriptVarPtr CScriptVarScopeFnc::getArgument(int Idx) {
+CScriptVarPtr CScriptVarScopeFnc::getArgument(uint32_t Idx) {
 	CScriptVarLinkPtr arguments = findChildOrCreate("arguments");
 	if(arguments) arguments = arguments->getVarPtr()->findChild(Idx);
 	return arguments ? arguments->getVarPtr() : constScriptVar(Undefined);
@@ -5460,7 +5460,8 @@ TinyJS::CScriptVarPtr CTinyJS::addNative_ParseFuncDesc(const std::string &funcDe
 	return base;
 }
 
-CScriptVarFunctionNativePtr CTinyJS::addNative(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
+template<>
+CScriptVarFunctionNativePtr CTinyJS::addNative<void, const CFunctionsScopePtr &, void *>(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags) {
 	std::string name;
 	FUNCTION_ARGUMENTS_VECT args;
 	CScriptVarPtr ret, base = addNative_ParseFuncDesc(funcDesc, name, args);

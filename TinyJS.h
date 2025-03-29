@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define TINY_JS_VERSION 0.10.1
+#define TINY_JS_VERSION 0.10.2
 
 #include <string>
 #include <vector>
@@ -2322,9 +2322,9 @@ public:
 
 	#define DEPRECATED_getParameter DEPRECATED("getParameter is deprecated use getArgument instead")
 	DEPRECATED_getParameter CScriptVarPtr getParameter(const std::string_view &name);
-	DEPRECATED_getParameter CScriptVarPtr getParameter(int Idx);
+	DEPRECATED_getParameter CScriptVarPtr getParameter(uint32_t Idx);
 	CScriptVarPtr getArgument(const std::string_view &name); ///< If this is a function, get the parameter with the given name (for use by native functions)
-	CScriptVarPtr getArgument(int Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
+	CScriptVarPtr getArgument(uint32_t Idx); ///< If this is a function, get the parameter with the given index (for use by native functions)
 	DEPRECATED("getParameterLength is deprecated use getArgumentsLength instead") int getParameterLength(); ///< If this is a function, get the count of parameters
 	uint32_t getArgumentsLength(); ///< If this is a function, get the count of parameters
 
@@ -2640,12 +2640,53 @@ public:
 	*/
 private:
 	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, FUNCTION_ARGUMENTS_VECT &args);
+
+	template <typename T>
+	T convertFromJS(const CScriptVarPtr &var) { static_assert(false, "convertFromJS<type> für type nicht definiert"); }
+	template <>	int32_t convertFromJS<int32_t>(const CScriptVarPtr &var) { return var->toNumber().toInt32(); }
+	template <>	uint32_t convertFromJS<uint32_t>(const CScriptVarPtr &var) { return var->toNumber().toUInt32(); }
+	template <>	double convertFromJS<double>(const CScriptVarPtr &var) { return var->toNumber().toDouble(); }
+	template <>	std::string convertFromJS<std::string>(const CScriptVarPtr &var) { return var->toString(); }
+
+	template <typename T>
+	CScriptVarPtr convertToJS(const T &value) { return newScriptVar(value); }
+
+	template <typename Func, typename Tuple, std::size_t... I>
+	auto callWithTuple(Func func, Tuple &args, std::index_sequence<I...>) {
+		return func(std::get<I>(args)...);
+	}
+	template <typename... Args, size_t... I>
+	std::tuple<Args...> getArgsTuple(const CFunctionsScopePtr &c, std::index_sequence<I...>) {
+		return { convertFromJS<Args>(c->getArgument((uint32_t)I))... };
+	}
 public:
-	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, JSCallback ptr, void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT);
+	template <typename Ret, typename... Args>
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, std::function<Ret(Args...)> ptr, void *userdata = 0, int LinkFlags = SCRIPTVARLINK_BUILDINDEFAULT) {
+		return addNative(funcDesc, JSCallback([ptr, this](const CFunctionsScopePtr &c, void *) {
+			auto I = std::index_sequence_for<Args...>{};
+			auto args = getArgsTuple<Args...>(c, I);
+			if constexpr (std::is_same_v<Ret, void>) {
+				callWithTuple(ptr, args, I);
+			} else {
+				c->setReturnVar(convertToJS(callWithTuple(ptr, args, I)));
+			}
+			}), 
+			userdata, LinkFlags);
+	}
+
+	template <>
+	CScriptVarFunctionNativePtr addNative<void, const CFunctionsScopePtr &, void *>(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags);
+
+	template <typename Ret, typename... Args>
+	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, Ret(*fnc)(Args...), void *userdata = 0, int LinkFlags = SCRIPTVARLINK_BUILDINDEFAULT) {
+		return addNative(funcDesc, std::function<Ret(Args...)>(fnc), userdata, LinkFlags);
+	}
+
 	template <typename C>
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, C *class_ptr, void(C::*class_fnc)(const CFunctionsScopePtr &, void *), void *userdata=0, int LinkFlags=SCRIPTVARLINK_BUILDINDEFAULT) {
-		return addNative(funcDesc, [class_ptr, class_fnc](const CFunctionsScopePtr &scope, void *data) { (class_ptr->*class_fnc)(scope, data); }, userdata, LinkFlags);
+		return addNative(funcDesc, JSCallback([class_ptr, class_fnc](const CFunctionsScopePtr &scope, void *data) { (class_ptr->*class_fnc)(scope, data); }), userdata, LinkFlags);
 	}
+
 	/// Send all variables to stdout
 	void trace();
 
