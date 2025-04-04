@@ -179,7 +179,8 @@ Version 0.10.2 (2025-03-29 20:18)
 -------------------------------------------------------------------------------
 
 
-Version 0.10.3 (2025-04-04 09:37)
+Version 0.10.3 (2025-04-04 10:16)
 =================================
 
 * updated Date() functions
+* removed extra constructor handling with setConstructor/getConstructor, as new.target has been supported since version 0.10.0

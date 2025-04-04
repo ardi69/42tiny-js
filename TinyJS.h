@@ -2127,15 +2127,10 @@ public:
 	virtual std::string getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) override;
 	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) override;
 
-	virtual void setTemporaryMark_recursive(uint32_t ID) override;
-
 	const virtual std::shared_ptr<CScriptTokenDataFnc> getFunctionData() const;
 	void setFunctionData(const std::shared_ptr<CScriptTokenDataFnc> &Data);
-	void setConstructor(const CScriptVarFunctionPtr &Constructor) { constructor = Constructor; };
-	const CScriptVarFunctionPtr &getConstructor() { return constructor; }
 private:
 	std::shared_ptr<CScriptTokenDataFnc> data;
-	CScriptVarFunctionPtr constructor;
 
 	friend define_newScriptVar_Fnc(Function, CTinyJS *Context, const std::shared_ptr<CScriptTokenDataFnc>&);
 };

@@ -4761,11 +4761,6 @@ CScriptVarPtr CScriptVarFunction::toString_CallBack(CScriptResult &execute, int 
 	return newScriptVar(((CScriptVar*)this)->getParsableString());
 }
 
-void CScriptVarFunction::setTemporaryMark_recursive(uint32_t ID) {
-	CScriptVarObject::setTemporaryMark_recursive(ID);
-	if (constructor) constructor->setTemporaryMark_recursive(ID);
-}
-
 const std::shared_ptr<CScriptTokenDataFnc> CScriptVarFunction::getFunctionData() const { return data; }
 
 void CScriptVarFunction::setFunctionData(const std::shared_ptr<CScriptTokenDataFnc> &Data) {
@@ -5137,7 +5132,6 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Array(arrayLength)", this, &CTinyJS::native_Array, 0, SCRIPTVARLINK_CONSTANT);
 	arrayPrototype = link = var->findChild("prototype");
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Array, (void *)1, "Array", CScriptTokenizer::tokenizeFunctionArguments("(arrayLength)")));
 
 	arrayPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	arrayPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -5149,7 +5143,6 @@ CTinyJS::CTinyJS() {
 	var = addNative("function String(thing)", this, &CTinyJS::native_String, 0, SCRIPTVARLINK_CONSTANT);
 	stringPrototype = link= var->findChild("prototype");
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_String, (void*)1, "String", CScriptTokenizer::tokenizeFunctionArguments("(thing)")));
 	stringPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	stringPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
 	stringPrototype->addChild(symbol_iterator, arrayPrototype___iterator__, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -5171,7 +5164,6 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Number(value)", this, &CTinyJS::native_Number, 0, SCRIPTVARLINK_CONSTANT);
 	numberPrototype = link =var->findChild("prototype");
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Number, (void*)1, "Number", CScriptTokenizer::tokenizeFunctionArguments("(value)")));
 
 	var->addChild("EPSILON", newScriptVarNumber(this, std::numeric_limits<double>::epsilon()), SCRIPTVARLINK_CONSTANT);
 	var->addChild("MAX_VALUE", newScriptVarNumber(this, std::numeric_limits<double>::max()), SCRIPTVARLINK_CONSTANT);
@@ -5195,7 +5187,6 @@ CTinyJS::CTinyJS() {
 	var = addNative("function Boolean()", this, &CTinyJS::native_Boolean, 0, SCRIPTVARLINK_CONSTANT);
 	booleanPrototype = link = var->findChild("prototype");
 	link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setConstructor(TinyJS::newScriptVar(this, this, &CTinyJS::native_Boolean, (void*)1, "Boolean", CScriptTokenizer::tokenizeFunctionArguments("(value)")));
 
 	booleanPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
 	booleanPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
@@ -6234,9 +6225,6 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 						prototype = Constructor->addChild("prototype", newScriptVar(Object), SCRIPTVARLINK_WRITABLE);
 					}
 					CScriptVarPtr obj(newScriptVar(Object, prototype));
-					CScriptVarFunctionPtr __constructor__ = Constructor->getConstructor();
-					if(__constructor__)
-						Constructor = __constructor__;
 					if (stackBase) {
 						int dummy = 0;
 						if(&dummy < stackBase)
@@ -7488,11 +7476,12 @@ void CTinyJS::native_Object_prototype_toString(const CFunctionsScopePtr &c, void
 //////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Array(const CFunctionsScopePtr &c, void *data) {
+	bool asConstructor = CScriptVarFunctionPtr(c->findChild("new.target")).operator bool();
 	CScriptVarPtr returnVar = c->newScriptVar(Array);
 	c->setReturnVar(returnVar);
 	uint32_t args = c->getArgumentsLength();
 	CScriptVarPtr Argument_0_Var = c->getArgument(0);
-	if(data!=0 && args == 1 && Argument_0_Var->isNumber()) {
+	if(asConstructor && args == 1 && Argument_0_Var->isNumber()) {
 		CNumber Argument_0 = Argument_0_Var->toNumber();
 		if(Argument_0.isUInt32())
 			c->setProperty(returnVar, "length", newScriptVar(Argument_0.toUInt32()));
@@ -7509,12 +7498,13 @@ void CTinyJS::native_Array___iterrator__(const CFunctionsScopePtr &c, void *data
 //////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_String(const CFunctionsScopePtr &c, void *data) {
+	bool asConstructor = CScriptVarFunctionPtr(c->findChild("new.target")).operator bool();
 	CScriptVarPtr arg;
 	if(c->getArgumentsLength()==0)
 		arg = newScriptVar("");
 	else
 		arg = newScriptVar(c->getArgument(0)->toString());
-	if(data)
+	if(asConstructor)
 		c->setReturnVar(arg->toObject());
 	else
 		c->setReturnVar(arg);
@@ -7551,12 +7541,13 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 //////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Number(const CFunctionsScopePtr &c, void *data) {
+	bool asConstructor = CScriptVarFunctionPtr(c->findChild("new.target")).operator bool();
 	CScriptVarPtr arg;
 	if(c->getArgumentsLength()==0)
 		arg = newScriptVar(0);
 	else
 		arg = newScriptVar(c->getArgument(0)->toNumber());
-	if(data)
+	if(asConstructor)
 		c->setReturnVar(arg->toObject());
 	else
 		c->setReturnVar(arg);
@@ -7568,12 +7559,13 @@ void CTinyJS::native_Number(const CFunctionsScopePtr &c, void *data) {
 //////////////////////////////////////////////////////////////////////////
 
 void CTinyJS::native_Boolean(const CFunctionsScopePtr &c, void *data) {
+	bool asConstructor = CScriptVarFunctionPtr(c->findChild("new.target")).operator bool();
 	CScriptVarPtr arg;
 	if(c->getArgumentsLength()==0)
 		arg = constScriptVar(false);
 	else
 		arg = constScriptVar(c->getArgument(0)->toBoolean());
-	if(data)
+	if(asConstructor)
 		c->setReturnVar(arg->toObject());
 	else
 		c->setReturnVar(arg);
