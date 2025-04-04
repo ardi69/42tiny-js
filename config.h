@@ -101,20 +101,6 @@
  */
 //#define HAVE_CUSTOM_THREADING_IMPL
 
-
-
-/* for Date we need the time in a resolution of 1 ms
- * on Windows the function "GetSystemTimeAsFileTime" is used
- * on non-Windows (WIN32 is not defined) it is tried to use "gettimeofday"
- * unset HAVE_GETTIMEOFDAY to use a simple time()*1000
- * or define NO_GETTIMEOFDAY
- */
-#define HAVE_GETTIMEOFDAY
-#ifdef NO_GETTIMEOFDAY
-#undef HAVE_GETTIMEOFDAY
-#endif
-
-
 ////////////////////////////////////////////////
 // DO NOT MAKE CHANGES OF THE FOLLOWING STUFF //
 ////////////////////////////////////////////////

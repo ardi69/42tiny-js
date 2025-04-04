@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define TINY_JS_VERSION 0.10.2
+#define TINY_JS_VERSION 0.10.3
 
 #include <string>
 #include <vector>
@@ -2583,11 +2583,11 @@ public:
 	~CTinyJS();
 
 	enum class LOGLEVEL {
-		LOG,
-		ERROR,
-		WARN,
-		INFO,
 		DEBUG,
+		INFO,
+		WARN,
+		ERROR,
+		LOG,
 	};
 	void setConsole(LOGLEVEL logLevel) { consoleLogLevel = logLevel; }
 	void setConsole(std::ostream &logStream) { consoleOut = &logStream; }

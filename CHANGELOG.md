@@ -175,4 +175,11 @@ Version 0.10.2 (2025-03-29 20:18)
 
 * added overlodaed versions of addNative to register standard functions like int(int,int)
 * renamed pool_allocator.h/.cpp to TinyJS_PoolAllocator.h/.cpp
-renamed pool_allocator.h/.cpp to TinyJS_PoolAllocator.h/.cpp
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.3 (2025-04-04 09:37)
+=================================
+
+* updated Date() functions
