@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
 		int passed = 0;
 		std::string mask[] = { "tests/test", "tests/42tests/test" };
 		TimeLoggerCreate(Tests, true);
-		for(int i=0; i<100;++i)
+		//for(int i=0; i<100;++i)
 		for (int js42 = 0; js42 < 2; js42++) {
 			for (int test_num = 1; test_num < 1000; ++test_num) {
 				std::string num = std::to_string(test_num);

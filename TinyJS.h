@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define TINY_JS_VERSION 0.10.3
+#define TINY_JS_VERSION 0.10.4
 
 #include <string>
 #include <vector>
@@ -732,7 +732,7 @@ public:
 
 	// ACTUAL_CHANGE
 	static std::string getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString="", const std::string &Indent="");
-	static std::string getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString="", const std::string &Indent="");
+	static std::string getParsableString(const TOKEN_VECT_it &&Begin, const TOKEN_VECT_it &&End, const std::string &IndentString="", const std::string &Indent="");
 	static std::string getTokenStr(uint16_t token, const char *tokenStr=0, bool *need_space=0 );
 	static std::string_view isReservedWord(uint16_t Token);
 	static uint16_t isReservedWord(const std::string_view &Str);
@@ -782,7 +782,7 @@ public:
 	CScriptTokenizer();
 	CScriptTokenizer(CScriptLex &Lexer);
 	CScriptTokenizer(const std::string &Code, const std::string &File = "", int Line = 0, int Column = 0);
-	CScriptTokenizer(nullptr_t, const std::string &File = "", int Line = 0, int Column = 0) : CScriptTokenizer("", File, Line, Column) {}
+	CScriptTokenizer(std::nullptr_t, const std::string &File = "", int Line = 0, int Column = 0) : CScriptTokenizer("", File, Line, Column) {}
 
 public:
 
@@ -917,7 +917,7 @@ public:
 #endif
 		CScriptPropertyName() {}
 
-	CScriptPropertyName(nullptr_t) =delete;
+	CScriptPropertyName(std::nullptr_t) =delete;
 
 	// Konstruktor mit std::string_view.
 	// Der arrayIndex wird aus dem Namen via computeArrayIndex berechnet.
@@ -1099,12 +1099,7 @@ protected:
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVar");
 
 	virtual bool isDerivedFrom(uint32_t parentHash) const {	return classHash == parentHash;  /* Prüft nur sich selbst*/ }
-	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr) {
-		if (basePtr && basePtr->isDerivedFrom(T::classHash)) {
-			return std::static_pointer_cast<T>(basePtr);
-		}
-		return nullptr;
-	}
+	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr);
 private:
 	CScriptVar& operator=(const CScriptVar& Copy) = delete; ///< private -> no assignment-Copy
 	CScriptVar& operator=(CScriptVar&& Move) = delete; ///< private -> no assignment-Copy
@@ -1293,6 +1288,12 @@ protected:
 #endif
 };
 
+template <typename T> inline std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr &basePtr) {
+	if (basePtr && basePtr->isDerivedFrom(T::classHash)) {
+		return std::static_pointer_cast<T>(basePtr);
+	}
+	return nullptr;
+}
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarPointer - template
@@ -2042,7 +2043,7 @@ public:
 	virtual CScriptVarLinkPtr &getter(CScriptResult &execute, CScriptVarLinkPtr &link) override;
 
 
-	uint32_t getLength();
+	uint32_t getLength() override;
 	CScriptVarPtr getArrayElement(uint32_t idx);
 	void setArrayElement(uint32_t idx, const CScriptVarPtr &value);
 private:
@@ -2175,6 +2176,10 @@ inline define_newScriptVar_NamedFnc(FunctionBounded, CScriptVarFunctionPtr Bound
 //////////////////////////////////////////////////////////////////////////
 
 define_ScriptVarPtr_Type(FunctionNative);
+
+template<typename T>
+define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
+
 class CScriptVarFunctionNative : public CScriptVarFunction {
 protected:
 	CScriptVarFunctionNative(CTinyJS *Context, JSCallback Callback, void *Userdata);
@@ -2196,7 +2201,7 @@ public:
 
 	friend define_newScriptVar_Fnc(FunctionNativeCallback, CTinyJS *Context, JSCallback Callback, void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args);
 	template<typename T>
-	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name = "", const FUNCTION_ARGUMENTS_VECT &Args = FUNCTION_ARGUMENTS_VECT{});
+	friend define_newScriptVar_Fnc(CScriptVarFunctionNative, CTinyJS *Context, T *ClassPtr, void (T:: *ClassFnc)(const CFunctionsScopePtr &, void *), void *Userdata, const std::string &Name, const FUNCTION_ARGUMENTS_VECT &Args);
 private:
 	JSCallback jsCallback; ///< Callback for native functions
 	void *jsUserData; ///< user data passed as second argument to native functions
@@ -2338,6 +2343,7 @@ public:
 	//CScriptVarLinkWorkPtr getProperty(const CScriptVarPtr &Objc, uint32_t idx)  { return getProperty(Objc, std::to_string(idx)); }
 	CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, const CScriptPropertyName &name) { return getProperty(Objc, name).getter(); } // short for getProperty().getter()
 	//CScriptVarPtr getPropertyValue(const CScriptVarPtr &Objc, uint32_t idx) { return getProperty(Objc, idx).getter(); } // short for getProperty().getter()
+	using CScriptVarScope::getLength; // prvent hide warning
 	uint32_t getLength(const CScriptVarPtr &Objc) { return Objc->getLength(); }
 	void setProperty(const CScriptVarPtr &Objc, const CScriptPropertyName &name, const CScriptVarPtr &_value, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool addIfNotExist = false);
 	//void setProperty(const CScriptVarPtr &Objc, uint32_t idx, const CScriptVarPtr &_value, bool ignoreReadOnly = false, bool ignoreNotExtensible = false, bool addIfNotExist = false) {
@@ -2636,12 +2642,7 @@ public:
 private:
 	CScriptVarPtr addNative_ParseFuncDesc(const std::string &funcDesc, std::string &name, FUNCTION_ARGUMENTS_VECT &args);
 
-	template <typename T>
-	T convertFromJS(const CScriptVarPtr &var) { static_assert(false, "convertFromJS<type> für type nicht definiert"); }
-	template <>	int32_t convertFromJS<int32_t>(const CScriptVarPtr &var) { return var->toNumber().toInt32(); }
-	template <>	uint32_t convertFromJS<uint32_t>(const CScriptVarPtr &var) { return var->toNumber().toUInt32(); }
-	template <>	double convertFromJS<double>(const CScriptVarPtr &var) { return var->toNumber().toDouble(); }
-	template <>	std::string convertFromJS<std::string>(const CScriptVarPtr &var) { return var->toString(); }
+	template <typename T> T convertFromJS(const CScriptVarPtr &var);
 
 	template <typename T>
 	CScriptVarPtr convertToJS(const T &value) { return newScriptVar(value); }
@@ -2669,8 +2670,6 @@ public:
 			userdata, LinkFlags);
 	}
 
-	template <>
-	CScriptVarFunctionNativePtr addNative<void, const CFunctionsScopePtr &, void *>(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags);
 
 	template <typename Ret, typename... Args>
 	CScriptVarFunctionNativePtr addNative(const std::string &funcDesc, Ret(*fnc)(Args...), void *userdata = 0, int LinkFlags = SCRIPTVARLINK_BUILDINDEFAULT) {
@@ -2719,8 +2718,6 @@ private:
 		void clear() { while(count--) {CScriptVarScopePtr parent = context->scopes.back()->getParent(); if(parent) context->scopes.back() = parent; else context->scopes.pop_back() ;} count=0; }
 		void addFncScope(const CScriptVarScopePtr &_Scope) { context->scopes.push_back(_Scope); count++; }
 		CScriptVarScopeLetPtr addLetScope() { count++; return context->scopes.back() = TinyJS::newScriptVar(context, ScopeLet, context->scopes.back()); }
-		CScriptVarScopeLetPtr cloneLetScope() {
-		}
 		void addWithScope(const CScriptVarPtr &With) { context->scopes.back() = TinyJS::newScriptVar(context, ScopeWith, context->scopes.back(), With); count++; }
 	private:
 		CTinyJS *context;
@@ -2932,6 +2929,13 @@ public:
 	void setStackBase(uint32_t StackSize) { char dummy = 0; stackBase = StackSize ? &dummy - StackSize : 0; }
 };
 
+template <> inline int32_t CTinyJS::convertFromJS<int32_t>(const CScriptVarPtr &var) { return var->toNumber().toInt32(); }
+template <>	inline uint32_t CTinyJS::convertFromJS<uint32_t>(const CScriptVarPtr &var) { return var->toNumber().toUInt32(); }
+template <>	inline double CTinyJS::convertFromJS<double>(const CScriptVarPtr &var) { return var->toNumber().toDouble(); }
+template <>	inline std::string CTinyJS::convertFromJS<std::string>(const CScriptVarPtr &var) { return var->toString(); }
+
+template <>
+CScriptVarFunctionNativePtr CTinyJS::addNative<void, const CFunctionsScopePtr &, void *>(const std::string &funcDesc, JSCallback ptr, void *userdata, int LinkFlags);
 
 //////////////////////////////////////////////////////////////////////////
 template<typename T>

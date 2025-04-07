@@ -120,6 +120,7 @@ private:
 	CScriptThread_t *thread;
 };
 
+#include <atomic>
 class CScriptCoroutine : protected CScriptThread {
 public:
 	CScriptCoroutine() : mainNotifies(0), coroutineNotifies(0) {}
@@ -136,10 +137,9 @@ private:
 	//void notify_and_wait(CScriptCondVar &notifyCondVar, CScriptCondVar &waitCondVar, bool &waitFlag);
 	CScriptMutex mutex;
 	CScriptCondVar mainCondVar, coroutineCondVar;
-	volatile int mainNotifies, coroutineNotifies;
+	std::atomic<int> mainNotifies, coroutineNotifies;
 };
 
-#include <atomic>
 class CScriptSpinLock {
 public:
 	CScriptSpinLock() { flag.clear(std::memory_order_release); }

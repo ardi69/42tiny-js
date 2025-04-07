@@ -200,10 +200,10 @@ std::string CScriptException::toString() {
 // Konstruktor, der einen istream verwendet.
 /////////////////////////////////
 CScriptLex::CScriptLex(std::istream& in, const std::string& File/* = ""*/, int Line/* = 1*/, [[maybe_unused]] int Column/* = 0*/)
-	: input(in), currentFile(File),
+	: input(in), head(0), bomChecked(false), currentFile(File),
 	pos({ 0, Line, 0 }),
 	currCh(LEX_EOF), nextCh(LEX_EOF),
-	head(0), bomChecked(false), globalOffset(0), lineBreakBeforeToken(false),
+	lineBreakBeforeToken(false), globalOffset(0),
 	tk(0), last_tk(0)
 {
 	// Initialer Puffer: 1024 Bytes (1024 ist eine Potenz von 2).
@@ -215,10 +215,10 @@ CScriptLex::CScriptLex(std::istream& in, const std::string& File/* = ""*/, int L
 // Konstruktor, der einen string verwendet.
 /////////////////////////////////
 CScriptLex::CScriptLex(const std::string &Code, const std::string_view File/* = ""*/, int Line/* = 1*/, [[maybe_unused]] int Column/* = 0*/)
-	: ownedStream(new std::istringstream(Code)), input(*ownedStream),
+	: ownedStream(new std::istringstream(Code)), input(*ownedStream), head(0), bomChecked(false),
 	currentFile(File), pos({ 0, Line, 0 }),
 	currCh(LEX_EOF), nextCh(LEX_EOF),
-	head(0), bomChecked(false), globalOffset(0), lineBreakBeforeToken(false),
+	lineBreakBeforeToken(false), globalOffset(0),
 	tk(0), last_tk(0)
 {
 	// Wähle eine Puffergröße passend zum Code.
@@ -675,7 +675,7 @@ bool CScriptLex::getNextToken()
 				}
 				if(currCh == '/') {
 #ifndef NO_REGEXP
-					try { std::regex r(tkStr.substr(1), std::regex_constants::ECMAScript); } catch(std::regex_error e) {
+					try { std::regex r(tkStr.substr(1), std::regex_constants::ECMAScript); } catch(std::regex_error &e) {
 						throw CScriptException(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()), currentFile, pos.currentLine, currentColumn());
 					}
 #endif /* NO_REGEXP */
@@ -988,7 +988,6 @@ int CScriptTokenDataTemplateLiteral::parseRaw(std::string &str) {
 					++rp; // 'x' überspringen
 					int hi, lo;
 					if ((rp+1) < ep && baseValue(16, rp[0], hi) && baseValue(16, rp[1], lo)) {
-						char buf[3] = { rp[0], rp[1], '\0'};
 						++rp;
 						*wp++ = static_cast<char>(hi << 4 | lo); // Hexadezimale Umwandlung
 					} else {
@@ -1030,9 +1029,9 @@ struct token2str_cmp_t {
 	constexpr bool operator()(const token2str_t* lhs, std::string_view rhs) const { return lhs && lhs->str < rhs; }
 };
 
-template<typename T, typename L>
-constexpr auto sort_array(T arr, L less=std::less) {
-	[less](auto& arr) {
+template<typename T, typename L = std::less<>>
+constexpr auto sort_array(T arr, L less = L{}) {
+	[less](auto &arr) {
 		for (std::size_t i = 0; i < arr.size(); ++i) {
 			for (std::size_t j = 0; j < arr.size() - i - 1; ++j) {
 				if (less(arr[j + 1], arr[j])) {
@@ -1050,8 +1049,8 @@ constexpr auto make_pointer_array(const std::array<T, N>& arr, L less, std::inde
 	//constexpr auto sorted = sort_array(arr, less);
 	return sort_array(std::array<const T*, N>{ &arr[I]... }, less);
 }
-template <typename T, std::size_t N, typename L>
-constexpr auto make_pointer_array(const std::array<T, N>& arr, L less=std::less) {
+template <typename T, std::size_t N, typename L = std::less<>>
+constexpr auto make_pointer_array(const std::array<T, N> &arr, L less = L{}) {
 	return make_pointer_array(arr, less, std::make_index_sequence<N>{});
 }
 
@@ -1128,7 +1127,7 @@ constexpr auto tokens2str = sort_array(std::array{
 	token2str_t{ LEX_SLASHEQUAL, 							"/=", 										false },
 	token2str_t{ LEX_PERCENTEQUAL, 							"%=", 										false },
 	token2str_t{ LEX_ASKASK, 								"??", 										false },
-	token2str_t{ LEX_ASKASKEQUAL, 							"??=", 										false },
+	token2str_t{ LEX_ASKASKEQUAL, 							"??""=", 									false },
 	token2str_t{ LEX_ASTERISKASTERISK, 						"**", 										false },
 	token2str_t{ LEX_ASTERISKASTERISKEQUAL, 				"**=", 										false },
 
@@ -1242,7 +1241,7 @@ CScriptToken::CScriptToken(uint16_t Tk, const std::string &TkStr) : line(0), col
 std::string CScriptToken::getParsableString(TOKEN_VECT &Tokens, const std::string &IndentString, const std::string &Indent) {
 	return getParsableString(Tokens.begin(), Tokens.end(), IndentString, Indent);
 }
-std::string CScriptToken::getParsableString(TOKEN_VECT_it Begin, TOKEN_VECT_it End, const std::string &IndentString, const std::string &Indent) {
+std::string CScriptToken::getParsableString(const TOKEN_VECT_it &&Begin, const TOKEN_VECT_it &&End, const std::string &IndentString, const std::string &Indent) {
 	std::ostringstream destination;
 	std::string nl = Indent.size() ? "\n" : " ";
 	std::string my_indentString = IndentString;
@@ -3563,11 +3562,11 @@ CNumber::CNumber(uint64_t Value) {
 		type= NType::tDouble, Double=(double)Value;
 }
 CNumber::CNumber(double Value) {
-	if(Value == 0.0 && signbit(Value))
+	if(Value == 0.0 && std::signbit(Value))
 		type= NType::tnNULL, Int32=0;
-	else if(isinf(Value))
+	else if(std::isinf(Value))
 		type= NType::tInfinity, Int32=Value > 0 ? 1 : -1;
-	else if(isnan(Value))
+	else if(std::isnan(Value))
 		type= NType::tNaN, Int32=0;
 	else {
 		double truncated = trunc(Value);  // Ganzzahliger Anteil
@@ -3727,6 +3726,7 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 	}
 
 	// 3. Verwende `from_chars`, um den Float-Wert zu parsen
+#ifdef __cpp_lib_to_chars
 	double value = 0.0;
 	auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
 
@@ -3736,10 +3736,25 @@ void CNumber::parseFloat(std::string_view str, std::string_view* endptr/*=0*/) {
 		if (endptr) *endptr = str;
 		return;
 	}
+	if (endptr) *endptr = std::string_view(ptr, str.data() + str.size() - ptr);
+#else
+	const char *cstr = str.data();
+	char *end = nullptr;
+	double value = std::strtod(cstr, &end);
+
+	if (end == cstr) { // Fehler beim Parsen → NaN
+		type = NType::tNaN;
+		Int32 = 0;
+		if (endptr) *endptr = str;
+		return;
+	}
+
+	// strtod gibt dir einen Pointer auf das erste ungültige Zeichen
+	// -> das können wir hier als endptr zurückgeben
+	if (endptr) *endptr = std::string_view(end, str.data() + str.size() - end);
+#endif
 
 	if (negative) value = -value;
-	if (endptr) *endptr = str.substr(ptr - str.data());
-
 	*this = value; // **Nutze den `operator=(double)` direkt**
 }
 
@@ -3987,46 +4002,28 @@ int CNumber::sign() const {
 		return 1;
 	}
 }
-char *tiny_ltoa(int32_t val, unsigned radix) {
-	char *buf, *buf_end, *p, *firstdig, temp;
-	unsigned digval;
 
-	buf = (char*)malloc(64);
-	if(!buf) return 0;
-	buf_end = buf+64-1; // -1 for '\0'
+static std::string tiny_ltoa(int32_t val, unsigned radix) {
+	if (radix < 2 || radix > 36) return {};
 
-	p = buf;
-	if (val < 0) {
-		*p++ = '-';
-		val = -val;
-	}
+	char buffer[35]; // maximal 33 Ziffern für base 2 + sign + null
+	char *p = buffer + sizeof(buffer);
+	*--p = '\0';
+
+	bool negative = (val < 0);
+	uint32_t uval = negative ? -val : val;
+
+	static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 	do {
-		digval = (unsigned) (val % radix);
-		val /= radix;
-		*p++ = (char) (digval + (digval > 9 ? ('a'-10) : '0'));
-		if(p==buf_end) {
-			char *new_buf = (char *)realloc(buf, buf_end-buf+16+1); // for '\0'
-			if(!new_buf) { free(buf); return 0; }
-			p = new_buf + (buf_end - buf);
-			buf_end = p + 16;
-			buf = new_buf;
-		}
-	} while (val > 0);
+		*--p = digits[uval % radix];
+		uval /= radix;
+	} while (uval);
 
-	// We now have the digit of the number in the buffer, but in reverse
-	// order.  Thus we reverse them now.
-	*p-- = '\0';
-	firstdig = buf;
-	if(*firstdig=='-') firstdig++;
-	do	{
-		temp = *p;
-		*p = *firstdig;
-		*firstdig = temp;
-		p--;
-		firstdig++;
-	} while (firstdig < p);
-	return buf;
+	if (negative)
+		*--p = '-';
+
+	return std::string(p);
 }
 
 static char *tiny_dtoa(double val, unsigned radix) {
@@ -4099,11 +4096,7 @@ std::string CNumber::toString( uint32_t Radix/*=10*/ ) const {
 		Radix = 10; // todo error;
 	switch(type) {
 	case NType::tInt32:
-		if( (str = tiny_ltoa(Int32, Radix)) ) {
-			std::string ret(str); free(str);
-			return ret;
-		}
-		break;
+		return tiny_ltoa(Int32, Radix);
 	case NType::tnNULL:
 		return "0";
 	case NType::tDouble:
@@ -6842,14 +6835,13 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 		{
 			CScriptVarPtr in_scope = scope()->scopeLet();
 			STRING_SET_t *varNames = t->getToken().Forwarder()->varNames;
-			static SCRIPTVARLINK_FLAGS flags[CScriptTokenDataForwards::END]{ SCRIPTVARLINK_VARDEFAULT, SCRIPTVARLINK_CONSTDEFAULT, SCRIPTVARLINK_VARDEFAULT };
-			for(int i=0; i<CScriptTokenDataForwards::END; ++i) {
+			for (int i = 0; i < CScriptTokenDataForwards::END; ++i) {
 				if (i == CScriptTokenDataForwards::VARS)in_scope = scope()->scopeVar();
-				for(auto &it : varNames[i]) {
+				for (auto &it : varNames[i]) {
 					CScriptVarLinkPtr a = in_scope->findChild(it);
 					CScriptVarPtr var = i == CScriptTokenDataForwards::VARS ? constScriptVar(Undefined) : constScriptVar(Uninitialized);
 					auto flags = i == CScriptTokenDataForwards::CONSTS ? SCRIPTVARLINK_CONSTDEFAULT : SCRIPTVARLINK_VARDEFAULT;
-					if(!a) in_scope->addChild(it, var, flags);
+					if (!a) in_scope->addChild(it, var, flags);
 				}
 			}
 			CScriptTokenDataForwards::FNC_SET_t &functions = t->getToken().Forwarder()->functions;
@@ -7521,7 +7513,7 @@ void CTinyJS::native_RegExp(const CFunctionsScopePtr &c, void *data) {
 	std::string RegExp, Flags;
 	if(arglen>=1) {
 		RegExp = c->getArgument(0)->toString();
-		try { std::regex r(RegExp, std::regex_constants::ECMAScript); } catch(std::regex_error e) {
+		try { std::regex r(RegExp, std::regex_constants::ECMAScript); } catch(std::regex_error &e) {
 			c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 		}
 		if(arglen>=2) {
@@ -7746,6 +7738,7 @@ void CTinyJS::native_eval(const CFunctionsScopePtr &c, void *data) {
 		c->setReturnVar(execute.value);
 }
 
+/*
 static int _native_require_read(const std::string &Fname, std::string &Data) {
 	std::ifstream in(Fname.c_str(), std::ios::in | std::ios::binary);
 	if (in) {
@@ -7758,6 +7751,7 @@ static int _native_require_read(const std::string &Fname, std::string &Data) {
 	}
 	return errno;
 }
+*/
 
 void CTinyJS::native_require(const CFunctionsScopePtr &c, void *data) {
 	std::string File = c->getArgument("jsFile")->toString();

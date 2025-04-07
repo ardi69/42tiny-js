@@ -184,3 +184,11 @@ Version 0.10.3 (2025-04-04 10:16)
 
 * updated Date() functions
 * removed extra constructor handling with setConstructor/getConstructor, as new.target has been supported since version 0.10.0
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.4 (2025-04-07 21:30)
+=================================
+
+* fixed compile with make on Linux or MingW or ...

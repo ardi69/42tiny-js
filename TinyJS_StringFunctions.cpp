@@ -28,19 +28,8 @@
  */
 
 #include <algorithm>
+#include <regex>
 #include "TinyJS.h"
-
-#ifndef NO_REGEXP 
-#	if defined HAVE_TR1_REGEX
-#		include <tr1/regex>
-		using namespace std::tr1;
-#	elif defined HAVE_BOOST_REGEX
-#		include <boost/regex.hpp>
-		using namespace boost;
-#	else
-#		include <regex>
-#	endif
-#endif
 
 namespace TinyJS {
 
@@ -269,7 +258,7 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 		if(RegExp) {
 			try {
 				c->setReturnVar(RegExp->exec(str));
-			} catch(std::regex_error e) {
+			} catch(std::regex_error &e) {
 				c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 			}
 		}
@@ -304,7 +293,7 @@ static void scStringMatch(const CFunctionsScopePtr &c, void *) {
 				c->setReturnVar(retVar);
 			} else
 				c->setReturnVar(c->constScriptVar(Null));
-		} catch(std::regex_error e) {
+		} catch(std::regex_error &e) {
 			c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 		}
 	}
@@ -321,7 +310,7 @@ static void scStringSearch(const CFunctionsScopePtr &c, void *userdata) {
 #ifndef NO_REGEXP
 	try { 
 		c->setReturnVar(c->newScriptVar(regex_search(str, search_begin, substr, ignoreCase, sticky, match_begin, match_end)?match_begin-search_begin:-1));
-	} catch(std::regex_error e) {
+	} catch(std::regex_error &e) {
 		c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 	}
 #else /* NO_REGEXP */
@@ -396,7 +385,7 @@ static void scStringSplit(const CFunctionsScopePtr &c, void *) {
 		if(RegExp) {
 			try { 
 				found = regex_search(str, search_begin, seperator, ignoreCase, sticky, match_begin, match_end, match);
-			} catch(std::regex_error e) {
+			} catch(std::regex_error &e) {
 				c->throwError(SyntaxError, std::string(e.what())+" - "+CScriptVarRegExp::ErrorStr(e.code()));
 			}
 		} else /* NO_REGEXP */

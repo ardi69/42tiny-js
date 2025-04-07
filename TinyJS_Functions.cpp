@@ -188,9 +188,9 @@ namespace {
 		const CFunctionsScopePtr &c;
 		CScriptVarFunctionPtr fnc;
 	};
-	bool cmp_by_name(const CScriptVarLinkPtr &a, const CScriptVarLinkPtr &b) {
-		return a < b->getName();
-	}
+// 	bool cmp_by_name(const CScriptVarLinkPtr &a, const CScriptVarLinkPtr &b) {
+// 		return a < b->getName();
+// 	}
 }
 static void scArraySort(const CFunctionsScopePtr &c, void *data) {
 	CScriptVarPtr arr = c->getArgument("this");
@@ -365,7 +365,6 @@ static void scArrayForEach(const CFunctionsScopePtr &c, void *data) {
 	SCRIPTVAR_CHILDS_it begin = lower_bound(arr->Childs.begin(), arr->Childs.end(), static_cast<uint32_t>(0));
 	SCRIPTVAR_CHILDS_it end = lower_bound(begin, arr->Childs.end(), len);
 	for (auto it = begin; it != end; ++it) {
-		auto &name = (*it)->getName();
 		std::vector<CScriptVarPtr> args = { it->getter(), c->newScriptVar((*it)->getName().toArrayIndex()), arr};
 		c->getContext()->callFunction(callback, args);
 	}

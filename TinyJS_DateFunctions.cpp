@@ -37,11 +37,14 @@
 
 #ifndef _MSC_VER
 
-#define localtime_s(tm, time) localtime_r(time, tm)
 #define _tzset tzset
 #define _get_timezone(pTimezone) do{*pTimezone=timezone;}while(0)
 #define sprintf_s sprintf
 
+#endif
+
+#ifndef _WIN32
+#define localtime_s(tm, time) localtime_r(time, tm)
 #endif
 
 namespace TinyJS {
@@ -197,7 +200,6 @@ CScriptTime::CScriptTime(int64_t Time, bool isLocalTime/*=true*/) : tm_islocal(i
 	setTime(Time);
 }
 int64_t CScriptTime::setTime(int64_t Time) {
-	long prevent_endless_loop = 0;
 	tm_time = Time;
 	for (int daylightSavingCheck = 1; daylightSavingCheck >= 0; --daylightSavingCheck) {
 		if (tm_islocal) tm_time -= TIMEZONE * 1000; // if tm_islocal than tm_time is now localtime
