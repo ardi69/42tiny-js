@@ -39,7 +39,7 @@
 #ifndef TINYJS_H
 #define TINYJS_H
 
-#define TINY_JS_VERSION 0.10.4
+#define TINY_JS_VERSION 0.10.5
 
 #include <string>
 #include <vector>
