@@ -200,3 +200,11 @@ Version 0.10.5 (2025-04-10 12:38)
 =================================
 
 * changed The Date object has been refactored, with time handling now implemented using std::chrono::local_time from C++20
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.6 (2025-04-18 10:14)
+=================================
+
+* fixed compiling withs clang++ (moved some constructors fom .h to .cpp)

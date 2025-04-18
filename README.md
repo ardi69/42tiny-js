@@ -32,6 +32,20 @@ TinyJS is a lightweight, modular JavaScript interpreter designed for seamless in
 - A modern C++ compiler (C++17 or later recommended)
 - Standard C++ build tools (e.g., Make, CMake, etc.)
 
+### Building with Gnu C++
+```bash
+ git clone https://github.com/ardi69/42tiny-js.git
+ cd 42tiny-js
+ make
+```
+
+### Building with Clang
+```bash
+ git clone https://github.com/ardi69/42tiny-js.git
+ cd 42tiny-js
+ make CXX=clang++ CXXEXTRA="-flto" LDEXTRA="-stdlib=libc++ -flto"
+```
+
 ### Building
 1. Clone or extract the repository:
    ```bash

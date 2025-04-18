@@ -204,7 +204,34 @@ private:
 		if (!localTime_cached) {
 			if (islocal) {
 				// Hole lokale Zeit direkt
+#if !defined(_MSC_VER) && defined(_WIN32)
+				// workaround for MingW 
+				static auto zone = []() {
+					auto TZ = std::getenv("TZ");
+					if (!TZ) {
+						char buffer[128];
+						std::string result;
+
+						FILE *pipe = _popen("tzset", "r");
+						if (pipe) {
+							while (fgets(buffer, 128, pipe) != nullptr) result += buffer;
+							_pclose(pipe);
+							auto result_view = [](std::string_view sv) -> std::string_view {
+								const auto start = sv.find_first_not_of(" \n\r");
+								if (start == std::string_view::npos) return {}; // alles Whitespace
+
+								const auto end = sv.find_last_not_of(" \n\r");
+								return sv.substr(start, end - start + 1);
+								}(result);
+							if (result_view.size()) { try { return locate_zone(result_view); } catch (...) {} }
+						}
+					}
+					return TZ ? locate_zone(TZ) : current_zone(); 
+					}();
+				localTime_cached = zone->to_local(tp);
+#else
 				localTime_cached = current_zone()->to_local(tp);
+#endif
 			} else {
 				// Konvertiere UTC-Zeitpunkt zu local_time
 				localTime_cached = local_time{ tp.time_since_epoch() };
@@ -935,16 +962,16 @@ protected:
 	CScriptVarDate(CTinyJS *Context);
 	// custom RTTI
 	static constexpr uint32_t classHash = fnv1aHash("CScriptVarDate");
-	virtual bool isDerivedFrom(uint32_t parentHash) const { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
+	virtual bool isDerivedFrom(uint32_t parentHash) const override { return classHash == parentHash || CScriptVarObject::isDerivedFrom(parentHash); }
 //	template <typename T> friend T* CScriptVarDynamicCast(CScriptVar* basePtr);
 	template <typename T> friend std::shared_ptr<T> CScriptVarDynamicCast(const CScriptVarPtr& basePtr);
 public:
 	virtual ~CScriptVarDate();
-	virtual bool isDate(); // { return true; }
-	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute);
+	virtual bool isDate() override; // { return true; }
+	virtual CScriptVarPrimitivePtr toPrimitive(CScriptResult &execute) override;
 
-	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0);
-	virtual CScriptVarPtr valueOf_CallBack();
+	virtual CScriptVarPtr toString_CallBack(CScriptResult &execute, int radix=0) override;
+	virtual CScriptVarPtr valueOf_CallBack() override;
 
 	friend inline define_newScriptVar_NamedFnc(Date, CTinyJS *Context);
 private:

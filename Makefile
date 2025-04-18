@@ -105,7 +105,6 @@ all:  run_tests Script
 	
 run_tests: lib42tiny-js.a run_tests.o
 	@echo link $@
-	echo $(LIBS)
 	$(CXX) $(LDFLAGS) run_tests.o $(LIBS) -o $@
 
 Script: lib42tiny-js.a Script.o

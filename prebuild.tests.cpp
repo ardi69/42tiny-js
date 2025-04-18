@@ -26,7 +26,8 @@ int main() {
 #include <filesystem>
 
 int main() {
-	if(std::filesystem::exists("test.txt"));
+	if(std::filesystem::exists("test.txt"))
+		do {} while(0);
 	return 0;
 }
 #elif defined(TEST_CPP17)

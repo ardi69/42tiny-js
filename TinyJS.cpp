@@ -180,7 +180,8 @@ static inline std::string getIDString(const std::string_view str) {
 /// CScriptException
 //////////////////////////////////////////////////////////////////////////
 
-std::string CScriptException::toString() {
+std::string CScriptException::toString() const
+{
 	std::ostringstream msg;
 	msg << ERROR_NAME[errorType] << ": " << message;
 	if(lineNumber >= 0) msg << " at Line:" << lineNumber+1;
@@ -775,6 +776,10 @@ std::string_view CScriptTokenDataForwards::addLets( STRING_VECTOR_t &Lets )
 // CScriptTokenDataLoop
 //////////////////////////////////////////////////////////////////////////
 
+CScriptTokenDataLoop::CScriptTokenDataLoop() {
+	type = FOR;
+}
+
 std::string CScriptTokenDataLoop::getParsableString(const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
 	static const char *heads[] = {"for each(", "for(", "for(", "for(", "while(", "do "};
 	static const char *ops[] = {" in ", " in ", " of ", "; ", "", ""};
@@ -791,6 +796,8 @@ std::string CScriptTokenDataLoop::getParsableString(const std::string &IndentStr
 //////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataIf
 //////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataIf::CScriptTokenDataIf() = default;
 
 std::string CScriptTokenDataIf::getParsableString(const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
 	std::string out = "if(";
@@ -813,6 +820,8 @@ std::string CScriptTokenDataIf::getParsableString(const std::string &IndentStrin
 //////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataTry
 //////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataTry::CScriptTokenDataTry() = default;
 
 std::string CScriptTokenDataTry::getParsableString( const std::string &IndentString/*=""*/, const std::string &Indent/*=""*/ ) {
 	std::string out = "try ";
@@ -838,6 +847,8 @@ std::string CScriptTokenDataTry::getParsableString( const std::string &IndentStr
 //////////////////////////////////////////////////////////////////////////
 // CScriptTokenDataFnc
 //////////////////////////////////////////////////////////////////////////
+
+CScriptTokenDataFnc::CScriptTokenDataFnc(int32_t Type) : type(Type), line(0) {}
 
 
 std::string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=false*/ ) {
@@ -872,10 +883,12 @@ std::string CScriptTokenDataFnc::getArgumentsString( bool forArrowFunction/*=fal
 // CScriptTokenDataObjectLiteral
 //////////////////////////////////////////////////////////////////////////
 
+CScriptTokenDataObjectLiteral::CScriptTokenDataObjectLiteral() : type(CScriptTokenDataObjectLiteral::OBJECT), destructuring(false), structuring(false) {}
+
 std::string CScriptTokenDataObjectLiteral::getParsableString() {
 	std::string out = type == OBJECT ? "{ " : "[";
 	const char *comma = "";
-	for(auto it : elements) {
+	for(auto &it : elements) {
 		out.append(comma); comma = (type <= ARRAY) ? ", " : " ";
 		if(it.value.empty()) continue;
 		if (it.isSpreadOrRest) out.append("...");
@@ -930,6 +943,7 @@ bool CScriptTokenDataObjectLiteral::getDestructuringVarNames(STRING_VECTOR_t &va
 // CScriptTokenDataTemplateLiteral
 //////////////////////////////////////////////////////////////////////////
 
+CScriptTokenDataTemplateLiteral::CScriptTokenDataTemplateLiteral() {}
 
 std::string CScriptTokenDataTemplateLiteral::getParsableString() {
 	std::string out = "`";
@@ -2919,8 +2933,8 @@ CScriptVarPtr CScriptVar::toIterator(CScriptResult &execute, IteratorMode Mode/*
 	if(!execute) return constScriptVar(Undefined);
 	if (isIterator()) return shared_from_this();
 	CScriptVarFunctionPtr Generator(findChildWithPrototypeChain(context->symbol_iterator).getter(execute));
-	//std::vector<CScriptVarPtr> args;
-	if (Generator) return context->callFunction(execute, Generator, std::vector<CScriptVarPtr>(), shared_from_this());
+	std::vector<CScriptVarPtr> args;
+	if (Generator) return context->callFunction(execute, Generator, args, shared_from_this());
 	return constScriptVar(Undefined); 
 }
 
@@ -3256,6 +3270,11 @@ void CScriptVar::setArrayIndex(uint32_t idx, const CScriptVarPtr &value) {
 uint32_t CScriptVar::getArrayLength() {
 	if(isArray()) return getLength();
 	return 0;
+}
+
+
+size_t CScriptVar::getChildren() const {
+	return Childs.size();
 }
 
 CScriptVarPtr CScriptVar::mathsOp(const CScriptVarPtr &b, int op) {
@@ -4694,7 +4713,7 @@ void CScriptVarGenerator::native_throw(const CFunctionsScopePtr &c, void *data) 
 
 int CScriptVarGenerator::Coroutine()
 {
-	context->generator_start(this);
+	context->generator_start(shared_from_this());
 	return 0;
 }
 
@@ -4787,8 +4806,8 @@ bool CScriptVarFunctionBounded::isBounded() { return true; }
 void CScriptVarFunctionBounded::setTemporaryMark_recursive(uint32_t ID) {
 	CScriptVarFunction::setTemporaryMark_recursive(ID);
 	boundedThis->setTemporaryMark_recursive(ID);
-	for(std::vector<CScriptVarPtr>::iterator it=boundedArguments.begin(); it!=boundedArguments.end(); ++it)
-		(*it)->setTemporaryMark_recursive(ID);
+	for (auto &it : boundedArguments)
+		it->setTemporaryMark_recursive(ID);
 }
 
 CScriptVarPtr CScriptVarFunctionBounded::callFunction(CScriptResult &execute, const std::vector<CScriptVarPtr> &Arguments, const CScriptVarPtr &This, CScriptVarPtr *newThis/*=0*/) {
@@ -5317,9 +5336,9 @@ CTinyJS::CTinyJS(std::initializer_list<std::function<void(CTinyJS *tinyJS)>> reg
 CTinyJS::~CTinyJS() {
 	ASSERT(!t);
 //	objectPrototype->setPrototype(0);
-	for (std::vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it != pseudo_refered.end(); ++it) {
-		(**it)->cleanUp4Destroy();
-		**it = CScriptVarPtr();
+	for (auto &it : pseudo_refered) {
+		(*it)->cleanUp4Destroy();
+		it->reset();
 	}
 	for(int i=Error; i<ERROR_COUNT; i++)
 		errorPrototypes[i] = CScriptVarPtr();
@@ -5623,7 +5642,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	return constScriptVar(Undefined);
 }
 #ifndef NO_GENERATORS
-void CTinyJS::generator_start(CScriptVarGenerator *Generator)
+void CTinyJS::generator_start(CScriptVarGeneratorPtr Generator)
 {
 	// push current Generator
 	generatorStack.push_back(Generator);
@@ -5702,9 +5721,10 @@ void CTinyJS::generator_start(CScriptVarGenerator *Generator)
 	// restore callers haveTry
 	haveTry = Generator->callersHaveTry;
 }
+
 CScriptVarPtr CTinyJS::generator_yield(CScriptResult& execute, const CScriptVarPtr &YieldIn) {
 	if(!execute) return constUndefined;
-	CScriptVarGenerator *Generator = generatorStack.back();
+	CScriptVarGeneratorPtr Generator(generatorStack.back().lock());
 	if(Generator->isClosed()) {
 		throwError(execute, TypeError, "yield from closing generator function");
 		return constUndefined;
@@ -5879,7 +5899,8 @@ std::vector<CScriptVarPtr> CTinyJS::execute_spread(CScriptResult &execute, Itera
 		bool old_haveTry = haveTry;
 		haveTry = true;
 		tmp_execute.set(CScriptResult::Normal, Iterator);
-		auto ret = callFunction(tmp_execute, Iterator_next, std::vector<CScriptVarPtr>(), Iterator);
+		std::vector<CScriptVarPtr> args;
+		auto ret = callFunction(tmp_execute, Iterator_next, args, Iterator);
 		haveTry = old_haveTry;
 		if (tmp_execute.isThrow()) {
 			if (tmp_execute.value != constStopIteration) {
@@ -5909,7 +5930,8 @@ void CTinyJS::execute_destructuring(CScriptResult &execute, const std::shared_pt
 				bool old_haveTry = haveTry; // save  haveTry
 				haveTry = true;
 				tmp_execute.set(CScriptResult::Normal, Iterator);
-				rhs = callFunction(tmp_execute, Iterator_next, std::vector<CScriptVarPtr>(), Iterator);
+				std::vector<CScriptVarPtr> args;
+				rhs = callFunction(tmp_execute, Iterator_next, args, Iterator);
 				haveTry = old_haveTry; // restor haveTry
 				if (tmp_execute.isThrow()) {
 					if (tmp_execute.value != constStopIteration) {
@@ -7850,8 +7872,8 @@ void CTinyJS::native_console_timeLog(const CFunctionsScopePtr &c, void *data) {
 }
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {
-	for(std::vector<CScriptVarPtr*>::iterator it = pseudo_refered.begin(); it!=pseudo_refered.end(); ++it)
-		if(**it) (**it)->setTemporaryMark_recursive(ID);
+	for(auto &it : pseudo_refered)
+		(*it)->setTemporaryMark_recursive(ID);
 	for(int i=Error; i<ERROR_COUNT; i++)
 		if(errorPrototypes[i]) errorPrototypes[i]->setTemporaryMark_recursive(ID);
 	root->setTemporaryMark_recursive(ID);
