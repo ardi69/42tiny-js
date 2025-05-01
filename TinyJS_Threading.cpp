@@ -270,8 +270,11 @@ public:
 	}
 	virtual int Stop(bool Wait) override {
 		activ = false;
-		if(Wait && started) {
-			pthread_join(thread, &retvar);
+		if (Wait && started) {
+			if (!joined) {
+				pthread_join(thread, &retvar);
+				joined = true;
+			}
 			return retValue();
 		}
 		return -1;
@@ -291,6 +294,7 @@ public:
 	std::atomic<bool> activ;
 	std::atomic<bool> running;
 	std::atomic<bool> started;
+	bool joined = false;
 	CScriptThread *This;
 	pthread_t thread;
 };

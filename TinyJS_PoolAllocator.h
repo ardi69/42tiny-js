@@ -55,20 +55,50 @@ void free(void *p, size_t size);
 
 } /* namespace fixed_size_allocator */
 
-template<typename T, int num_objects = 64>
-class fixed_size_object {
+template <typename T>
+class SmallObjectAllocator {
 public:
-	static void *operator new(size_t size) {
-		return fixed_size_allocator::alloc(size);
+	using value_type = T;
+	static constexpr std::size_t MaxObjectSize = 256;
+
+	SmallObjectAllocator() noexcept = default;
+	template <class U> SmallObjectAllocator(const SmallObjectAllocator<U> &) noexcept {}
+
+	T *allocate(std::size_t n) {
+		if (n == 0) return nullptr;
+		auto size = n * sizeof(T);
+		if (size <= MaxObjectSize) {
+			return static_cast<T *>(TinyJS::fixed_size_allocator::alloc(size));
+		} else {
+			return static_cast<T *>(::operator new(size));
+		}
 	}
-	static void *operator new(size_t size, void *p) {
-		return p;
+
+	void deallocate(T *p, std::size_t n) noexcept {
+		if (!p) return;
+
+		auto size = n * sizeof(T);
+		if (size <= MaxObjectSize) {
+			TinyJS::fixed_size_allocator::free(p, size);
+		} else {
+			::operator delete(p);
+		}
 	}
-	static void operator delete(void *p, size_t size) {
-		fixed_size_allocator::free(p, size);
-	}
-private:
+
+	// C++17-konform: Rebind für andere Typen (nicht zwingend, aber hilfreich für einige STL-Container)
+	template <class U>
+	struct rebind {
+		using other = SmallObjectAllocator<U>;
+	};
 };
+
+// Gleichheit: Alle Instanzen dieses Allocators gelten als gleich (kein Zustand)
+template <class T, class U>
+constexpr bool operator==(const SmallObjectAllocator<T> &, const SmallObjectAllocator<U> &) noexcept { return true; }
+
+template <class T, class U>
+constexpr bool operator!=(const SmallObjectAllocator<T> &, const SmallObjectAllocator<U> &) noexcept { return false; }
+
 
 } /* namespace TinyJS */
 #endif // pool_allocator_h__

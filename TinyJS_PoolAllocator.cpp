@@ -112,17 +112,34 @@ static CScriptMutex locker;
 #	define LOCK CScriptUniqueLock<CScriptMutex> lock(locker)
 #endif
 
-#	define ROUND_SIZE(size) ((size+3) & ~3)
-#	define SHIFT_SIZE(size) (size >> 2)
+static inline constexpr unsigned ilog2(unsigned v) noexcept {
+	unsigned n = 0;
+	while (v >>= 1)  // shift until zero
+		++n;
+	return n;
+}
+static inline constexpr std::size_t ROUND_SIZE(std::size_t size) noexcept {
+	constexpr std::size_t A = __STDCPP_DEFAULT_NEW_ALIGNMENT__;
+	static_assert((A & (A - 1)) == 0, "Alignment must be a power-of-two");
+	return (size + (A - 1)) & ~(A - 1);
+}
+
+static inline constexpr std::size_t SHIFT_SIZE(std::size_t size) noexcept {
+	constexpr std::size_t shift = ilog2(__STDCPP_DEFAULT_NEW_ALIGNMENT__);
+	return size >> shift;
+}
 static struct _fixed_size_allocator_init_control {
+	_fixed_size_allocator_init_control() {
+		pool.reserve(SHIFT_SIZE(256/*SmallObjectAllocator::MaxObjectSize*/) + 1);
+	}
 	~_fixed_size_allocator_init_control() {
-		for (std::vector<_fixed_size_allocator *>::iterator it = pool.begin(); it != pool.end(); ++it)
-			if (*it) delete *it;
+		for (auto it : pool)
+			if (it) delete it;
 	}
 	_fixed_size_allocator *&getFromPool(size_t size) {
 		size = SHIFT_SIZE(size);
 		if (size >= pool.size())
-			pool.resize(size + 1, 0);
+			pool.resize(size + 1, nullptr);
 		return pool[size];
 	}
 	std::vector<_fixed_size_allocator *> pool;

@@ -38,6 +38,7 @@
 
 #include <errno.h>
 #include <sstream>
+
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -2866,7 +2867,7 @@ CScriptVarPrimitivePtr CScriptVar::toPrimitive_hintNumber(CScriptResult &execute
 CScriptVarPtr CScriptVar::callJS_valueOf(CScriptResult &execute) {
 	if(execute) {
 		CScriptVarPtr FncValueOf = findChildWithPrototypeChain("valueOf").getter(execute);
-		if(FncValueOf && FncValueOf != context->objectPrototype_valueOf) { // custom valueOf in JavaScript
+		if(FncValueOf && FncValueOf != context->objectPrototype_valueOf()) { // custom valueOf in JavaScript
 			if(FncValueOf->isFunction()) { // no Error if toString not callable
 				std::vector<CScriptVarPtr> Params;
 				return context->callFunction(execute, FncValueOf, Params, shared_from_this());
@@ -2883,7 +2884,7 @@ CScriptVarPtr CScriptVar::valueOf_CallBack() {
 CScriptVarPtr CScriptVar::callJS_toString(CScriptResult &execute, int radix/*=0*/) {
 	if(execute) {
 		CScriptVarPtr FncToString = findChildWithPrototypeChain("toString").getter(execute);
-		if(FncToString && FncToString != context->objectPrototype_toString) { // custom valueOf in JavaScript
+		if(FncToString && FncToString != context->objectPrototype_toString()) { // custom valueOf in JavaScript
 			if(FncToString->isFunction()) { // no Error if toString not callable
 				std::vector<CScriptVarPtr> Params;
 				Params.push_back(newScriptVar(radix));
@@ -3449,7 +3450,7 @@ CScriptVarPtr CScriptVarPrimitive::toString_CallBack( CScriptResult &execute, in
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Symbol);
-CScriptVarSymbol::CScriptVarSymbol(CTinyJS *Context, const CScriptPropertyName &Objc) : CScriptVarPrimitive(Context, Context->objectPrototype), symbol(Objc) {}
+CScriptVarSymbol::CScriptVarSymbol(CTinyJS *Context, const CScriptPropertyName &Objc) : CScriptVarPrimitive(Context, Context->objectPrototype()), symbol(Objc) {}
 
 //bool CScriptVarUndefined::isUndefined() { return true; }
 
@@ -3468,7 +3469,7 @@ bool CScriptVarSymbol::isSymbol() { return true; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Undefined);
-CScriptVarUndefined::CScriptVarUndefined(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
+CScriptVarUndefined::CScriptVarUndefined(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype()) { }
 
 bool CScriptVarUndefined::isUndefined() { return true; }
 
@@ -3483,7 +3484,7 @@ std::string CScriptVarUndefined::getVarType() { return "undefined"; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Uninitialized);
-CScriptVarUninitialized::CScriptVarUninitialized(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype) {}
+CScriptVarUninitialized::CScriptVarUninitialized(CTinyJS *Context) : CScriptVarPrimitive(Context, Context->objectPrototype()) {}
 bool CScriptVarUninitialized::isUninitialized() { return true; }
 CNumber CScriptVarUninitialized::toNumber_Callback() { return NaN; }
 std::string CScriptVarUninitialized::toCString(int radix/*=0*/) { return "uninitialized"; }
@@ -3495,7 +3496,7 @@ std::string CScriptVarUninitialized::getVarType() { return "uninitialized"; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Null);
-CScriptVarNull::CScriptVarNull(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype) { }
+CScriptVarNull::CScriptVarNull(CTinyJS* Context) : CScriptVarPrimitive(Context, Context->objectPrototype()) { }
 bool CScriptVarNull::isNull() { return true; }
 
 CNumber CScriptVarNull::toNumber_Callback() { return 0; }
@@ -3506,8 +3507,8 @@ std::string CScriptVarNull::getVarType() { return "null"; }
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarString
 //////////////////////////////////////////////////////////////////////////
-CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(Data) {}
-CScriptVarString::CScriptVarString(CTinyJS *Context, std::string &&Data) : CScriptVarPrimitive(Context, Context->stringPrototype), data(std::move(Data)) {}
+CScriptVarString::CScriptVarString(CTinyJS *Context, const std::string &Data) : CScriptVarPrimitive(Context, Context->stringPrototype()), data(Data) {}
+CScriptVarString::CScriptVarString(CTinyJS *Context, std::string &&Data) : CScriptVarPrimitive(Context, Context->stringPrototype()), data(std::move(Data)) {}
 bool CScriptVarString::isString() { return true; }
 
 bool CScriptVarString::toBoolean() { return data.length()!=0; }
@@ -3518,7 +3519,7 @@ std::string CScriptVarString::getParsableString(const std::string &indentString,
 std::string CScriptVarString::getVarType() { return "string"; }
 
 CScriptVarPtr CScriptVarString::toObject() {
-	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->stringPrototype);
+	CScriptVarPtr ret = newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->stringPrototype());
 	ret->addChild("length", newScriptVar(data.size()), SCRIPTVARLINK_CONSTANT);
 	return ret;
 }
@@ -4070,9 +4071,10 @@ static char *tiny_dtoa(double val, unsigned radix) {
 
 		*p++ = (char) (digval + (digval > 9 ? ('a'-10) : '0'));
 		if(p==buf_end) {
+			auto old_len = buf_end - buf;
 			char *new_buf = (char *)realloc(buf, buf_end-buf+16+2); // +2 for '.' + '\0'
 			if(!new_buf) { free(buf); return 0; }
-			p = new_buf + (buf_end - buf);
+			p = new_buf + old_len;
 			buf_end = p + 16;
 			buf = new_buf;
 		}
@@ -4097,9 +4099,10 @@ static char *tiny_dtoa(double val, unsigned radix) {
 
 			*p++ = (char) (digval + (digval > 9 ? ('a'-10) : '0'));
 			if(p==buf_end) {
+				auto old_len = buf_end - buf;
 				char *new_buf = (char *)realloc(buf, buf_end-buf+16);
 				if(!new_buf) { free(buf); return 0; }
-				p = new_buf + (buf_end - buf);
+				p = new_buf + old_len;
 				buf_end = p + 16;
 				buf = new_buf;
 			}
@@ -4163,7 +4166,7 @@ double CNumber::toDouble() const
 /// CScriptVarNumber
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarNumber::CScriptVarNumber(CTinyJS *Context, const CNumber &Data) : CScriptVarPrimitive(Context, Context->numberPrototype), data(Data) {}
+CScriptVarNumber::CScriptVarNumber(CTinyJS *Context, const CNumber &Data) : CScriptVarPrimitive(Context, Context->numberPrototype()), data(Data) {}
 bool CScriptVarNumber::isNumber() { return true; }
 bool CScriptVarNumber::isInt() { return data.isInt32(); }
 bool CScriptVarNumber::isDouble() { return data.isDouble(); }
@@ -4177,14 +4180,14 @@ std::string CScriptVarNumber::toCString(int radix/*=0*/) { return data.toString(
 
 std::string CScriptVarNumber::getVarType() { return "number"; }
 
-CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->numberPrototype); }
+CScriptVarPtr CScriptVarNumber::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->numberPrototype()); }
 define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
 	if(!Obj.isInt32() && !Obj.isDouble()) {
 		if(Obj.isNaN()) return Context->constScriptVar(NaN);
 		if(Obj.isInfinity()) return Context->constScriptVar(Infinity(Obj.sign()));
 		if(Obj.isNegativeZero()) return Context->constScriptVar(NegativeZero);
 	}
-	return CScriptVarPtr(new CScriptVarNumber(Context, Obj));
+	return allocate_shared_protected<CScriptVarNumber>(Context, Obj);
 }
 
 
@@ -4192,7 +4195,7 @@ define_newScriptVar_Fnc(Number, CTinyJS *Context, const CNumber &Obj) {
 // CScriptVarBool
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarBool::CScriptVarBool(CTinyJS *Context, bool Data) : CScriptVarPrimitive(Context, Context->booleanPrototype), data(Data) {}
+CScriptVarBool::CScriptVarBool(CTinyJS *Context, bool Data) : CScriptVarPrimitive(Context, Context->booleanPrototype()), data(Data) {}
 bool CScriptVarBool::isBool() { return true; }
 
 bool CScriptVarBool::toBoolean() { return data; }
@@ -4201,14 +4204,14 @@ std::string CScriptVarBool::toCString(int radix/*=0*/) { return data ? "true" : 
 
 std::string CScriptVarBool::getVarType() { return "boolean"; }
 
-CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->booleanPrototype); }
+CScriptVarPtr CScriptVarBool::toObject() { return newScriptVar(CScriptVarPrimitivePtr(shared_from_this()), context->booleanPrototype()); }
 
 //////////////////////////////////////////////////////////////////////////
 /// CScriptVarObject
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Object);
-CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype) { }
+CScriptVarObject::CScriptVarObject(CTinyJS *Context) : CScriptVar(Context, Context->objectPrototype()) { }
 
 void CScriptVarObject::removeAllChildren()
 {
@@ -4342,7 +4345,7 @@ CScriptException CScriptVarError::toCScriptException()
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Array);
-CScriptVarArray::CScriptVarArray(CTinyJS* Context) : CScriptVarObject(Context, Context->arrayPrototype), toStringRecursion(false) {}
+CScriptVarArray::CScriptVarArray(CTinyJS* Context) : CScriptVarObject(Context, Context->arrayPrototype()), toStringRecursion(false) {}
 bool CScriptVarArray::isArray() { return true; }
 std::string CScriptVarArray::getParsableString(const std::string &indentString, const std::string &indent, uint32_t uniqueID, bool &hasRecursion) {
 	getParsableStringRecursionsCheckBegin();
@@ -4486,7 +4489,7 @@ void CScriptVarArray::native_setLength(const CFunctionsScopePtr &c, void *data) 
 
 #ifndef NO_REGEXP
 
-CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype), regexp(Regexp), flags(Flags) {}
+CScriptVarRegExp::CScriptVarRegExp(CTinyJS *Context, const std::string &Regexp, const std::string &Flags) : CScriptVarObject(Context, Context->regexpPrototype()), regexp(Regexp), flags(Flags) {}
 
 CScriptVarPtr CScriptVarRegExp::init() {
 	addChild("global", TinyJS::newScriptVarAccessor<CScriptVarRegExp>(context, this, &CScriptVarRegExp::native_Global, 0, 0, 0), 0);
@@ -4591,12 +4594,11 @@ const char * CScriptVarRegExp::ErrorStr( int Error )
 
 //declare_dummy_t(DefaultIterator);
 CScriptVarDefaultIterator::CScriptVarDefaultIterator(CTinyJS* Context, const CScriptVarPtr& Object, IteratorMode Mode)
-	: CScriptVarObject(Context, Context->iteratorPrototype), mode(Mode), object(Object) {}
-CScriptVarPtr CScriptVarDefaultIterator::init() {
+	: CScriptVarObject(Context, Context->iteratorPrototype()), mode(Mode), object(Object) {}
+void CScriptVarDefaultIterator::init() {
 	object->keys(keys, true);
 	pos = keys.begin();
 	addChild("next", TinyJS::newScriptVar(context, this, &CScriptVarDefaultIterator::native_next, 0));
-	return shared_from_this();
 }
 bool CScriptVarDefaultIterator::isIterator()		{return true;}
 void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *data) {
@@ -4625,7 +4627,7 @@ void CScriptVarDefaultIterator::native_next(const CFunctionsScopePtr &c, void *d
 #pragma warning(disable: 4355) // possible loss of data
 #endif
 CScriptVarGenerator::CScriptVarGenerator(CTinyJS *Context, const CScriptVarPtr &FunctionRoot, const CScriptVarFunctionPtr &Function)
-	: CScriptVarObject(Context, Context->generatorPrototype), functionRoot(FunctionRoot), function(Function),
+	: CScriptVarObject(Context, Context->generatorPrototype()), functionRoot(FunctionRoot), function(Function),
 	closed(false), yieldVarIsException(false), coroutine(this), 
 	callersStackBase(nullptr), callersScopeSize(0) , callersTokenizer(nullptr), callersHaveTry(false) {
 }
@@ -4647,13 +4649,29 @@ bool CScriptVarGenerator::isGenerator()	{return true;}
 std::string CScriptVarGenerator::getVarType() { return "generator"; }
 std::string CScriptVarGenerator::getVarTypeTagName() { return "Generator"; }
 
+
+void CScriptVarGenerator::cleanUp4Destroy() {
+	if (coroutine.isStarted()) {
+		if (coroutine.isRunning()) {
+			coroutine.Stop(false);
+			coroutine.next();
+		}
+		coroutine.Stop();
+	}
+	CScriptVarObject::cleanUp4Destroy();
+	functionRoot.reset();
+	function.reset();
+	yieldVar.reset();
+	generatorScopes.clear();
+}
+
 void CScriptVarGenerator::setTemporaryMark_recursive( uint32_t ID ) {
 	CScriptVarObject::setTemporaryMark_recursive(ID);
 	functionRoot->setTemporaryMark_recursive(ID);
 	function->setTemporaryMark_recursive(ID);
 	if(yieldVar) yieldVar->setTemporaryMark_recursive(ID);
-	for(std::vector<CScriptVarScopePtr>::iterator it=generatorScopes.begin(); it != generatorScopes.end(); ++it)
-		(*it)->setTemporaryMark_recursive(ID);
+	for (auto &it : generatorScopes)
+		it->setTemporaryMark_recursive(ID);
 }
 void CScriptVarGenerator::native_send(const CFunctionsScopePtr &c, void *data) {
 	// data == 0 ==> next()
@@ -4733,7 +4751,7 @@ CScriptVarPtr CScriptVarGenerator::yield(CScriptResult& execute, const CScriptVa
 // CScriptVarFunction
 //////////////////////////////////////////////////////////////////////////
 
-CScriptVarFunction::CScriptVarFunction(CTinyJS *Context) : CScriptVarObject(Context, Context->functionPrototype), data(0) {}
+CScriptVarFunction::CScriptVarFunction(CTinyJS *Context) : CScriptVarObject(Context, Context->functionPrototype()), data(0) {}
 bool CScriptVarFunction::isObject() { return true; }
 bool CScriptVarFunction::isFunction() { return true; }
 bool CScriptVarFunction::isPrimitive()	{ return false; }
@@ -4829,20 +4847,18 @@ bool CScriptVarFunctionNative::isNative() { return true; }
 //////////////////////////////////////////////////////////////////////////
 
 declare_dummy_t(Accessor);
-CScriptVarPtr CScriptVarAccessor::init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData) {
+void CScriptVarAccessor::init(JSCallback getterFnc, void* getterData, JSCallback setterFnc, void* setterData) {
 	if (getterFnc)
 		addChild(context->symbol_accessor_get, TinyJS::newScriptVar(context, getterFnc, getterData), 0);
 	if (setterFnc)
 		addChild(context->symbol_accessor_set, TinyJS::newScriptVar(context, setterFnc, setterData), 0);
-	return shared_from_this();
 }
 
-CScriptVarPtr CScriptVarAccessor::init(const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) {
+void CScriptVarAccessor::init(const CScriptVarFunctionPtr &getter, const CScriptVarFunctionPtr &setter) {
 	if(getter)
 		addChild(context->symbol_accessor_get, getter, 0);
 	if(setter)
 		addChild(context->symbol_accessor_set, setter, 0);
-	return shared_from_this();
 }
 
 bool CScriptVarAccessor::isAccessor() { return true; }
@@ -4881,9 +4897,8 @@ CScriptVarScopePtr CScriptVarScope::getParent() { return CScriptVarScopePtr(); }
 
 declare_dummy_t(ScopeFnc);
 
-TinyJS::CScriptVarPtr CScriptVarScopeFnc::init(const CScriptVarScopePtr &Closure) {
+void CScriptVarScopeFnc::init(const CScriptVarScopePtr &Closure) {
 	closure = Closure ? addChild(context->symbol_function_closure, Closure, 0) : CScriptVarLinkPtr();
-	return shared_from_this();
 }
 
 TinyJS::CScriptVarLinkWorkPtr CScriptVarScopeFnc::findInScopes(const CScriptPropertyName &childName) {
@@ -4991,9 +5006,8 @@ void CScriptVarScopeFnc::setProperty(CScriptVarLinkWorkPtr &lhs, const CScriptVa
 declare_dummy_t(ScopeLet);
 CScriptVarScopeLet::CScriptVarScopeLet(const CScriptVarScopePtr &Parent) // constructor for LetScope
 	: CScriptVarScope(Parent->getContext()), letExpressionInitMode(false) {}
-CScriptVarPtr CScriptVarScopeLet::init(const CScriptVarScopePtr& Parent) {
+void CScriptVarScopeLet::init(const CScriptVarScopePtr& Parent) {
 	parent = addChild(context->symbol_scope_parent, Parent, 0);
-	return shared_from_this();
 }
 
 CScriptVarPtr CScriptVarScopeLet::scopeVar() {						// to create var like: var a = ...
@@ -5028,9 +5042,9 @@ TinyJS::CScriptVarLinkWorkPtr CScriptVarScopeLet::findInScopes(const CScriptProp
 
 declare_dummy_t(ScopeWith);
 
-TinyJS::CScriptVarPtr CScriptVarScopeWith::init(const CScriptVarScopePtr &Parent, const CScriptVarPtr &With) {
+void CScriptVarScopeWith::init(const CScriptVarScopePtr &Parent, const CScriptVarPtr &With) {
 	with = addChild(context->symbol_scope_with, With, 0);
-	return CScriptVarScopeLet::init(Parent);
+	CScriptVarScopeLet::init(Parent);
 }
 
 CScriptVarPtr CScriptVarScopeWith::scopeLet() { 							// to create var like: let a = ...
@@ -5093,7 +5107,7 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// Object-Prototype
 	// must be created as first object because this prototype is the base of all objects
-	objectPrototype = newScriptVar(Object, nullptr);
+	objectPrototype() = newScriptVar(Object, nullptr);
 
 	// all objects have a prototype. Also the prototype of prototypes
 //	objectPrototype->addChild(TINYJS___PROTO___VAR, objectPrototype, 0);
@@ -5101,7 +5115,7 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// Function-Prototype
 	// must be created as second object because this is the base of all functions (also constructors)
-	functionPrototype = newScriptVar(Object);
+	functionPrototype() = newScriptVar(Object);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Scopes
@@ -5113,10 +5127,10 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// Object
 	var = addNative("function Object(value)", this, &CTinyJS::native_Object, 0, SCRIPTVARLINK_CONSTANT);
-	replacePrototype(var, objectPrototype);
+	replacePrototype(var, objectPrototype());
 
 	//	objectPrototype->addChild("__proto__", newScriptVar(Accessor, newScriptVar(na))
-	objectPrototype->addChild("__proto__", TinyJS::newScriptVarAccessor(this, TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_getter__proto__, 0), TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_setter__proto__, 0)), SCRIPTVARLINK_CONSTANT);
+	objectPrototype()->addChild("__proto__", TinyJS::newScriptVarAccessor(this, TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_getter__proto__, 0), TinyJS::newScriptVar<CTinyJS>(this, this, &CTinyJS::native_Object_prototype_setter__proto__, 0)), SCRIPTVARLINK_CONSTANT);
 	addNative("function Object.getPrototypeOf(obj)", this, &CTinyJS::native_Object_getPrototypeOf);
 	addNative("function Object.setPrototypeOf(obj, proto)", this, &CTinyJS::native_Object_setPrototypeOf);
 	addNative("function Object.preventExtensions(obj)", this, &CTinyJS::native_Object_setObjectSecure);
@@ -5133,48 +5147,42 @@ CTinyJS::CTinyJS() {
 	addNative("function Object.create(obj,properties)", this, &CTinyJS::native_Object_defineProperties, (void*)1);
 
 	addNative("function Object.prototype.hasOwnProperty(prop)", this, &CTinyJS::native_Object_prototype_hasOwnProperty);
-	objectPrototype_valueOf = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf);
-	objectPrototype_toString = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString);
-	pseudo_refered.push_back(&objectPrototype);
-	pseudo_refered.push_back(&objectPrototype_valueOf);
-	pseudo_refered.push_back(&objectPrototype_toString);
+	objectPrototype_valueOf() = addNative("function Object.prototype.valueOf()", this, &CTinyJS::native_Object_prototype_valueOf);
+	objectPrototype_toString() = addNative("function Object.prototype.toString(radix)", this, &CTinyJS::native_Object_prototype_toString);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Array
 	var = addNative("function Array(arrayLength)", this, &CTinyJS::native_Array, 0, SCRIPTVARLINK_CONSTANT);
-	arrayPrototype = link = var->findChild("prototype");
+	arrayPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
 
-	arrayPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	arrayPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-	auto arrayPrototype___iterator__ = arrayPrototype->addChild(symbol_iterator, TinyJS::newScriptVar(this, this, &CTinyJS::native_Array___iterrator__, 0), SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&arrayPrototype);
+	arrayPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	arrayPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
+	auto arrayPrototype___iterator__ = arrayPrototype()->addChild(symbol_iterator, TinyJS::newScriptVar(this, this, &CTinyJS::native_Array___iterrator__, 0), SCRIPTVARLINK_BUILDINDEFAULT);
 
 	//////////////////////////////////////////////////////////////////////////
 	// String
 	var = addNative("function String(thing)", this, &CTinyJS::native_String, 0, SCRIPTVARLINK_CONSTANT);
-	stringPrototype = link= var->findChild("prototype");
+	stringPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
-	stringPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	stringPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-	stringPrototype->addChild(symbol_iterator, arrayPrototype___iterator__, SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&stringPrototype);
+	stringPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	stringPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
+	stringPrototype()->addChild(symbol_iterator, arrayPrototype___iterator__, SCRIPTVARLINK_BUILDINDEFAULT);
 
 	//////////////////////////////////////////////////////////////////////////
 	// RegExp
 #ifndef NO_REGEXP
 	var = addNative("function RegExp(pattern, flags)", this, &CTinyJS::native_RegExp, 0, SCRIPTVARLINK_CONSTANT);
-	regexpPrototype = link = var->findChild("prototype");
+	regexpPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
-	regexpPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	regexpPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&regexpPrototype);
+	regexpPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	regexpPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
 #endif /* NO_REGEXP */
 
 	//////////////////////////////////////////////////////////////////////////
 	// Number
 	var = addNative("function Number(value)", this, &CTinyJS::native_Number, 0, SCRIPTVARLINK_CONSTANT);
-	numberPrototype = link =var->findChild("prototype");
+	numberPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
 
 	var->addChild("EPSILON", newScriptVarNumber(this, std::numeric_limits<double>::epsilon()), SCRIPTVARLINK_CONSTANT);
@@ -5182,62 +5190,53 @@ CTinyJS::CTinyJS() {
 	var->addChild("MIN_VALUE", newScriptVarNumber(this, std::numeric_limits<double>::min()), SCRIPTVARLINK_CONSTANT);
 	var->addChild("MAX_SAFE_INTEGER", newScriptVarNumber(this, (1LL << std::numeric_limits<double>::digits)-1), SCRIPTVARLINK_CONSTANT);
 	var->addChild("MIN_SAFE_INTEGER", newScriptVarNumber(this, 1-(1LL << std::numeric_limits<double>::digits)), SCRIPTVARLINK_CONSTANT);
-	var->addChild("NaN", constNaN = newScriptVarNumber(this, NaN), SCRIPTVARLINK_CONSTANT);
-	var->addChild("POSITIVE_INFINITY", constInfinityPositive = newScriptVarNumber(this, InfinityPositive), SCRIPTVARLINK_CONSTANT);
-	var->addChild("NEGATIVE_INFINITY", constInfinityNegative = newScriptVarNumber(this, InfinityNegative), SCRIPTVARLINK_CONSTANT);
+	var->addChild("NaN", constNaN() = newScriptVarNumber(this, NaN), SCRIPTVARLINK_CONSTANT);
+	var->addChild("POSITIVE_INFINITY", constInfinityPositive() = newScriptVarNumber(this, InfinityPositive), SCRIPTVARLINK_CONSTANT);
+	var->addChild("NEGATIVE_INFINITY", constInfinityNegative() = newScriptVarNumber(this, InfinityNegative), SCRIPTVARLINK_CONSTANT);
 
-	numberPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	numberPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-
-	pseudo_refered.push_back(&numberPrototype);
-	pseudo_refered.push_back(&constNaN);
-	pseudo_refered.push_back(&constInfinityPositive);
-	pseudo_refered.push_back(&constInfinityNegative);
+	numberPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	numberPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Boolean
 	var = addNative("function Boolean()", this, &CTinyJS::native_Boolean, 0, SCRIPTVARLINK_CONSTANT);
-	booleanPrototype = link = var->findChild("prototype");
+	booleanPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
 
-	booleanPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	booleanPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&booleanPrototype);
+	booleanPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	booleanPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
 
 
 	//////////////////////////////////////////////////////////////////////////
 	// Iterator
 	var = addNative("function Iterator(obj,mode)", this, &CTinyJS::native_Iterator, 0, SCRIPTVARLINK_CONSTANT);
-	iteratorPrototype = link = var->findChild("prototype");
+	iteratorPrototype() = link = var->findChild("prototype");
 	link->setWritable(false);
-	pseudo_refered.push_back(&iteratorPrototype);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Generator
 //	var = addNative("function Iterator(obj,mode)", this, &CTinyJS::native_Iterator, 0, SCRIPTVARLINK_CONSTANT);
 #ifndef NO_GENERATORS
-	generatorPrototype = link = newScriptVar(Object);
+	generatorPrototype() = link = newScriptVar(Object);
 	link->setWritable(false);
-	generatorPrototype->addChild("next", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)0, "Generator.next"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("send", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)1, "Generator.send"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("close", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)2, "Generator.close"), SCRIPTVARLINK_BUILDINDEFAULT);
-	generatorPrototype->addChild("throw", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void*)3, "Generator.throw"), SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&generatorPrototype);
+	generatorPrototype()->addChild("next", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void *)0, "Generator.next"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype()->addChild("send", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void *)1, "Generator.send"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype()->addChild("close", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void *)2, "Generator.close"), SCRIPTVARLINK_BUILDINDEFAULT);
+	generatorPrototype()->addChild("throw", TinyJS::newScriptVar(this, this, &CTinyJS::native_Generator_prototype_next, (void *)3, "Generator.throw"), SCRIPTVARLINK_BUILDINDEFAULT);
 #endif /*NO_GENERATORS*/
 
 	//////////////////////////////////////////////////////////////////////////
 	// Function
 	var = addNative("function Function(body)", this, &CTinyJS::native_Function, 0, SCRIPTVARLINK_CONSTANT);
-	replacePrototype(var, functionPrototype);
+	replacePrototype(var, functionPrototype());
 
 	addNative("function Function.prototype.call(objc)", this, &CTinyJS::native_Function_prototype_call);
 	addNative("function Function.prototype.apply(objc, args)", this, &CTinyJS::native_Function_prototype_apply);
 	addNative("function Function.prototype.bind(objc, args)", this, &CTinyJS::native_Function_prototype_bind);
 	addNative("function Function.prototype.isGenerator()", this, &CTinyJS::native_Function_prototype_isGenerator);
 
-	functionPrototype->addChild("valueOf", objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	functionPrototype->addChild("toString", objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
-	pseudo_refered.push_back(&functionPrototype);
+	functionPrototype()->addChild("valueOf", objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	functionPrototype()->addChild("toString", objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
 
 	//////////////////////////////////////////////////////////////////////////
 	// Symbol
@@ -5249,37 +5248,37 @@ CTinyJS::CTinyJS() {
 	//////////////////////////////////////////////////////////////////////////
 	// Error
 	var = addNative("function Error(message, fileName, lineNumber, column)", this, &CTinyJS::native_Error, 0, SCRIPTVARLINK_BUILDINDEFAULT);
-	errorPrototypes[Error] = link = var->findChild("prototype"); link->setWritable(false);
-	errorPrototypes[Error]->addChild("message", newScriptVar(""));
-	errorPrototypes[Error]->addChild("name", newScriptVar("Error"));
-	errorPrototypes[Error]->addChild("fileName", newScriptVar(""));
-	errorPrototypes[Error]->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
-	errorPrototypes[Error]->addChild("column", newScriptVar(-1));			// -1 means not viable
+	getErrorPrototype(Error) = link = var->findChild("prototype"); link->setWritable(false);
+	getErrorPrototype(Error)->addChild("message", newScriptVar(""));
+	getErrorPrototype(Error)->addChild("name", newScriptVar("Error"));
+	getErrorPrototype(Error)->addChild("fileName", newScriptVar(""));
+	getErrorPrototype(Error)->addChild("lineNumber", newScriptVar(-1));	// -1 means not viable
+	getErrorPrototype(Error)->addChild("column", newScriptVar(-1));			// -1 means not viable
 
 	var = addNative("function EvalError(message, fileName, lineNumber, column)", this, &CTinyJS::native_EvalError, 0, SCRIPTVARLINK_CONSTANT);
-	errorPrototypes[EvalError] = var->findChild("prototype"); link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setPrototype(errorPrototypes[Error]);
-	errorPrototypes[EvalError]->addChild("name", newScriptVar("EvalError"));
+	getErrorPrototype(EvalError) = link = var->findChild("prototype"); link->setWritable(false);
+	CScriptVarFunctionPtr(var)->setPrototype(getErrorPrototype(Error));
+	getErrorPrototype(EvalError)->addChild("name", newScriptVar("EvalError"));
 
 	var = addNative("function RangeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_RangeError, 0, SCRIPTVARLINK_CONSTANT);
-	errorPrototypes[RangeError] = var->findChild("prototype"); link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setPrototype(errorPrototypes[Error]);
-	errorPrototypes[RangeError]->addChild("name", newScriptVar("RangeError"));
+	getErrorPrototype(RangeError) = link = var->findChild("prototype"); link->setWritable(false);
+	CScriptVarFunctionPtr(var)->setPrototype(getErrorPrototype(Error));
+	getErrorPrototype(RangeError)->addChild("name", newScriptVar("RangeError"));
 
 	var = addNative("function ReferenceError(message, fileName, lineNumber, column)", this, &CTinyJS::native_ReferenceError, 0, SCRIPTVARLINK_CONSTANT);
-	errorPrototypes[ReferenceError] = var->findChild("prototype"); link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setPrototype(errorPrototypes[Error]);
-	errorPrototypes[ReferenceError]->addChild("name", newScriptVar("ReferenceError"));
+	getErrorPrototype(ReferenceError) = link = var->findChild("prototype"); link->setWritable(false);
+	CScriptVarFunctionPtr(var)->setPrototype(getErrorPrototype(Error));
+	getErrorPrototype(ReferenceError)->addChild("name", newScriptVar("ReferenceError"));
 
 	var = addNative("function SyntaxError(message, fileName, lineNumber, column)", this, &CTinyJS::native_SyntaxError, 0, SCRIPTVARLINK_CONSTANT);
-	errorPrototypes[SyntaxError] = var->findChild("prototype"); link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setPrototype(errorPrototypes[Error]);
-	errorPrototypes[SyntaxError]->addChild("name", newScriptVar("SyntaxError"));
+	getErrorPrototype(SyntaxError) = link = var->findChild("prototype"); link->setWritable(false);
+	CScriptVarFunctionPtr(var)->setPrototype(getErrorPrototype(Error));
+	getErrorPrototype(SyntaxError)->addChild("name", newScriptVar("SyntaxError"));
 
 	var = addNative("function TypeError(message, fileName, lineNumber, column)", this, &CTinyJS::native_TypeError, 0, SCRIPTVARLINK_CONSTANT);
-	errorPrototypes[TypeError] = var->findChild("prototype"); link->setWritable(false);
-	CScriptVarFunctionPtr(var)->setPrototype(errorPrototypes[Error]);
-	errorPrototypes[TypeError]->addChild("name", newScriptVar("TypeError"));
+	getErrorPrototype(TypeError) = link = var->findChild("prototype"); link->setWritable(false);
+	CScriptVarFunctionPtr(var)->setPrototype(getErrorPrototype(Error));
+	getErrorPrototype(TypeError)->addChild("name", newScriptVar("TypeError"));
 
 
 
@@ -5288,17 +5287,16 @@ CTinyJS::CTinyJS() {
 
 	//////////////////////////////////////////////////////////////////////////
 	// add global built-in vars & constants
-	root->addChild("undefined", constUndefined = newScriptVarUndefined(this), SCRIPTVARLINK_CONSTANT);
-	pseudo_refered.push_back(&constUndefined);
-	constUninitialized = newScriptVarUninitialized(this);	pseudo_refered.push_back(&constUninitialized);
-	constNull = newScriptVarNull(this);	pseudo_refered.push_back(&constNull);
-	root->addChild("NaN", constNaN, SCRIPTVARLINK_CONSTANT);
-	root->addChild("Infinity", constInfinityPositive, SCRIPTVARLINK_CONSTANT);
-	root->addChild("StopIteration", constStopIteration=newScriptVar(Object, var=newScriptVar(Object), "StopIteration"), SCRIPTVARLINK_CONSTANT);
-	constStopIteration->addChild("prototype", var, SCRIPTVARLINK_CONSTANT);	pseudo_refered.push_back(&constStopIteration);
-	constNegativZero	= newScriptVarNumber(this, NegativeZero);	pseudo_refered.push_back(&constNegativZero);
-	constFalse	= newScriptVarBool(this, false);	pseudo_refered.push_back(&constFalse);
-	constTrue	= newScriptVarBool(this, true);	pseudo_refered.push_back(&constTrue);
+	root->addChild("undefined", constUndefined() = newScriptVarUndefined(this), SCRIPTVARLINK_CONSTANT);
+	constUninitialized() = newScriptVarUninitialized(this);
+	constNull() = newScriptVarNull(this);
+	root->addChild("NaN", constNaN(), SCRIPTVARLINK_CONSTANT);
+	root->addChild("Infinity", constInfinityPositive(), SCRIPTVARLINK_CONSTANT);
+	root->addChild("StopIteration", constStopIteration() = newScriptVar(Object, var = newScriptVar(Object), "StopIteration"), SCRIPTVARLINK_CONSTANT);
+	constStopIteration()->addChild("prototype", var, SCRIPTVARLINK_CONSTANT);
+	constNegativZero() = newScriptVarNumber(this, NegativeZero);
+	constFalse() = newScriptVarBool(this, false);
+	constTrue() = newScriptVarBool(this, true);
 
 	//////////////////////////////////////////////////////////////////////////
 	// add global functions
@@ -5336,16 +5334,20 @@ CTinyJS::CTinyJS(std::initializer_list<std::function<void(CTinyJS *tinyJS)>> reg
 CTinyJS::~CTinyJS() {
 	ASSERT(!t);
 //	objectPrototype->setPrototype(0);
-	for (auto &it : pseudo_refered) {
-		(*it)->cleanUp4Destroy();
-		it->reset();
+	for (auto &it : _pseudo_refered) {
+		it->cleanUp4Destroy();
+		it.reset();
 	}
-	for(int i=Error; i<ERROR_COUNT; i++)
-		errorPrototypes[i] = CScriptVarPtr();
+// 	for (auto it = root->Childs.begin(); it != root->Childs.end(); ++it) {
+// 		if ((*it)->getVarPtr()->isGenerator()) {
+// 			root->Childs.erase(it);
+// 			break;
+// 		}
+// 	}
 	root->cleanUp4Destroy();
 	scopes.clear();
 	ClearUnreferedVars();
-	root = CScriptVarPtr();
+	root.reset();
 #ifdef _DEBUG
 	for(CScriptVar *p = first; p; p=p->next)
 		printf("%p (%s) %s ID=%u\n", p, typeid(*p).name(), p->getParsableString().c_str(), p->debugID);
@@ -5511,7 +5513,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 	if(newThis)
 		functionRoot->addChild("new.target", Function);
 	else
-		functionRoot->addChild("new.target", constUndefined);
+		functionRoot->addChild("new.target", constUndefined());
 
 	// If the function is not an arrow function, "this" must be explicitly set
 	bool isArrow = Fnc->isArrowFunction();
@@ -5547,7 +5549,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 
 	// Initialize all parameters (default: Undefined)
 	for (auto &it : arg_names)
-		functionRoot->addChildOrReplace(it, constUndefined);
+		functionRoot->addChildOrReplace(it, constUndefined());
 
 	CScriptVarPtr restVar; // If there is a "rest" parameter (e.g., ...args)
 	if (length_proto && Fnc->arguments.back().first.token == LEX_SPREAD_REST_ID) {
@@ -5563,7 +5565,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 		if (arguments_idx < length_arguments)
 			value = arguments->addChild(arguments_idx, Arguments[arguments_idx]);
 		else
-			value = constUndefined;
+			value = constUndefined();
 
 		// If the argument is present in the function declaration
 		if (arguments_idx < length_proto) {
@@ -5587,7 +5589,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 			}
 		}
 	}
-	if (!execute) return constUndefined;
+	if (!execute) return constUndefined();
 
 	arguments->addChild("length", newScriptVar(length_arguments));
 
@@ -5603,7 +5605,7 @@ CScriptVarPtr CTinyJS::callFunction(CScriptResult &execute, const CScriptVarFunc
 		try {
 			CScriptVarFunctionNativePtr(Function)->callFunction(functionRoot);
 			CScriptVarLinkPtr ret = functionRoot->findChild(symbol_return_var);
-			function_execute.set(CScriptResult::Return, ret ? CScriptVarPtr(ret) : constUndefined);
+			function_execute.set(CScriptResult::Return, ret ? CScriptVarPtr(ret) : constUndefined());
 		} catch (CScriptVarPtr v) {
 			if (haveTry) {
 				function_execute.setThrow(v, "native function '" + Fnc->name + "'");
@@ -5683,7 +5685,7 @@ void CTinyJS::generator_start(CScriptVarGeneratorPtr Generator)
 		if(function_execute.isThrow())
 			Generator->setException(function_execute.value);
 		else
-			Generator->setException(constStopIteration);
+			Generator->setException(constStopIteration());
 	} catch(CScriptCoroutine::StopIteration_t &) {
 		Generator->setException(CScriptVarPtr());
 	} catch(...) {
@@ -5702,7 +5704,7 @@ void CTinyJS::generator_start(CScriptVarGeneratorPtr Generator)
 		// restore callers haveTry
 		haveTry = Generator->callersHaveTry;
 
-		Generator->setException(constStopIteration);
+		Generator->setException(constStopIteration());
 		// re-throw
 		throw;
 	}
@@ -5723,11 +5725,11 @@ void CTinyJS::generator_start(CScriptVarGeneratorPtr Generator)
 }
 
 CScriptVarPtr CTinyJS::generator_yield(CScriptResult& execute, const CScriptVarPtr &YieldIn) {
-	if(!execute) return constUndefined;
+	if(!execute) return constUndefined();
 	CScriptVarGeneratorPtr Generator(generatorStack.back().lock());
 	if(Generator->isClosed()) {
 		throwError(execute, TypeError, "yield from closing generator function");
-		return constUndefined;
+		return constUndefined();
 	}
 
 	// pop current Generator
@@ -5807,10 +5809,10 @@ CScriptVarPtr CTinyJS::generator_yield(CScriptResult& execute, const CScriptVarP
 
 
 inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPtr &A, const CScriptVarPtr &B, int op) {
-	if(!execute) return constUndefined;
+	if(!execute) return constUndefined();
 	if (op == LEX_TYPEEQUAL || op == LEX_NTYPEEQUAL) {
 		// check type first
-		if( (A->getVarType() == B->getVarType()) ^ (op == LEX_TYPEEQUAL)) return constFalse;
+		if( (A->getVarType() == B->getVarType()) ^ (op == LEX_TYPEEQUAL)) return constFalse();
 		// check value second
 		return mathsOp(execute, A, B, op == LEX_TYPEEQUAL ? LEX_EQUAL : LEX_NEQUAL);
 	}
@@ -5822,12 +5824,12 @@ inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPt
 		}
 	}
 	if (A->isSymbol() || B->isSymbol()) {
-		return A->toPropertyName() == B->toPropertyName() ? constTrue : constFalse;
+		return A->toPropertyName() == B->toPropertyName() ? constTrue() : constFalse();
 	}
 
 	CScriptVarPtr a = A->toPrimitive(execute);
 	CScriptVarPtr b = B->toPrimitive(execute);
-	if(!execute) return constUndefined;
+	if(!execute) return constUndefined();
 	// do maths...
 	bool a_isString = a->isString();
 	bool b_isString = b->isString();
@@ -5841,7 +5843,7 @@ inline CScriptVarPtr CTinyJS::mathsOp(CScriptResult &execute, const CScriptVarPt
 				return newScriptVar(da+db);
 			} catch(std::exception& e) {
 				throwError(execute, Error, e.what());
-				return constUndefined;
+				return constUndefined();
 			}
 		case LEX_EQUAL:	return constScriptVar(da==db);
 		case LEX_NEQUAL:	return constScriptVar(da!=db);
@@ -5903,7 +5905,7 @@ std::vector<CScriptVarPtr> CTinyJS::execute_spread(CScriptResult &execute, Itera
 		auto ret = callFunction(tmp_execute, Iterator_next, args, Iterator);
 		haveTry = old_haveTry;
 		if (tmp_execute.isThrow()) {
-			if (tmp_execute.value != constStopIteration) {
+			if (tmp_execute.value != constStopIteration()) {
 				if (!haveTry)
 					throw CScriptException("uncaught exception: '" + tmp_execute.value->toString(CScriptResult()) + "'", t->currentFile, t->currentLine(), t->currentColumn());
 				else
@@ -5934,7 +5936,7 @@ void CTinyJS::execute_destructuring(CScriptResult &execute, const std::shared_pt
 				rhs = callFunction(tmp_execute, Iterator_next, args, Iterator);
 				haveTry = old_haveTry; // restor haveTry
 				if (tmp_execute.isThrow()) {
-					if (tmp_execute.value != constStopIteration) {
+					if (tmp_execute.value != constStopIteration()) {
 						if (!haveTry)
 							throw CScriptException("uncaught exception: '" + tmp_execute.value->toString(CScriptResult()) + "'", t->currentFile, t->currentLine(), t->currentColumn());
 						else
@@ -5943,7 +5945,7 @@ void CTinyJS::execute_destructuring(CScriptResult &execute, const std::shared_pt
 					endIteration = true;
 				}
 			} else
-				rhs = constUndefined;
+				rhs = constUndefined();
 
 			if (element_it->value.empty()) {
 				++element_it;
@@ -6048,7 +6050,7 @@ void CTinyJS::execute_destructuring(CScriptResult &execute, const std::shared_pt
 					keys_used.insert(element.id);
 					rhs = Object->getOwnProperty(element.id).getter(execute);
 				}
-				if (!rhs) rhs = constUndefined;
+				if (!rhs) rhs = constUndefined();
 				if (rhs->isUndefined() && element.defaultValue.size()) {
 					t->pushTokenScope(element.defaultValue);
 					rhs = execute_assignment(execute);
@@ -6216,13 +6218,13 @@ CScriptVarLinkWorkPtr CTinyJS::execute_literals(CScriptResult &execute) {
 	case LEX_R_YIELD:
 		if (execute) {
 			t->match(LEX_R_YIELD);
-			CScriptVarPtr result = constUndefined;
+			CScriptVarPtr result = constUndefined();
 			if (t->tk != ';')
 				result = execute_base(execute);
 			if(execute)
 				return generator_yield(execute, result);
 			else
-				return constUndefined;
+				return constUndefined();
 		} else
 			t->skip(t->getToken().Int());
 		break;
@@ -6390,24 +6392,23 @@ inline CScriptVarLinkWorkPtr CTinyJS::execute_function_call(CScriptResult &execu
 				throwError(execute, TypeError, a->getName().toString() + " is not a function");
 			if (stackBase) {
 				int dummy = 0;
-				if(&dummy < stackBase)
+				if (&dummy < stackBase)
 					throwError(execute, Error, "too much recursion");
 			}
 			if (t->tk == LEX_T_TEMPLATE_LITERAL) {
 				auto &data = t->getToken().TemplateLiteral();
 				t->match(LEX_T_TEMPLATE_LITERAL);
-				if (!data->stringsArray) {
-					data->stringsArray = newScriptVar(Array);
-					CScriptVarPtr raw = data->stringsArray->addChild("raw", newScriptVar(Array));
-					for (uint32_t it = 0; it < data->raw.size(); ++it) {
-						CScriptPropertyName idxString(it);
-						std::string str = data->raw[it];
-						raw->addChild(idxString, newScriptVar(str));
-						auto err = CScriptTokenDataTemplateLiteral::parseRaw(str);
-						data->stringsArray->addChild(idxString, err ? constUndefined : newScriptVar(std::move(str)));
-					}
+
+				auto stringsArray = newScriptVar(Array);
+				CScriptVarPtr raw = stringsArray->addChild("raw", newScriptVar(Array));
+				for (uint32_t it = 0; it < data->raw.size(); ++it) {
+					CScriptPropertyName idxString(it);
+					std::string str = data->raw[it];
+					raw->addChild(idxString, newScriptVar(str));
+					auto err = CScriptTokenDataTemplateLiteral::parseRaw(str);
+					stringsArray->addChild(idxString, err ? constUndefined() : newScriptVar(std::move(str)));
 				}
-				std::vector<CScriptVarPtr> arguments{ data->stringsArray };
+				std::vector<CScriptVarPtr> arguments{ stringsArray };
 				for (auto it = data->values.begin(); it < data->values.end(); ++it) {
 					t->pushTokenScope(*it);
 					arguments.push_back(execute_condition(execute).getter(execute));
@@ -6896,12 +6897,12 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				if (t->tk == LEX_T_OBJECT_LITERAL) {
 					for (auto &it : t->getToken().Object()->getDestructuringVarNames()) {
 						auto a = findInScopes(it);
-						a->setVarPtr(constUndefined);
+						a->setVarPtr(constUndefined());
 						if (isConst) childs.push_back(a);
 					}
 				} else {
 					auto a = findInScopes(t->tkStr());
-					a->setVarPtr(constUndefined);
+					a->setVarPtr(constUndefined());
 					if (isConst) childs.push_back(a);
 				}
 				execute_assignment(execute);
@@ -7032,7 +7033,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 				execute_statement(tmp_execute);
 				haveTry = old_haveTry;
 				if(tmp_execute.isThrow()){
-					if(tmp_execute.value != constStopIteration) {
+					if(tmp_execute.value != constStopIteration()) {
 						if(!haveTry)
 							throw CScriptException("uncaught exception: '"+tmp_execute.value->toString(CScriptResult())+"'", t->currentFile, t->currentLine(), t->currentColumn());
 						else
@@ -7130,7 +7131,7 @@ void CTinyJS::execute_statement(CScriptResult &execute) {
 	case LEX_R_RETURN:
 		if (execute) {
 			t->match(LEX_R_RETURN);
-			CScriptVarPtr result = constUndefined;
+			CScriptVarPtr result = constUndefined();
 			if (t->tk != ';')
 				result = execute_base(execute);
 			t->match(';');
@@ -7872,10 +7873,8 @@ void CTinyJS::native_console_timeLog(const CFunctionsScopePtr &c, void *data) {
 }
 
 void CTinyJS::setTemporaryID_recursive(uint32_t ID) {
-	for(auto &it : pseudo_refered)
-		(*it)->setTemporaryMark_recursive(ID);
-	for(int i=Error; i<ERROR_COUNT; i++)
-		if(errorPrototypes[i]) errorPrototypes[i]->setTemporaryMark_recursive(ID);
+	for(auto &it : _pseudo_refered)
+		if(it) it->setTemporaryMark_recursive(ID);
 	root->setTemporaryMark_recursive(ID);
 }
 
@@ -7884,7 +7883,7 @@ void CTinyJS::ClearUnreferedVars(const CScriptVarPtr &extra/*=CScriptVarPtr()*/)
 	setTemporaryID_recursive(UniqueID);
 	if(extra) extra->setTemporaryMark_recursive(UniqueID);
 	CScriptVar *p = first;
-
+	CScriptVarPtr generator;
 	while (p)
 	{
 		if(p->getTemporaryMark() != UniqueID)

@@ -1182,8 +1182,8 @@ DATE_PROTOTYPE_GET(getTimezoneOffset)
 extern "C" void _registerDateFunctions(CTinyJS *tinyJS) {
 	CScriptVarPtr var = tinyJS->addNative("function Date(year, month, day, hour, minute, second, millisecond)", scDate, 0, SCRIPTVARLINK_CONSTANT);
 	CScriptVarPtr datePrototype = var->findChild("prototype");
-	datePrototype->addChild("valueOf", tinyJS->objectPrototype_valueOf, SCRIPTVARLINK_BUILDINDEFAULT);
-	datePrototype->addChild("toString", tinyJS->objectPrototype_toString, SCRIPTVARLINK_BUILDINDEFAULT);
+	datePrototype->addChild("valueOf", tinyJS->objectPrototype_valueOf(), SCRIPTVARLINK_BUILDINDEFAULT);
+	datePrototype->addChild("toString", tinyJS->objectPrototype_toString(), SCRIPTVARLINK_BUILDINDEFAULT);
 	tinyJS->addNative("function Date.UTC()", scDate_UTC, 0, SCRIPTVARLINK_CONSTANT);
 	tinyJS->addNative("function Date.now()", scDate_now, 0, SCRIPTVARLINK_CONSTANT);
 	tinyJS->addNative("function Date.parse()", scDate_parse, 0, SCRIPTVARLINK_CONSTANT);

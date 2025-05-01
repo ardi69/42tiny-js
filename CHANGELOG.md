@@ -208,3 +208,11 @@ Version 0.10.6 (2025-04-18 10:14)
 =================================
 
 * fixed compiling withs clang++ (moved some constructors fom .h to .cpp)
+
+-------------------------------------------------------------------------------
+
+
+Version 0.10.7 (2025-05-01 11:04)
+=================================
+
+* PoolAllocator optimized allocate_shared_protected allocates controlblock and object at once
